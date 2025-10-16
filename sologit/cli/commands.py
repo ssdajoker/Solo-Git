@@ -2,11 +2,350 @@
 """
 Command implementations for Solo Git CLI.
 
-This module will be populated with actual command implementations in Phase 1+.
+Phase 1: Repository and workpad management.
 """
 
-# Placeholder for future command implementations
-# Phase 1: repo.init, pad.create, pad.promote, test.run
-# Phase 2: ai.plan, pair loop
-# Phase 3: pipeline.run, audit.report
+import click
+from pathlib import Path
+from typing import Optional
+
+from sologit.engines.git_engine import GitEngine, GitEngineError
+from sologit.engines.patch_engine import PatchEngine
+from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
+from sologit.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+# Initialize engines (singleton pattern)
+_git_engine: Optional[GitEngine] = None
+_patch_engine: Optional[PatchEngine] = None
+_test_orchestrator: Optional[TestOrchestrator] = None
+
+
+def get_git_engine() -> GitEngine:
+    """Get or create GitEngine instance."""
+    global _git_engine
+    if _git_engine is None:
+        _git_engine = GitEngine()
+    return _git_engine
+
+
+def get_patch_engine() -> PatchEngine:
+    """Get or create PatchEngine instance."""
+    global _patch_engine
+    if _patch_engine is None:
+        _patch_engine = PatchEngine(get_git_engine())
+    return _patch_engine
+
+
+def get_test_orchestrator() -> TestOrchestrator:
+    """Get or create TestOrchestrator instance."""
+    global _test_orchestrator
+    if _test_orchestrator is None:
+        _test_orchestrator = TestOrchestrator(get_git_engine())
+    return _test_orchestrator
+
+
+@click.group()
+def repo():
+    """Repository management commands."""
+    pass
+
+
+@repo.command('init')
+@click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
+@click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
+@click.option('--name', type=str, help='Repository name (optional)')
+def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]):
+    """Initialize a new repository from zip file or Git URL."""
+    if not zip_file and not git_url:
+        click.echo("❌ Error: Must provide either --zip or --git", err=True)
+        raise click.Abort()
+    
+    if zip_file and git_url:
+        click.echo("❌ Error: Cannot provide both --zip and --git", err=True)
+        raise click.Abort()
+    
+    git_engine = get_git_engine()
+    
+    try:
+        if zip_file:
+            # Read zip file
+            zip_path = Path(zip_file)
+            zip_data = zip_path.read_bytes()
+            
+            # Derive name from filename if not provided
+            if not name:
+                name = zip_path.stem
+            
+            click.echo(f"🔄 Initializing repository from zip: {zip_path.name}")
+            repo_id = git_engine.init_from_zip(zip_data, name)
+            
+        else:  # git_url
+            # Derive name from URL if not provided
+            if not name:
+                name = Path(git_url).stem.replace('.git', '')
+            
+            click.echo(f"🔄 Cloning repository from: {git_url}")
+            repo_id = git_engine.init_from_git(git_url, name)
+        
+        repo = git_engine.get_repo(repo_id)
+        click.echo(f"\n✅ Repository initialized!")
+        click.echo(f"   Repo ID: {repo.id}")
+        click.echo(f"   Name: {repo.name}")
+        click.echo(f"   Path: {repo.path}")
+        click.echo(f"   Trunk: {repo.trunk_branch}")
+        
+    except GitEngineError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@repo.command('list')
+def repo_list():
+    """List all repositories."""
+    git_engine = get_git_engine()
+    repos = git_engine.list_repos()
+    
+    if not repos:
+        click.echo("No repositories found.")
+        return
+    
+    click.echo(f"Repositories ({len(repos)}):\n")
+    for i, repo in enumerate(repos, 1):
+        click.echo(f"  {i}. {repo.id} - {repo.name}")
+        click.echo(f"     Trunk: {repo.trunk_branch}")
+        click.echo(f"     Workpads: {repo.workpad_count}")
+        click.echo(f"     Created: {repo.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        click.echo()
+
+
+@repo.command('info')
+@click.argument('repo_id')
+def repo_info(repo_id: str):
+    """Show repository information."""
+    git_engine = get_git_engine()
+    repo = git_engine.get_repo(repo_id)
+    
+    if not repo:
+        click.echo(f"❌ Repository {repo_id} not found", err=True)
+        raise click.Abort()
+    
+    click.echo(f"Repository: {repo.id}")
+    click.echo(f"Name: {repo.name}")
+    click.echo(f"Path: {repo.path}")
+    click.echo(f"Trunk: {repo.trunk_branch}")
+    click.echo(f"Created: {repo.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    click.echo(f"Workpads: {repo.workpad_count} active")
+    click.echo(f"Source: {repo.source_type}")
+    if repo.source_url:
+        click.echo(f"URL: {repo.source_url}")
+
+
+@click.group()
+def pad():
+    """Workpad management commands."""
+    pass
+
+
+@pad.command('create')
+@click.argument('title')
+@click.option('--repo', 'repo_id', type=str, help='Repository ID (required if multiple repos)')
+def pad_create(title: str, repo_id: Optional[str]):
+    """Create a new workpad."""
+    git_engine = get_git_engine()
+    
+    # If no repo_id, try to auto-select
+    if not repo_id:
+        repos = git_engine.list_repos()
+        if len(repos) == 0:
+            click.echo("❌ No repositories found. Initialize a repository first.", err=True)
+            raise click.Abort()
+        elif len(repos) == 1:
+            repo_id = repos[0].id
+            click.echo(f"🔄 Using repository: {repos[0].name} ({repo_id})")
+        else:
+            click.echo("❌ Multiple repositories found. Please specify --repo", err=True)
+            raise click.Abort()
+    
+    try:
+        click.echo(f"🔄 Creating workpad: {title}")
+        pad_id = git_engine.create_workpad(repo_id, title)
+        
+        workpad = git_engine.get_workpad(pad_id)
+        click.echo(f"\n✅ Workpad created!")
+        click.echo(f"   Pad ID: {workpad.id}")
+        click.echo(f"   Title: {workpad.title}")
+        click.echo(f"   Branch: {workpad.branch_name}")
+        click.echo(f"   Base: main")
+        
+    except GitEngineError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@pad.command('list')
+@click.option('--repo', 'repo_id', type=str, help='Filter by repository ID')
+def pad_list(repo_id: Optional[str]):
+    """List all workpads."""
+    git_engine = get_git_engine()
+    workpads = git_engine.list_workpads(repo_id)
+    
+    if not workpads:
+        click.echo("No workpads found.")
+        return
+    
+    click.echo(f"Workpads ({len(workpads)}):\n")
+    for i, pad in enumerate(workpads, 1):
+        click.echo(f"  {i}. {pad.id} - {pad.title}")
+        click.echo(f"     Status: {pad.status}")
+        click.echo(f"     Checkpoints: {len(pad.checkpoints)}")
+        click.echo(f"     Created: {pad.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        if pad.test_status:
+            click.echo(f"     Tests: {pad.test_status}")
+        click.echo()
+
+
+@pad.command('info')
+@click.argument('pad_id')
+def pad_info(pad_id: str):
+    """Show workpad information."""
+    git_engine = get_git_engine()
+    workpad = git_engine.get_workpad(pad_id)
+    
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    click.echo(f"Workpad: {workpad.id}")
+    click.echo(f"Title: {workpad.title}")
+    click.echo(f"Repo: {workpad.repo_id}")
+    click.echo(f"Branch: {workpad.branch_name}")
+    click.echo(f"Status: {workpad.status}")
+    click.echo(f"Created: {workpad.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    click.echo(f"Checkpoints: {len(workpad.checkpoints)}")
+    
+    if workpad.checkpoints:
+        click.echo("\nCheckpoints:")
+        for cp in workpad.checkpoints:
+            click.echo(f"  - {cp}")
+    
+    if workpad.test_status:
+        click.echo(f"\nLast Test: {workpad.test_status}")
+
+
+@pad.command('promote')
+@click.argument('pad_id')
+def pad_promote(pad_id: str):
+    """Promote workpad to trunk (fast-forward merge)."""
+    git_engine = get_git_engine()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    # Check if can promote
+    if not git_engine.can_promote(pad_id):
+        click.echo("❌ Cannot promote: not fast-forward-able", err=True)
+        click.echo("   Trunk has diverged. Manual merge required.", err=True)
+        raise click.Abort()
+    
+    try:
+        click.echo(f"🔄 Promoting workpad: {workpad.title}")
+        commit_hash = git_engine.promote_workpad(pad_id)
+        
+        click.echo(f"\n✅ Workpad promoted to trunk!")
+        click.echo(f"   Commit: {commit_hash}")
+        click.echo(f"   Branch deleted: {workpad.branch_name}")
+        click.echo(f"   Trunk updated: main @ {commit_hash}")
+        
+    except GitEngineError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@pad.command('diff')
+@click.argument('pad_id')
+def pad_diff(pad_id: str):
+    """Show diff between workpad and trunk."""
+    git_engine = get_git_engine()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    try:
+        diff = git_engine.get_diff(pad_id)
+        if diff:
+            click.echo(diff)
+        else:
+            click.echo("No changes.")
+    except GitEngineError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@click.group()
+def test():
+    """Test execution commands."""
+    pass
+
+
+@test.command('run')
+@click.argument('pad_id')
+@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
+@click.option('--parallel/--sequential', default=True, help='Parallel execution')
+def test_run(pad_id: str, target: str, parallel: bool):
+    """Run tests in Docker sandbox."""
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    # Define test configurations (hardcoded for now, will load from evogit.yaml later)
+    if target == 'fast':
+        tests = [
+            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+        ]
+    else:
+        tests = [
+            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+            TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+        ]
+    
+    try:
+        click.echo(f"🧪 Running {target} tests for {workpad.title}")
+        click.echo(f"   Tests: {len(tests)}")
+        click.echo(f"   Parallel: {parallel}\n")
+        
+        results = test_orchestrator.run_tests_sync(pad_id, tests, parallel)
+        
+        # Display results
+        for result in results:
+            status_icon = "✅" if result.status.value == "passed" else "❌"
+            duration_s = result.duration_ms / 1000
+            click.echo(f"{status_icon} {result.name} ({duration_s:.1f}s)")
+            if result.status.value != "passed":
+                click.echo(f"   {result.stdout}")
+        
+        # Summary
+        summary = test_orchestrator.get_summary(results)
+        click.echo(f"\nSummary:")
+        click.echo(f"  Total: {summary['total']}")
+        click.echo(f"  Passed: {summary['passed']}")
+        click.echo(f"  Failed: {summary['failed']}")
+        click.echo(f"  Status: {summary['status'].upper()}")
+        
+        # Update workpad test status
+        workpad.test_status = summary['status']
+        
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
 

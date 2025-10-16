@@ -105,27 +105,14 @@ def hello():
     click.echo("Run 'evogitctl --help' for more information.")
 
 
-# Command groups (will be implemented in Phase 1+)
-@cli.group()
-def repo():
-    """Repository management commands."""
-    pass
-
-
-@cli.group()
-def pad():
-    """Workpad operations."""
-    pass
-
-
-@cli.group()
-def test():
-    """Test execution commands."""
-    pass
-
-
-# Register config commands
+# Register command groups
 cli.add_command(config_group)
+
+# Phase 1 command groups
+from sologit.cli.commands import repo, pad, test
+cli.add_command(repo)
+cli.add_command(pad)
+cli.add_command(test)
 
 
 @cli.command()
