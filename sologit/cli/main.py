@@ -120,11 +120,57 @@ cli.add_command(ci)
 
 
 @cli.command()
-def pair():
-    """Start AI pairing session (coming in Phase 2)."""
-    click.echo("🤖 AI pairing mode coming in Phase 2!")
-    click.echo("This will enable natural language prompts like:")
-    click.echo('  evogitctl pair "add passwordless magic link login"')
+@click.argument('prompt', required=False)
+@click.option('--repo', 'repo_id', type=str, help='Repository ID (auto-selects if only one)')
+@click.option('--title', type=str, help='Workpad title (derived from prompt if not provided)')
+@click.option('--no-test', is_flag=True, help='Skip test execution')
+@click.option('--no-promote', is_flag=True, help='Disable automatic promotion')
+@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
+@click.pass_context
+def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
+    """
+    Start AI pair programming session.
+    
+    The pair command is the heart of Solo Git - it takes a natural language prompt
+    and orchestrates the entire workflow: planning, coding, testing, and merging.
+    
+    \b
+    Examples:
+      evogitctl pair "add passwordless magic link login"
+      evogitctl pair "refactor auth module to use JWT" --no-promote
+      evogitctl pair "fix bug in payment processor" --target full
+    
+    \b
+    Workflow:
+      1. Creates ephemeral workpad
+      2. AI plans implementation
+      3. AI generates patch
+      4. Applies patch to workpad
+      5. Runs tests (unless --no-test)
+      6. Auto-promotes if green (unless --no-promote)
+    """
+    if not prompt:
+        click.echo("❌ Error: Prompt is required", err=True)
+        click.echo("\nUsage: evogitctl pair \"your task description\"")
+        click.echo("\nExample: evogitctl pair \"add user login feature\"")
+        raise click.Abort()
+    
+    from sologit.cli.commands import execute_pair_loop
+    
+    try:
+        execute_pair_loop(
+            ctx=ctx,
+            prompt=prompt,
+            repo_id=repo_id,
+            title=title,
+            no_test=no_test,
+            no_promote=no_promote,
+            target=target
+        )
+    except Exception as e:
+        logger.error(f"Pair command failed: {e}", exc_info=ctx.obj.get('verbose', False))
+        click.echo(f"\n❌ Pair session failed: {e}", err=True)
+        raise click.Abort()
 
 
 def main():

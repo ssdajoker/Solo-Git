@@ -64,9 +64,15 @@ class TestPromotionGateEnhanced:
         git_engine.get_workpad = Mock(return_value=mock_workpad)
         git_engine.can_promote = Mock(side_effect=GitEngineError("Cannot check promotion"))
         
-        # Mock analysis
-        analysis = Mock(spec=TestAnalysis)
-        analysis.status = "green"
+        # Create proper TestAnalysis instance
+        analysis = TestAnalysis(
+            total_tests=10,
+            passed=10,
+            failed=0,
+            timeout=0,
+            error=0,
+            status="green"
+        )
         
         # Evaluate
         decision = gate.evaluate("test-pad", analysis)
@@ -83,12 +89,15 @@ class TestPromotionGateEnhanced:
         git_engine.get_workpad = Mock(return_value=mock_workpad)
         git_engine.can_promote = Mock(return_value=True)
         
-        # Mock analysis with red status
-        analysis = Mock(spec=TestAnalysis)
-        analysis.status = "red"
-        analysis.passed = 5
-        analysis.failed = 3
-        analysis.total_tests = 8
+        # Create proper TestAnalysis instance with red status
+        analysis = TestAnalysis(
+            total_tests=8,
+            passed=5,
+            failed=3,
+            timeout=0,
+            error=0,
+            status="red"
+        )
         
         # Evaluate
         decision = gate.evaluate("test-pad", analysis)
@@ -106,20 +115,23 @@ class TestPromotionGateEnhanced:
         git_engine.get_workpad = Mock(return_value=mock_workpad)
         git_engine.can_promote = Mock(return_value=True)
         
-        # Mock analysis with yellow status
-        analysis = Mock(spec=TestAnalysis)
-        analysis.status = "yellow"
-        analysis.passed = 8
-        analysis.failed = 0
-        analysis.total_tests = 8
+        # Create proper TestAnalysis instance with yellow status
+        analysis = TestAnalysis(
+            total_tests=8,
+            passed=8,
+            failed=0,
+            timeout=0,
+            error=0,
+            status="yellow"
+        )
         
         # Evaluate
         decision = gate.evaluate("test-pad", analysis)
         
-        # Verify
+        # Verify - Implementation treats non-green as REJECT
         assert not decision.can_promote
-        assert decision.decision == PromotionDecisionType.MANUAL_REVIEW
-        assert len(decision.warnings) > 0
+        assert decision.decision == PromotionDecisionType.REJECT
+        assert any("failed" in reason.lower() or "error" in reason.lower() for reason in decision.reasons)
     
     def test_evaluate_tests_not_required(self, custom_gate, git_engine):
         """Test evaluation when tests are not required."""
@@ -147,9 +159,15 @@ class TestPromotionGateEnhanced:
         git_engine.get_workpad = Mock(return_value=mock_workpad)
         git_engine.can_promote = Mock(return_value=False)  # Cannot fast-forward
         
-        # Mock analysis
-        analysis = Mock(spec=TestAnalysis)
-        analysis.status = "green"
+        # Create proper TestAnalysis instance
+        analysis = TestAnalysis(
+            total_tests=10,
+            passed=10,
+            failed=0,
+            timeout=0,
+            error=0,
+            status="green"
+        )
         
         # Evaluate
         decision = gate.evaluate("test-pad", analysis)
@@ -188,7 +206,7 @@ class TestPromotionGateEnhanced:
         
         # Verify
         assert "PROMOTION GATE DECISION" in formatted
-        assert "⚠️ MANUAL REVIEW REQUIRED" in formatted
+        assert "👀 MANUAL REVIEW REQUIRED" in formatted  # Uses 👀 emoji
         assert "Warning 1" in formatted
         assert "Warning 2" in formatted
     

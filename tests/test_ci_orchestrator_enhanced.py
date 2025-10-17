@@ -39,11 +39,11 @@ class TestCIOrchestratorEnhanced:
     
     def test_run_smoke_tests_repo_not_found(self, orchestrator, git_engine, smoke_tests):
         """Test running smoke tests when repository doesn't exist."""
-        # Mock git engine to raise error
-        git_engine.get_repo = Mock(side_effect=GitEngineError("Repository not found"))
+        # Mock git engine to return None (repo not found)
+        git_engine.get_repo = Mock(return_value=None)
         
         # Run smoke tests
-        result = orchestrator.run_smoke_tests("nonexistent-repo", smoke_tests)
+        result = orchestrator.run_smoke_tests("nonexistent-repo", "abc123", smoke_tests)
         
         # Verify
         assert result.status == CIStatus.FAILURE
@@ -59,7 +59,7 @@ class TestCIOrchestratorEnhanced:
         git_engine.get_history = Mock(side_effect=GitEngineError("History unavailable"))
         
         # Run smoke tests
-        result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+        result = orchestrator.run_smoke_tests("test-repo", "abc123", smoke_tests)
         
         # Verify
         assert result.status == CIStatus.FAILURE
@@ -74,7 +74,7 @@ class TestCIOrchestratorEnhanced:
         git_engine.get_history = Mock(return_value=[])  # No commits
         
         # Run smoke tests
-        result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+        result = orchestrator.run_smoke_tests("test-repo", "abc123", smoke_tests)
         
         # Verify
         assert result.status == CIStatus.FAILURE
@@ -92,7 +92,7 @@ class TestCIOrchestratorEnhanced:
         test_orchestrator.run_tests_sync = Mock(side_effect=Exception("Test orchestrator crashed"))
         
         # Run smoke tests
-        result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+        result = orchestrator.run_smoke_tests("test-repo", "abc123", smoke_tests)
         
         # Verify
         assert result.status == CIStatus.FAILURE
@@ -129,7 +129,7 @@ class TestCIOrchestratorEnhanced:
         test_orchestrator.run_tests_sync = Mock(return_value=test_results)
         
         # Run smoke tests
-        result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+        result = orchestrator.run_smoke_tests("test-repo", "abc123", smoke_tests)
         
         # Verify
         assert result.status == CIStatus.FAILURE

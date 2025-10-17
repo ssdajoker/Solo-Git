@@ -620,3 +620,235 @@ def test_analyze(pad_id: str):
     click.echo(f"⚠️ Test analysis requires recent test results")
     click.echo(f"   Run 'sologit test run {pad_id}' first")
     click.echo(f"\nNote: In Phase 3, test results will be cached and analyzed automatically")
+
+
+# ============================================================================
+# Phase 4: Complete Pair Loop Implementation
+# ============================================================================
+
+def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[str],
+                      no_test: bool, no_promote: bool, target: str):
+    """
+    Execute the complete AI pair programming loop.
+    
+    This is the core workflow of Solo Git:
+    1. Select/validate repository
+    2. Create ephemeral workpad
+    3. AI plans implementation
+    4. AI generates patch
+    5. Apply patch to workpad
+    6. Run tests (optional)
+    7. Auto-promote if green (optional)
+    
+    Args:
+        ctx: Click context
+        prompt: Natural language task description
+        repo_id: Repository ID (auto-selected if None)
+        title: Workpad title (derived from prompt if None)
+        no_test: Skip test execution
+        no_promote: Disable automatic promotion
+        target: Test target (fast/full)
+    """
+    from sologit.orchestration.ai_orchestrator import AIOrchestrator
+    from sologit.engines.patch_engine import PatchEngine
+    from sologit.workflows.auto_merge import AutoMergeWorkflow
+    from sologit.workflows.promotion_gate import PromotionRules
+    
+    import time
+    
+    git_engine = get_git_engine()
+    config_manager = ctx.obj.get('config')
+    
+    # Step 1: Select repository
+    if not repo_id:
+        repos = git_engine.list_repos()
+        if len(repos) == 0:
+            click.echo("❌ No repositories found. Initialize a repository first:", err=True)
+            click.echo("   evogitctl repo init --zip app.zip")
+            raise click.Abort()
+        elif len(repos) == 1:
+            repo_id = repos[0].id
+            click.echo(f"📦 Using repository: {repos[0].name} ({repo_id})")
+        else:
+            click.echo("❌ Multiple repositories found. Please specify --repo", err=True)
+            click.echo("\nAvailable repositories:")
+            for repo in repos:
+                click.echo(f"  • {repo.id} - {repo.name}")
+            raise click.Abort()
+    
+    # Validate repository exists
+    repo = git_engine.get_repo(repo_id)
+    if not repo:
+        click.echo(f"❌ Repository {repo_id} not found", err=True)
+        raise click.Abort()
+    
+    # Step 2: Create workpad
+    if not title:
+        # Derive title from prompt (first few words, sanitized)
+        words = prompt.split()[:5]
+        title = '-'.join(words).lower()
+        # Remove special characters
+        title = ''.join(c if c.isalnum() or c == '-' else '-' for c in title)
+        title = '-'.join(filter(None, title.split('-')))  # Remove empty parts
+    
+    click.echo(f"\n🚀 Starting pair programming session")
+    click.echo(f"   Repository: {repo.name}")
+    click.echo(f"   Prompt: {prompt}")
+    click.echo(f"   Title: {title}\n")
+    
+    try:
+        click.echo("📝 Creating workpad...")
+        pad_id = git_engine.create_workpad(repo_id, title)
+        workpad = git_engine.get_workpad(pad_id)
+        click.echo(f"✅ Workpad created: {pad_id}")
+        
+        # Step 3: AI Planning
+        click.echo(f"\n🤖 AI Planning (using {config_manager.config.models.planning_model})...")
+        start_time = time.time()
+        
+        orchestrator = AIOrchestrator(config_manager)
+        
+        # Get repo context (file tree)
+        repo_map = git_engine.get_repo_map(repo_id)
+        context = {
+            'repo_id': repo_id,
+            'repo_name': repo.name,
+            'file_tree': repo_map,
+            'trunk_branch': repo.trunk_branch
+        }
+        
+        plan_response = orchestrator.plan(
+            prompt=prompt,
+            repo_context=context
+        )
+        
+        planning_time = time.time() - start_time
+        click.echo(f"✅ Plan generated in {planning_time:.1f}s (cost: ${plan_response.cost_usd:.4f})")
+        click.echo(f"   Model: {plan_response.model_used}")
+        click.echo(f"   Complexity: {plan_response.complexity.score:.2f}")
+        
+        # Display plan
+        plan = plan_response.plan
+        click.echo(f"\n📋 Implementation Plan:")
+        click.echo(f"   Description: {plan.description}")
+        click.echo(f"   Files to modify: {', '.join(plan.files_to_modify) if plan.files_to_modify else 'None'}")
+        click.echo(f"   Files to create: {', '.join(plan.files_to_create) if plan.files_to_create else 'None'}")
+        if plan.test_strategy:
+            click.echo(f"   Test strategy: {plan.test_strategy}")
+        
+        # Step 4: Generate Patch
+        click.echo(f"\n💻 Generating code (using {config_manager.config.models.coding_model})...")
+        start_time = time.time()
+        
+        patch_response = orchestrator.generate_patch(
+            plan=plan,
+            repo_context=context
+        )
+        
+        coding_time = time.time() - start_time
+        click.echo(f"✅ Patch generated in {coding_time:.1f}s (cost: ${patch_response.cost_usd:.4f})")
+        click.echo(f"   Model: {patch_response.model_used}")
+        
+        patch = patch_response.patch
+        if patch.description:
+            click.echo(f"   Description: {patch.description}")
+        
+        # Step 5: Apply Patch
+        click.echo(f"\n📦 Applying patch to workpad...")
+        patch_engine = get_patch_engine()
+        
+        try:
+            result = patch_engine.apply_patch(pad_id, patch.diff)
+            click.echo(f"✅ Patch applied successfully")
+            click.echo(f"   Files changed: {result.files_changed}")
+            click.echo(f"   Insertions: +{result.insertions}")
+            click.echo(f"   Deletions: -{result.deletions}")
+            
+        except Exception as e:
+            click.echo(f"❌ Failed to apply patch: {e}", err=True)
+            click.echo(f"\n🔍 Workpad preserved for manual inspection: {pad_id}")
+            raise click.Abort()
+        
+        # Step 6: Run Tests (optional)
+        if not no_test:
+            click.echo(f"\n🧪 Running {target} tests...")
+            
+            # Define test configurations
+            if target == 'fast':
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60),
+                ]
+            else:
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60),
+                    TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q --tb=short", timeout=120),
+                ]
+            
+            test_orchestrator = get_test_orchestrator()
+            results = test_orchestrator.run_tests_sync(pad_id, tests, parallel=True)
+            
+            # Display results
+            click.echo(f"\n📊 Test Results:")
+            all_passed = True
+            for result in results:
+                status_icon = "✅" if result.status.value == "passed" else "❌"
+                duration_s = result.duration_ms / 1000
+                click.echo(f"   {status_icon} {result.name} ({duration_s:.1f}s)")
+                if result.status.value != "passed":
+                    all_passed = False
+                    # Show first few lines of error
+                    error_lines = result.stdout.split('\n')[:5]
+                    for line in error_lines:
+                        if line.strip():
+                            click.echo(f"      {line}")
+            
+            summary = test_orchestrator.get_summary(results)
+            click.echo(f"\n   Summary: {summary['passed']}/{summary['total']} passed")
+            
+            # Step 7: Auto-promote (optional)
+            if all_passed and not no_promote:
+                click.echo(f"\n🎉 All tests passed! Auto-promoting to trunk...")
+                
+                try:
+                    commit_hash = git_engine.promote_workpad(pad_id)
+                    click.echo(f"✅ Workpad promoted to trunk!")
+                    click.echo(f"   Commit: {commit_hash}")
+                    click.echo(f"\n🏁 Pair session complete! Changes are now in {repo.trunk_branch}.")
+                    
+                    # Show total cost
+                    total_cost = plan_response.cost_usd + patch_response.cost_usd
+                    click.echo(f"\n💰 Total cost: ${total_cost:.4f}")
+                    
+                except Exception as e:
+                    click.echo(f"❌ Promotion failed: {e}", err=True)
+                    click.echo(f"\n🔍 Workpad preserved: {pad_id}")
+                    click.echo(f"   Manually promote: evogitctl pad promote {pad_id}")
+                    raise click.Abort()
+            
+            elif not all_passed:
+                click.echo(f"\n⚠️  Tests failed. Workpad preserved for fixes: {pad_id}")
+                click.echo(f"   View diff: evogitctl pad diff {pad_id}")
+                click.echo(f"   Run tests: evogitctl test run {pad_id}")
+                click.echo(f"   Promote manually: evogitctl pad promote {pad_id}")
+                raise click.Abort()
+            
+            else:  # no_promote flag
+                click.echo(f"\n✅ Tests passed but auto-promote disabled")
+                click.echo(f"   Workpad: {pad_id}")
+                click.echo(f"   Promote manually: evogitctl pad promote {pad_id}")
+        
+        else:  # no_test flag
+            click.echo(f"\n⚠️  Tests skipped. Workpad ready for manual testing: {pad_id}")
+            click.echo(f"   Run tests: evogitctl test run {pad_id}")
+            click.echo(f"   View diff: evogitctl pad diff {pad_id}")
+            if not no_promote:
+                click.echo(f"   Promote: evogitctl pad promote {pad_id}")
+        
+    except click.Abort:
+        # Re-raise abort to exit cleanly
+        raise
+    except Exception as e:
+        click.echo(f"\n❌ Unexpected error: {e}", err=True)
+        logger.exception("Pair loop failed")
+        click.echo(f"\n🔍 Workpad may be in inconsistent state: {pad_id if 'pad_id' in locals() else 'N/A'}")
+        raise click.Abort()
