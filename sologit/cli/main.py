@@ -118,6 +118,21 @@ cli.add_command(test)
 from sologit.cli.commands import ci
 cli.add_command(ci)
 
+# Phase 4: Integrated Heaven Interface commands
+try:
+    from sologit.cli.integrated_commands import workpad as integrated_workpad
+    from sologit.cli.integrated_commands import ai as integrated_ai
+    from sologit.cli.integrated_commands import history as integrated_history
+    
+    # Register with different names to avoid conflicts
+    cli.add_command(integrated_workpad, name="workpad-integrated")
+    cli.add_command(integrated_ai, name="ai")
+    cli.add_command(integrated_history, name="history")
+    
+    logger.info("Integrated Heaven Interface commands loaded")
+except ImportError as e:
+    logger.warning(f"Could not load integrated commands: {e}")
+
 
 @cli.command()
 def tui():
@@ -148,6 +163,46 @@ def tui():
         raise click.Abort()
     except Exception as e:
         click.echo(f"❌ TUI launch failed: {e}", err=True)
+        raise click.Abort()
+
+
+@cli.command()
+def heaven():
+    """
+    Launch the Enhanced Heaven Interface TUI.
+    
+    The enhanced TUI provides a production-ready interface with:
+    - Real-time commit graph with ASCII visualization
+    - Live workpad status updates
+    - Real-time test output streaming
+    - AI operation tracking
+    - Full keyboard navigation
+    
+    \b
+    Keyboard Shortcuts:
+      q - Quit
+      r - Refresh all panels
+      c - Clear test output
+      t - Run tests on active workpad
+      ? - Show help
+    
+    \b
+    Layout:
+      • Left Panel:   Commit graph (trunk history)
+      • Middle Top:   Active workpad status
+      • Middle Bot:   AI operation activity
+      • Right Panel:  Real-time test output
+    """
+    try:
+        from sologit.ui.enhanced_tui import run_enhanced_tui
+        run_enhanced_tui()
+    except ImportError as e:
+        click.echo("❌ Error: Enhanced TUI dependencies not installed", err=True)
+        click.echo("Install with: pip install textual", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Enhanced TUI launch failed: {e}", err=True)
+        logger.error(f"Enhanced TUI error: {e}", exc_info=True)
         raise click.Abort()
 
 
