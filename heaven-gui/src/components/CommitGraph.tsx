@@ -37,10 +37,11 @@ export default function CommitGraph({ repoId }: CommitGraphProps) {
     
     try {
       setLoading(true)
-      const data = await invoke<{ commits: Commit[] }>('read_commits', { repoId })
-      setCommits(data.commits || [])
+      const data = await invoke<Commit[]>('list_commits', { repoId, limit: 20 })
+      setCommits(data || [])
     } catch (e) {
       console.error('Failed to load commits:', e)
+      setCommits([]) // Set empty array on error
     } finally {
       setLoading(false)
     }

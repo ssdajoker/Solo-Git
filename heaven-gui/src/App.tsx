@@ -136,10 +136,12 @@ function App() {
       description: 'Run tests for active workpad',
       category: 'Testing',
       shortcut: 'Cmd+T',
-      action: () => {
+      action: async () => {
         if (globalState?.active_workpad) {
           addNotification('Running tests...', 'info')
-          // TODO: Invoke test run
+          // Note: Test execution is handled by the CLI. Use `evogitctl test run` command.
+          // GUI test execution requires integration with the backend test orchestrator.
+          addNotification('Use CLI: evogitctl test run --pad ' + globalState.active_workpad, 'info')
         } else {
           addNotification('No active workpad', 'warning')
         }

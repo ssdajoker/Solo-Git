@@ -37,7 +37,7 @@ export default function TestDashboard({ workpadId }: TestDashboardProps) {
     
     try {
       setLoading(true)
-      const runs = await invoke<TestRun[]>('get_test_runs', { workpadId })
+      const runs = await invoke<TestRun[]>('list_test_runs', { workpadId })
       setTestRuns(runs || [])
     } catch (e) {
       console.error('Failed to load test runs:', e)

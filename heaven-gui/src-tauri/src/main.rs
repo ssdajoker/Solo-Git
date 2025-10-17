@@ -97,6 +97,23 @@ struct CommitNode {
     is_trunk: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct FileNode {
+    name: String,
+    path: String,
+    is_directory: bool,
+    children: Option<Vec<FileNode>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Settings {
+    theme: String,
+    font_size: i32,
+    auto_save: bool,
+    show_line_numbers: bool,
+    enable_ai: bool,
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -404,6 +421,162 @@ fn list_repository_files(repo_id: String) -> Result<Vec<String>, String> {
     Ok(files)
 }
 
+#[tauri::command]
+fn get_file_tree(repo_id: String) -> Result<Vec<FileNode>, String> {
+    let repo_dir = get_repos_dir().join(&repo_id);
+    
+    if !repo_dir.exists() {
+        return Err(format!("Repository directory not found: {}", repo_id));
+    }
+    
+    fn build_tree(dir: &std::path::Path, base: &std::path::Path) -> Result<Vec<FileNode>, String> {
+        let mut nodes = Vec::new();
+        
+        for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            
+            // Skip .git directory and hidden files
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if file_name == ".git" || file_name.starts_with('.') {
+                continue;
+            }
+            
+            let rel_path = path.strip_prefix(base)
+                .map_err(|e| e.to_string())?
+                .to_string_lossy()
+                .to_string();
+            
+            let is_dir = path.is_dir();
+            let children = if is_dir {
+                Some(build_tree(&path, base)?)
+            } else {
+                None
+            };
+            
+            nodes.push(FileNode {
+                name: file_name.to_string(),
+                path: rel_path,
+                is_directory: is_dir,
+                children,
+            });
+        }
+        
+        // Sort: directories first, then alphabetically
+        nodes.sort_by(|a, b| {
+            match (a.is_directory, b.is_directory) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.cmp(&b.name),
+            }
+        });
+        
+        Ok(nodes)
+    }
+    
+    build_tree(&repo_dir, &repo_dir)
+}
+
+#[tauri::command]
+fn get_directory_contents(repo_id: String, dir_path: String) -> Result<Vec<FileNode>, String> {
+    let full_path = get_repos_dir().join(&repo_id).join(&dir_path);
+    
+    if !full_path.exists() || !full_path.is_dir() {
+        return Err(format!("Directory not found: {}", dir_path));
+    }
+    
+    let mut nodes = Vec::new();
+    
+    for entry in fs::read_dir(&full_path).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        
+        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if file_name.starts_with('.') {
+            continue;
+        }
+        
+        let is_dir = path.is_dir();
+        
+        nodes.push(FileNode {
+            name: file_name.to_string(),
+            path: format!("{}/{}", dir_path, file_name),
+            is_directory: is_dir,
+            children: None,
+        });
+    }
+    
+    // Sort: directories first, then alphabetically
+    nodes.sort_by(|a, b| {
+        match (a.is_directory, b.is_directory) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+    
+    Ok(nodes)
+}
+
+fn get_settings_path() -> PathBuf {
+    let home = dirs::home_dir().expect("Could not find home directory");
+    home.join(".sologit").join("gui_settings.json")
+}
+
+#[tauri::command]
+fn get_settings() -> Result<Settings, String> {
+    let settings_path = get_settings_path();
+    
+    if !settings_path.exists() {
+        // Return default settings
+        return Ok(Settings {
+            theme: "dark".to_string(),
+            font_size: 14,
+            auto_save: true,
+            show_line_numbers: true,
+            enable_ai: true,
+        });
+    }
+    
+    let contents = fs::read_to_string(settings_path)
+        .map_err(|e| format!("Failed to read settings: {}", e))?;
+    
+    serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse settings: {}", e))
+}
+
+#[tauri::command]
+fn save_settings(settings: Settings) -> Result<(), String> {
+    let settings_path = get_settings_path();
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create settings directory: {}", e))?;
+    }
+    
+    let contents = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+    
+    fs::write(settings_path, contents)
+        .map_err(|e| format!("Failed to write settings: {}", e))
+}
+
+#[tauri::command]
+fn ai_chat(repo_id: String, workpad_id: Option<String>, prompt: String, model: String) -> Result<serde_json::Value, String> {
+    // This is a stub that returns a simulated response
+    // In production, this would call the actual Solo Git AI orchestrator
+    // For now, we'll return a placeholder response
+    
+    Ok(serde_json::json!({
+        "content": "AI integration is being implemented. This feature will connect to the Solo Git AI orchestrator to provide planning, code generation, and debugging assistance.",
+        "model": model,
+        "cost_usd": 0.0,
+        "tokens_used": 0,
+        "error": "AI chat functionality requires integration with the Solo Git backend. Please use the CLI commands for AI features until GUI integration is complete."
+    }))
+}
+
 // ============================================================================
 // Main Application
 // ============================================================================
@@ -425,6 +598,13 @@ fn main() {
             // File operations
             read_file,
             list_repository_files,
+            get_file_tree,
+            get_directory_contents,
+            // Settings
+            get_settings,
+            save_settings,
+            // AI operations
+            ai_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
