@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Solo Git Launcher Script
+# 
+# Simple launcher for Solo Git CLI
+# Usage: ./solo-git [command] [args...]
+#
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Check if evogitctl is installed
+if ! command -v evogitctl &> /dev/null; then
+    echo -e "${YELLOW}⚠️  evogitctl not found. Installing Solo Git...${NC}"
+    
+    # Get the directory where this script is located
+    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+    
+    # Install in development mode
+    cd "$SCRIPT_DIR"
+    pip3 install -e . > /dev/null 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Solo Git installed successfully!${NC}"
+    else
+        echo -e "${YELLOW}❌ Installation failed. Please run: pip3 install -e .${NC}"
+        exit 1
+    fi
+fi
+
+# If no arguments provided, show help
+if [ $# -eq 0 ]; then
+    echo -e "${BLUE}🚀 Solo Git - Frictionless Git for AI-augmented solo developers${NC}"
+    echo ""
+    echo "Usage: ./solo-git [command] [args...]"
+    echo ""
+    echo "Quick commands:"
+    echo "  ./solo-git hello                    - Test installation"
+    echo "  ./solo-git heaven                   - Launch Heaven TUI"
+    echo "  ./solo-git version                  - Show version"
+    echo "  ./solo-git config show              - Show configuration"
+    echo "  ./solo-git --help                   - Show all commands"
+    echo ""
+    echo "Run './solo-git --help' for full command list"
+    exit 0
+fi
+
+# Run evogitctl with all provided arguments
+evogitctl "$@"
