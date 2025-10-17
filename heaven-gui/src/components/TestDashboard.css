@@ -1,0 +1,68 @@
+
+.test-dashboard {
+  background: var(--color-surface);
+  border-radius: 8px;
+  padding: var(--spacing-lg);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--color-text-muted);
+}
+
+.dashboard-header h2 {
+  color: var(--color-green);
+}
+
+.workpad-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: var(--color-background);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: 4px;
+}
+
+.dashboard-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.empty-state p {
+  margin-bottom: var(--spacing-sm);
+}
+
+.empty-state .hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.placeholder {
+  text-align: center;
+}
+
+.feature-list {
+  list-style: none;
+  margin-top: var(--spacing-lg);
+  text-align: left;
+}
+
+.feature-list li {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  margin-bottom: var(--spacing-sm);
+}

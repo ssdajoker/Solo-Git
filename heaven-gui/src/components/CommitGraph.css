@@ -1,0 +1,103 @@
+
+.commit-graph {
+  display: flex;
+  flex-direction: column;
+  height: 50%;
+  border-bottom: 1px solid var(--color-text-muted);
+}
+
+.commit-graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-text-muted);
+}
+
+.commit-graph-header h3 {
+  color: var(--color-blue);
+  font-size: 14px;
+}
+
+.loading-indicator {
+  color: var(--color-blue);
+  animation: spin 1s linear infinite;
+}
+
+.commit-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+}
+
+.commit-item {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.commit-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 20px;
+}
+
+.node {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.node.trunk {
+  color: var(--color-blue);
+}
+
+.node.workpad {
+  color: var(--color-purple);
+}
+
+.connector {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.commit-info {
+  flex: 1;
+}
+
+.commit-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: 2px;
+}
+
+.test-status {
+  font-size: 10px;
+}
+
+.status-passed { color: var(--color-success); }
+.status-failed { color: var(--color-error); }
+.status-running { color: var(--color-info); }
+.status-none { color: var(--color-text-muted); }
+
+.commit-sha {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.commit-message {
+  font-size: 12px;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.empty-message {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  text-align: center;
+  padding: var(--spacing-lg);
+}

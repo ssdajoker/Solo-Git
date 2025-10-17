@@ -1,0 +1,95 @@
+
+/* Heaven Interface Design System - Global Styles */
+
+:root {
+  /* Colors - Heaven Interface Palette */
+  --color-background: #1E1E1E;
+  --color-surface: #252526;
+  --color-text-primary: #DDDDDD;
+  --color-text-secondary: #5C6370;
+  --color-text-muted: #3E4451;
+  
+  /* Accent colors */
+  --color-blue: #61AFEF;
+  --color-green: #98C379;
+  --color-orange: #E5C07B;
+  --color-red: #E06C75;
+  --color-purple: #C678DD;
+  --color-cyan: #56B6C2;
+  
+  /* Semantic colors */
+  --color-success: var(--color-green);
+  --color-error: var(--color-red);
+  --color-warning: var(--color-orange);
+  --color-info: var(--color-blue);
+  
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  --font-sans: 'SF Pro', -apple-system, 'Roboto', sans-serif;
+  
+  /* Spacing - 8-point grid */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease-in-out;
+  --transition-normal: 250ms ease-in-out;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  overflow: hidden;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h1 { font-size: 24px; }
+h2 { font-size: 20px; }
+h3 { font-size: 16px; }
+h4 { font-size: 14px; }
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-text-muted);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-blue);
+  color: var(--color-background);
+}
