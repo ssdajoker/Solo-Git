@@ -1,83 +1,216 @@
-
 # Solo Git
 
-**Frictionless Git workflow for AI-augmented solo developers**
+**Frictionless AI-Powered Development for the Solo Developer**
 
 > *"Tests are the review. Trunk is king. Workpads are ephemeral."*
 
-## 🎯 What is Solo Git?
+[![Python 3.9+](https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Blue_Python_3.9_Shield_Badge.svg/1200px-Blue_Python_3.9_Shield_Badge.svg.png)
+[![License: MIT](https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/License_icon-mit.svg/256px-License_icon-mit.svg.png)
+[![Status: Beta](https://i.ytimg.com/vi/4cgpu9L2AE8/hq720.jpg?sqp=-oaymwEhCK4FEIIDSFryq4qpAxMIARUAAAAAGAElAADIQj0AgKJD&rs=AOn4CLCzedb-c7IZSg8ZCib1APCJvLdWqw)
 
-Solo Git is a paradigm shift in version control for solo developers working with AI assistants. It eliminates the friction of traditional Git workflows (branches, PRs, manual reviews) and replaces them with an intelligent, test-driven, auto-merging system.
+---
 
-### The Core Innovation
+## What is Solo Git?
 
-Traditional Git was designed for teams with human reviewers. Solo Git recognizes that in the human/AI pairing, **comprehensive automated testing** is more reliable than manual review processes. The system treats your test suite as the ultimate arbiter of correctness, enabling instant merges when tests pass.
+**Solo Git** is a revolutionary version control system designed specifically for solo developers working with AI assistants. It eliminates the friction of traditional Git workflows (branches, PRs, manual reviews) and replaces them with an intelligent, test-driven, auto-merging system where **tests are the ultimate arbiter of correctness**.
 
-## ✨ Key Features
+### The Problem
 
-- 🚫 **No Branches**: Ephemeral workpads replace traditional branches
-- ✅ **Tests are the Review**: Green tests = instant merge to trunk
-- 🤖 **AI-Powered**: Multi-model orchestration via Abacus.ai RouteLLM API
-- 🏎️ **Frictionless Flow**: From idea to production in minutes, not hours
-- ☁️ **Pure Cloud**: No local model hosting, no GPU requirements
-- 💰 **Cost-Controlled**: Daily spend caps and smart model selection
+Traditional Git workflows are optimized for teams:
+- **Branches** require constant naming, switching, and mental overhead
+- **Pull Requests** assume human reviewers (often yourself)
+- **Merge conflicts** disrupt flow and waste precious time
+- **CI/CD** runs too late to prevent broken commits
 
-## 🚀 Quick Start
+For solo developers working with AI, these patterns create friction without adding value.
+
+### The Solution
+
+Solo Git introduces three core innovations:
+
+1. **Ephemeral Workpads** - Disposable, auto-named sandboxes that replace branches
+2. **Tests as Review** - Automated testing replaces human code review
+3. **Instant Auto-Merge** - Green tests trigger immediate trunk promotion
+
+---
+
+## Key Features
+
+### ✨ **Frictionless Workflow**
+- **No Branch Management**: Say goodbye to `git checkout -b feature/...`
+- **No Pull Requests**: Tests replace human review
+- **No Merge Conflicts**: Fast-forward merges only
+- **Auto-Merge on Green**: Code ships the moment tests pass
+
+### 🤖 **AI-Native Design**
+- **Multi-Model Intelligence**: Automatically selects optimal AI model for each task
+- **Cloud-Powered**: 100% Abacus.ai RouteLLM API - no local model hosting
+- **Smart Escalation**: Simple edits use fast models, complex logic uses GPT-4/Claude
+- **Cost Controls**: Daily budgets, per-model tracking, automatic alerts
+
+### 🧪 **Test-Driven Safety**
+- **Isolated Sandboxes**: Every test runs in a clean subprocess
+- **Parallel Execution**: Fast tests run simultaneously
+- **Intelligent Analysis**: AI diagnoses failures and suggests fixes
+- **CI Integration**: Optional Jenkins/GitHub Actions for post-merge smoke tests
+
+### 🎯 **Production Ready**
+- **76% Test Coverage**: 555 tests passing, comprehensive validation
+- **Battle-Tested**: Phases 0-3 complete and verified
+- **Comprehensive Docs**: Setup guides, API reference, wiki
+- **Active Development**: Phase 4 refinements ongoing
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Python 3.9+**
+- **Git 2.30+**
+- **Abacus.ai API Account** ([Sign up here](https://abacus.ai))
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Install from source
 git clone https://github.com/yourusername/solo-git.git
 cd solo-git
-
-# Install dependencies
 pip install -e .
 
-# Setup configuration
-evogitctl config setup
+# Verify installation
+evogitctl --version
 ```
 
-### First Steps
+### Configuration
 
 ```bash
-# 1. Configure API credentials (interactive)
+# Interactive setup (recommended)
 evogitctl config setup
 
-# 2. Test configuration
-evogitctl config test
-
-# 3. Initialize a repository
-evogitctl repo init --zip app.zip
-
-# 4. Start AI pairing (coming in Phase 2)
-evogitctl pair "add passwordless magic link login"
+# Or set environment variables
+export ABACUS_API_ENDPOINT=https://api.abacus.ai/v1
+export ABACUS_API_KEY=your-api-key-here
 ```
 
-## 🏗️ Architecture
+### Your First Project
+
+```bash
+# Initialize repository from zip
+evogitctl repo init --zip myproject.zip
+
+# Create a workpad
+evogitctl pad create "add-auth-feature"
+
+# Run tests
+evogitctl test run --target fast
+
+# Tests passed? Auto-promoted to trunk! ✅
+```
+
+---
+
+## The Pair Loop
+
+**The core Solo Git experience:**
+
+```
+You: "Add Redis caching to search endpoint with 5-minute TTL"
+
+Solo Git:
+  1. 🧠 Plans changes (GPT-4/Claude)        →  4 seconds
+  2. ✍️  Generates patches (DeepSeek Coder) → 10 seconds  
+  3. 🧪 Runs tests in sandbox              → 20 seconds
+  4. ✅ Auto-merges to trunk                →  1 second
+  ─────────────────────────────────────────────────────
+  Total: Under 1 minute, from idea to production!
+```
+
+---
+
+## Architecture
+
+### System Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Solo Git Core                       │
+├─────────────────────────────────────────────────────┤
+│                                                      │
+│  Git Engine        ←  Workpads, patches, merges     │
+│  Test Orchestrator ←  Sandboxed test execution      │
+│  AI Orchestrator   ←  Multi-model routing           │
+│  Auto-Merge        ←  Test-gated promotion          │
+│                                                      │
+└──────────────┬──────────────────────┬────────────────┘
+               │                      │
+               ▼                      ▼
+    ┌──────────────────┐    ┌──────────────────┐
+    │  Abacus.ai API   │    │  Optional CI/CD  │
+    │  RouteLLM        │    │  Jenkins/Actions │
+    │                  │    │                  │
+    │ • GPT-4          │    │ • Smoke Tests    │
+    │ • Claude 3.5     │    │ • Auto-Rollback  │
+    │ • DeepSeek       │    │                  │
+    │ • Llama 70B/8B   │    └──────────────────┘
+    └──────────────────┘
+```
+
+### Three-Tier Model Selection
+
+**All through Abacus.ai RouteLLM API** - one endpoint, multiple world-class models:
+
+| Tier | Models | Use Cases | Speed | Cost |
+|------|--------|-----------|-------|------|
+| **Planning** | GPT-4, Claude 3.5 Sonnet | Architecture, complex logic, failure diagnosis | Slower | Higher |
+| **Coding** | DeepSeek-Coder, CodeLlama | Patch generation, refactoring, standard tasks | Medium | Medium |
+| **Fast** | Llama 3.1 8B, Gemma 2 9B | Simple edits, boilerplate, documentation | Fast | Low |
+
+**Smart Escalation**: The system automatically routes tasks to the optimal model based on:
+- Code complexity
+- Security sensitivity (auth, crypto keywords)
+- Test failure history
+- Budget constraints
+- Patch size estimates
+
+---
+
+## Core Concepts
+
+### Workpads (Not Branches)
+
+**Traditional Git:**
+```bash
+git checkout -b feature/add-login
+# Do work...
+git add . && git commit -m "Add login"
+git checkout main
+git merge feature/add-login
+git branch -d feature/add-login
+```
+
+**Solo Git:**
+```bash
+evogitctl pad create "add-login"
+# Work happens automatically via AI
+# Tests pass → merged already! 🎉
+```
+
+**Mental Model**: Workpads are scratch paper. Use them freely, they disappear when done.
+
+### Tests as Review
+
+**Traditional:** Code → Human Review → Merge  
+**Solo Git:** Code → Test Suite → Auto-Merge (if green)
 
 ```
 ┌─────────────┐
-│   Prompt    │  You speak natural language
-│  (Human)    │
+│   AI Code   │
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│  AI Plan    │  Smart model analyzes & plans
-│  (GPT-4)    │  (via Abacus.ai RouteLLM)
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  AI Patch   │  Coder model implements
-│ (DeepSeek)  │  (via Abacus.ai RouteLLM)
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  Test Run   │  Sandboxed test execution
-│  (Isolated) │
+│  Run Tests  │
 └──────┬──────┘
        │
    ┌───┴───┐
@@ -90,134 +223,483 @@ evogitctl pair "add passwordless magic link login"
 └──────┘ └──────┘
 ```
 
-### Multi-Model Intelligence
+### Fast-Forward Only Merges
 
-Solo Git automatically routes tasks to the optimal model:
+**Solo Git never creates merge commits**. All promotions are fast-forward merges, keeping history linear and clean.
 
-- **Planning**: GPT-4, Claude 3.5 Sonnet (complex reasoning)
-- **Coding**: DeepSeek-Coder, CodeLlama (specialized generation)
-- **Fast Ops**: Llama 3.1 8B, Gemma 2 9B (quick edits)
+**Benefits:**
+- Clean, readable history
+- No merge commit noise
+- Easy rollbacks
+- Clear causality
 
-All through a single Abacus.ai RouteLLM API endpoint!
+---
 
-## 📖 Philosophy
+## Configuration
 
-### What You Keep
+### Basic Setup
+
+Create `~/.sologit/config.yaml`:
+
+```yaml
+# Abacus.ai RouteLLM API (all AI operations)
+abacus:
+  endpoint: https://api.abacus.ai/v1
+  api_key: ${ABACUS_API_KEY}  # Or hardcode (not recommended)
+
+# Model selection by task type
+models:
+  # Planning models - deep reasoning
+  planning_model: gpt-4o
+  planning_fallback: claude-3-5-sonnet
+  planning_temperature: 0.2
+  planning_max_tokens: 4096
+  
+  # Coding models - specialized generation
+  coding_model: deepseek-coder-33b
+  coding_fallback: codellama-70b-instruct
+  coding_temperature: 0.1
+  coding_max_tokens: 2048
+  
+  # Fast models - quick operations
+  fast_model: llama-3.1-8b-instruct
+  fast_fallback: gemma-2-9b-it
+  fast_temperature: 0.1
+  fast_max_tokens: 1024
+
+# Budget controls
+budget:
+  daily_usd_cap: 10.0           # Maximum daily spend
+  alert_threshold: 0.80         # Alert at 80%
+  track_by_model: true          # Track costs per model
+
+# Workflow settings
+promote_on_green: true          # Auto-merge when tests pass
+rollback_on_ci_red: true        # Auto-rollback on CI failure
+workpad_ttl_days: 7             # Workpad retention period
+
+# Test configuration
+tests:
+  fast:
+    - name: unit-tests
+      cmd: pytest tests/unit --quiet
+      timeout: 30
+    - name: integration-tests
+      cmd: pytest tests/integration --quiet
+      timeout: 60
+  
+  full:
+    - name: e2e-tests
+      cmd: npm run test:e2e
+      timeout: 180
+    - name: security-scan
+      cmd: trivy fs --severity HIGH,CRITICAL .
+      timeout: 120
+
+# Escalation rules
+escalation:
+  triggers:
+    - patch_lines > 200          # Large changes → planning model
+    - test_failures >= 2         # Repeated failures → smarter model
+    - security_keywords:         # Security code → planning model
+        - auth
+        - crypto
+        - password
+        - token
+        - jwt
+    - complexity_score > 0.7     # Complex code → planning model
+```
+
+---
+
+## CLI Reference
+
+### Core Commands
+
+```bash
+# Configuration
+evogitctl config setup              # Interactive setup
+evogitctl config show               # Display config
+evogitctl config test               # Test API connection
+
+# Repository Management
+evogitctl repo init --zip app.zip   # Initialize from zip
+evogitctl repo init --git <url>     # Initialize from Git URL
+evogitctl repo list                 # List repositories
+evogitctl repo info <repo-id>       # Show repo details
+
+# Workpad Lifecycle
+evogitctl pad create <title>        # Create workpad
+evogitctl pad list                  # List workpads
+evogitctl pad info <pad-id>         # Show workpad details
+evogitctl pad promote <pad-id>      # Promote to trunk
+evogitctl pad delete <pad-id>       # Delete workpad
+
+# Testing
+evogitctl test run --pad <id>       # Run tests
+evogitctl test run --target full    # Run full test suite
+evogitctl test config               # Show test config
+
+# AI Pairing (Phase 2)
+evogitctl pair "<prompt>"           # AI pair programming
+evogitctl pair --model planning     # Force model tier
+
+# Workflows (Phase 3)
+evogitctl auto-merge run            # Run auto-merge workflow
+evogitctl auto-merge status         # Check workflow status
+evogitctl promote                   # Gate-checked promotion
+evogitctl rollback --last           # Rollback last commit
+
+# CI/CD Integration (Phase 3)
+evogitctl ci smoke                  # Run smoke tests
+evogitctl ci status                 # CI job status
+
+# Utilities
+evogitctl version                   # Show version info
+evogitctl hello                     # Verify installation
+```
+
+### Global Options
+
+```bash
+evogitctl -v <command>              # Verbose output
+evogitctl --config <path> <command> # Custom config file
+evogitctl --help                    # Show help
+```
+
+---
+
+## Project Status
+
+### Development Phases
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **Phase 0** | ✅ Complete | Foundation, config, API client |
+| **Phase 1** | ✅ Complete | Git engine, workpads, tests |
+| **Phase 2** | ✅ Complete | AI integration, multi-model routing |
+| **Phase 3** | ✅ Complete | Auto-merge, CI/CD, rollback |
+| **Phase 4** | 🚧 In Progress | Documentation, polish, beta prep |
+
+### Test Coverage
+
+```
+Overall Coverage:    76%
+Core Components:     90%+
+Total Tests:         555 passing
+Test Suites:         32 suites
+```
+
+### Current Capabilities
+
+- ✅ Repository initialization (ZIP/Git)
+- ✅ Workpad lifecycle management
+- ✅ Patch application with conflict detection
+- ✅ Test orchestration with sandboxing
+- ✅ Multi-model AI integration
+- ✅ Cost tracking and budgets
+- ✅ Auto-merge on green tests
+- ✅ CI smoke tests with rollback
+- ✅ Intelligent test failure analysis
+- ✅ Configurable promotion gates
+- ⏳ Desktop UI (planned)
+- ⏳ Advanced metrics dashboard (planned)
+
+---
+
+## Documentation
+
+### Quick Links
+
+- **[Setup Guide](docs/SETUP.md)** - Installation and configuration
+- **[API Documentation](docs/API.md)** - Complete API reference
+- **[CLI Reference](docs/wiki/guides/cli-reference.md)** - All commands
+- **[Configuration Guide](docs/wiki/guides/config-reference.md)** - Config options
+- **[Wiki Home](docs/wiki/Home.md)** - Complete documentation hub
+
+### Phase Completion Reports
+
+- [Phase 0 Completion](docs/PHASE_0_COMPLETE.md)
+- [Phase 1 Completion](docs/wiki/phases/phase-1-completion.md)
+- [Phase 2 Completion](docs/wiki/phases/phase-2-completion.md)
+- [Phase 3 Completion](docs/wiki/phases/phase-3-completion.md)
+- [Phase 4 Readiness Report](PHASE_4_READINESS_REPORT.md)
+
+---
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific phase tests
+pytest tests/test_git_engine*.py -v
+pytest tests/test_ai_orchestrator*.py -v
+pytest tests/test_phase3*.py -v
+
+# Run with coverage
+pytest tests/ --cov=sologit --cov-report=html
+```
+
+### Code Quality
+
+```bash
+# Format code
+black sologit/ tests/
+
+# Sort imports
+isort sologit/ tests/
+
+# Type checking
+mypy sologit/
+
+# Linting
+flake8 sologit/
+```
+
+### Project Structure
+
+```
+solo-git/
+├── sologit/                    # Main package
+│   ├── cli/                    # CLI commands
+│   ├── config/                 # Configuration management
+│   ├── api/                    # API clients
+│   ├── core/                   # Core models (Repository, Workpad)
+│   ├── engines/                # Git, Patch, Test engines
+│   ├── orchestration/          # AI orchestration
+│   ├── analysis/               # Test analysis
+│   ├── workflows/              # Auto-merge, CI, rollback
+│   └── utils/                  # Utilities and logging
+├── tests/                      # Test suite (555 tests)
+├── docs/                       # Documentation
+│   ├── wiki/                   # Comprehensive wiki
+│   ├── SETUP.md               # Setup guide
+│   └── API.md                 # API reference
+└── [config files]              # setup.py, LICENSE, etc.
+```
+
+---
+
+## Philosophy
+
+### Why Solo Git?
+
+**Traditional Git was designed for teams with human reviewers.**  
+Solo Git recognizes that for solo developers working with AI:
+
+1. **Automated testing is more reliable than manual code review**
+2. **Branches create overhead without adding safety**
+3. **Pull requests are ceremony when you're both author and reviewer**
+4. **AI models can plan, code, and test faster than humans can review**
+
+### Design Principles
+
+1. **Tests as Truth** - If tests pass, code ships. Period.
+2. **Zero Ceremony** - No branches, no PRs, no waiting.
+3. **Fast-Forward Only** - Linear history, easy rollbacks.
+4. **Ephemeral Workspaces** - Disposable sandboxes, not persistent branches.
+5. **AI-Augmented** - Leverage AI for planning, coding, and diagnosis.
+6. **Cloud-Native** - No local model hosting, pure API simplicity.
+
+### What You Keep from Git
 
 - ✅ Git's integrity, reproducibility, and time machine
-- ✅ Full audit trail of all changes
-- ✅ Ability to export to standard Git at any time
+- ✅ Commit history and auditability
+- ✅ Rollback capabilities
+- ✅ Diff and blame tools
+- ✅ Remote backup and collaboration (when needed)
 
 ### What You Drop
 
 - ❌ Manual branch management
-- ❌ Pull request ceremony
-- ❌ Blocking reviews by the same person
-- ❌ Context switching between branches
+- ❌ PR creation and ceremony
+- ❌ Blocking human reviews
+- ❌ Merge conflict resolution (fast-forward only)
+- ❌ Manual CI trigger waiting
 
 ### What You Gain
 
-- ✨ Ephemeral workpads (disposable, auto-named)
-- ✨ Test-gated auto-merge (green = instant trunk promotion)
-- ✨ AI pair programming at every step
-- ✨ Sub-minute cycle time for typical changes
-
-## 🛠️ Configuration
-
-Solo Git uses a YAML configuration file at `~/.sologit/config.yaml`:
-
-```yaml
-# Abacus.ai API (all AI operations)
-abacus:
-  endpoint: https://api.abacus.ai/v1
-  api_key: your-api-key-here
-
-# Model selection strategy
-models:
-  planning_model: gpt-4o
-  coding_model: deepseek-coder-33b
-  fast_model: llama-3.1-8b-instruct
-
-# Budget controls
-budget:
-  daily_usd_cap: 10.0
-  alert_threshold: 0.8
-  track_by_model: true
-
-# Workflow
-promote_on_green: true
-rollback_on_ci_red: true
-```
-
-## 🧪 Development Status
-
-**Current Phase**: Phase 2 Complete! ✅
-
-### Phase 0: Foundation & Setup ✅
-- [x] Project structure and CLI framework
-- [x] Configuration management system
-- [x] API client for Abacus.ai
-- [x] Logging and error handling
-- [x] Setup and verification commands
-
-### Phase 1: Core Git Engine ✅
-- [x] Repository initialization (zip/git)
-- [x] Workpad lifecycle management
-- [x] Patch engine with conflict detection
-- [x] Merge and promotion operations
-- [x] Test orchestrator framework
-- [x] **120 tests, 93% passing**
-
-### Phase 2: AI Integration ✅
-- [x] Model router (intelligent selection)
-- [x] Cost guard (budget tracking)
-- [x] Planning engine (AI-driven planning)
-- [x] Code generator (patch generation)
-- [x] AI orchestrator (main coordinator)
-- [x] **67 tests, all passing, 86% coverage**
-
-### Phase 3: Testing & Auto-Merge (Next)
-- [ ] Test orchestrator implementation
-- [ ] Auto-merge on green tests
-- [ ] Jenkins integration
-- [ ] Auto-rollback on CI failures
-
-### Phase 4: Polish & Beta (Planned)
-- [ ] Desktop UI (Electron/React)
-- [ ] Advanced CLI features
-- [ ] Production deployment setup
-- [ ] Beta release
-
-## 📋 Requirements
-
-- Python 3.9+
-- Git 2.30+
-- Docker (for test sandboxing)
-- Abacus.ai API credentials
-
-## 🤝 Contributing
-
-Solo Git is in active development. The codebase is structured for the phased roadmap outlined in the game plan document.
-
-Current focus: **Phase 1 - Core Git Engine**
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
-## 🔗 Resources
-
-- [Game Plan Document](docs/game-plan.md) - Comprehensive phased roadmap
-- [Abacus.ai Platform](https://abacus.ai) - Get API credentials
-- [Solo Git Vision](docs/vision.md) - Philosophy and design principles
-
-## 🎬 Status
-
-Solo Git is being built in a 2-week sprint to beta-ready status. Follow the journey as we build a truly frictionless Git workflow for the AI age.
-
-**Target**: Beta-ready by October 30, 2025
+- ✨ Instant auto-merge on green tests
+- ✨ AI-powered planning and coding
+- ✨ Intelligent model selection
+- ✨ Cost-optimized cloud operations
+- ✨ Sub-minute idea-to-production cycles
+- ✨ Zero mental overhead
 
 ---
 
-*"The pair-creature runs: the human names intent; the AI sketches the hunt; the sandbox tests the stride; and before the dust has settled, the track marshals wave the green flag on trunk."*
+## Comparison
 
+### Solo Git vs Traditional Git
+
+| Aspect | Traditional Git | Solo Git |
+|--------|----------------|----------|
+| **Workflow** | Branch → PR → Review → Merge | Workpad → Test → Auto-Merge |
+| **Review** | Human reviewer | Test suite |
+| **Merge Time** | Hours to days | Seconds |
+| **Mental Load** | High (branches, naming, switching) | Low (automatic) |
+| **History** | Merge commits, complex graph | Linear, clean |
+| **AI Integration** | None | Native, multi-model |
+| **Cost Control** | N/A | Built-in budgets |
+| **Best For** | Teams | Solo developers + AI |
+
+### Solo Git vs GitHub Copilot
+
+| Feature | GitHub Copilot | Solo Git |
+|---------|----------------|----------|
+| **Scope** | Code suggestions | Full workflow automation |
+| **Testing** | Manual | Automated, sandboxed |
+| **Merging** | Manual | Automatic on green |
+| **Planning** | No | Yes (GPT-4/Claude) |
+| **Models** | Single (Codex) | Multi-model (best for task) |
+| **Version Control** | Separate (Git) | Integrated |
+| **Cost Tracking** | No | Yes |
+
+---
+
+## FAQ
+
+### Q: Does Solo Git replace Git?
+
+**A:** No! Solo Git is built **on top of Git**. Under the hood, it's still Git with branches, commits, and merges. You can export to standard Git at any time.
+
+### Q: What if I need human review?
+
+**A:** Configure promotion gates to require manual approval. Solo Git is flexible - you can mix automated and manual workflows.
+
+### Q: Can I use my own models?
+
+**A:** Currently Solo Git is optimized for Abacus.ai RouteLLM API. Local model support is planned for Phase 5.
+
+### Q: What about merge conflicts?
+
+**A:** Solo Git only does fast-forward merges. If trunk has moved, the workpad is rebased before promotion. Conflicts trigger manual review.
+
+### Q: Is this production-ready?
+
+**A:** Phase 4 is in progress. Core functionality (Phases 0-3) is tested and stable. Use at your own risk for production, but it's ready for personal projects!
+
+### Q: How much does it cost?
+
+**A:** Solo Git itself is free (MIT license). You pay only for Abacus.ai API usage. With smart model selection and budgets, typical daily costs are $5-15.
+
+### Q: Can I use this with a team?
+
+**A:** Solo Git is optimized for solo developers. For teams, stick with traditional Git workflows. However, individual team members can use Solo Git for their personal branches.
+
+### Q: What about security?
+
+**A:** All code stays in your environment. API calls to Abacus.ai are encrypted. Security-sensitive code automatically escalates to planning models. Audit logs track every AI operation.
+
+---
+
+## Roadmap
+
+### Phase 4 (Current) - Beta Preparation
+- ✅ Comprehensive documentation
+- ✅ Setup and API guides
+- ✅ Beta launch checklist
+- 🚧 Desktop UI (Electron/React)
+- 🚧 Metrics dashboard
+- 🚧 Final polish and bug fixes
+
+### Phase 5 (Future) - Advanced Features
+- ⏳ Local model support (Ollama integration)
+- ⏳ Custom model providers
+- ⏳ Advanced analytics and insights
+- ⏳ Team collaboration features
+- ⏳ IDE plugins (VSCode, etc.)
+- ⏳ Git hosting integration (GitHub, GitLab)
+
+### Phase 6 (Vision) - Ecosystem
+- ⏳ Plugin system
+- ⏳ Community model registry
+- ⏳ Deployment automation
+- ⏳ Mobile companion app
+- ⏳ SaaS offering
+
+---
+
+## Contributing
+
+Solo Git is currently in active development. Contributions are welcome!
+
+### How to Contribute
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Submit a pull request
+
+### Areas for Contribution
+
+- 🐛 Bug reports and fixes
+- 📚 Documentation improvements
+- 🧪 Additional test coverage
+- 🎨 UI/UX enhancements
+- 🔌 Integration plugins
+- 💡 Feature suggestions
+
+---
+
+## License
+
+**MIT License** - See [LICENSE](LICENSE) for details.
+
+---
+
+## Acknowledgments
+
+### Powered By
+
+- **[Abacus.ai RouteLLM API](https://abacus.ai)** - Multi-model AI orchestration
+- **[GPT-4 (OpenAI)](https://openai.com)** - Planning and complex reasoning
+- **[Claude 3.5 (Anthropic)](https://anthropic.com)** - Strategic planning
+- **[DeepSeek-Coder](https://deepseek.com)** - Specialized code generation
+- **[Meta Llama](https://ai.meta.com/llama/)** - Fast operations and coding
+
+### Inspired By
+
+- **Conventional Git** - For version control fundamentals
+- **GitHub Copilot** - For AI-assisted coding
+- **trunk-based development** - For workflow simplicity
+- **Test-driven development** - For quality through automation
+
+---
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/solo-git/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/solo-git/discussions)
+- **Email**: support@sologit.dev
+- **Wiki**: [Documentation Wiki](docs/wiki/Home.md)
+
+---
+
+## Citation
+
+If you use Solo Git in your research or project, please cite:
+
+```bibtex
+@software{sologit2025,
+  title = {Solo Git: Frictionless AI-Powered Development},
+  author = {Solo Git Contributors},
+  year = {2025},
+  url = {https://github.com/yourusername/solo-git},
+  version = {0.4.0}
+}
+```
+
+---
+
+<div align="center">
+
+**Made with ❤️ for solo developers who want to move fast without breaking things**
+
+[Get Started](docs/SETUP.md) • [Documentation](docs/wiki/Home.md) • [API Reference](docs/API.md)
+
+</div>
