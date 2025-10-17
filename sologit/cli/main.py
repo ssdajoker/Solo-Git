@@ -9,6 +9,7 @@ repository management, workpad operations, testing, and AI pairing.
 import click
 import sys
 from pathlib import Path
+from typing import Optional
 
 from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
@@ -120,14 +121,18 @@ cli.add_command(ci)
 
 # Phase 4: Integrated Heaven Interface commands
 try:
-    from sologit.cli.integrated_commands import workpad as integrated_workpad
-    from sologit.cli.integrated_commands import ai as integrated_ai
-    from sologit.cli.integrated_commands import history as integrated_history
+    from sologit.cli.integrated_commands import (
+        workpad as integrated_workpad,
+        ai as integrated_ai,
+        history as integrated_history,
+        edit as integrated_edit
+    )
     
     # Register with different names to avoid conflicts
     cli.add_command(integrated_workpad, name="workpad-integrated")
     cli.add_command(integrated_ai, name="ai")
     cli.add_command(integrated_history, name="history")
+    cli.add_command(integrated_edit, name="edit")
     
     logger.info("Integrated Heaven Interface commands loaded")
 except ImportError as e:
@@ -167,31 +172,67 @@ def tui():
 
 
 @cli.command()
-def heaven():
+@click.option('--repo', 'repo_path', type=click.Path(exists=True), help='Repository path')
+def heaven(repo_path: Optional[str]):
     """
-    Launch the Enhanced Heaven Interface TUI.
+    Launch the Heaven Interface TUI (Production Version).
     
-    The enhanced TUI provides a production-ready interface with:
-    - Real-time commit graph with ASCII visualization
+    The Heaven Interface is a comprehensive, production-ready TUI with:
+    - Command palette with fuzzy search (Ctrl+P)
+    - File tree with git status
+    - Real-time commit graph visualization
     - Live workpad status updates
-    - Real-time test output streaming
-    - AI operation tracking
+    - Real-time test output streaming with pytest integration
+    - AI operation tracking with cost monitoring
+    - Command history with undo/redo (Ctrl+Z/Ctrl+Y)
     - Full keyboard navigation
     
     \b
-    Keyboard Shortcuts:
-      q - Quit
-      r - Refresh all panels
-      c - Clear test output
-      t - Run tests on active workpad
-      ? - Show help
+    Key Features (>90% Integration):
+      ✓ Complete workpad lifecycle management
+      ✓ AI integration (code gen, review, refactor, test gen)
+      ✓ Real-time test execution with live output
+      ✓ Visual diff viewer and file browser
+      ✓ Command history with undo/redo
+      ✓ Fuzzy command palette
+      ✓ Keyboard shortcuts for all operations
+      ✓ Multi-panel layout following Heaven Design System
     
     \b
-    Layout:
-      • Left Panel:   Commit graph (trunk history)
-      • Middle Top:   Active workpad status
-      • Middle Bot:   AI operation activity
-      • Right Panel:  Real-time test output
+    Essential Shortcuts:
+      Ctrl+P - Command palette
+      Ctrl+T - Run tests
+      Ctrl+Z/Y - Undo/Redo
+      ? - Help (full shortcuts)
+      R - Refresh
+      Ctrl+Q - Quit
+    
+    \b
+    Layout (Heaven Interface Design System):
+      • Left:   Commit graph + File tree
+      • Center: Workpad status + AI activity
+      • Right:  Test runner + Diff viewer
+    """
+    try:
+        from sologit.ui.heaven_tui import run_heaven_tui
+        run_heaven_tui(repo_path=repo_path)
+    except ImportError as e:
+        click.echo("❌ Error: Heaven TUI dependencies not installed", err=True)
+        click.echo("Install with: pip install textual", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Heaven TUI launch failed: {e}", err=True)
+        logger.error(f"Heaven TUI error: {e}", exc_info=True)
+        raise click.Abort()
+
+
+@cli.command()
+def heaven_legacy():
+    """
+    Launch the Legacy Enhanced Heaven Interface TUI.
+    
+    This is the previous version with basic functionality.
+    Use 'evogitctl heaven' for the new production version.
     """
     try:
         from sologit.ui.enhanced_tui import run_enhanced_tui

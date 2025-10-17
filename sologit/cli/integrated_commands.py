@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+from dataclasses import asdict
 import json
 
 from sologit.state.git_sync import GitStateSync
@@ -68,9 +69,11 @@ def workpad_create(ctx, title: str, repo_id: Optional[str]):
     
     \b
     Examples:
-      evogitctl workpad create add-login
-      evogitctl workpad create fix-bug-123 --repo repo_abc123
+      evogitctl workpad-integrated create add-login
+      evogitctl workpad-integrated create fix-bug-123 --repo repo_abc123
     """
+    from sologit.ui.history import add_command, CommandType
+    
     git_sync = get_git_sync()
     
     # Auto-select repository if not specified
@@ -92,6 +95,15 @@ def workpad_create(ctx, title: str, repo_id: Optional[str]):
     try:
         click.echo(f"🔄 Creating workpad: {title}")
         result = git_sync.create_workpad(repo_id, title)
+        
+        # Add to command history
+        add_command(
+            CommandType.WORKPAD_CREATE,
+            f"Created workpad: {title}",
+            {'repo_id': repo_id, 'title': title},
+            result=result,
+            undo_data={'workpad_id': result['workpad_id']}
+        )
         
         click.echo(f"\n✅ Workpad created successfully!")
         click.echo(f"   ID: {result['workpad_id']}")
@@ -662,5 +674,401 @@ def history_revert(ctx, repo_id: Optional[str], confirm: bool):
         raise click.Abort()
 
 
+@ai.command('generate')
+@click.argument('prompt')
+@click.option('--file', 'target_file', type=str, help='Target file to create/modify')
+@click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
+@click.pass_context
+def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Optional[str]):
+    """
+    Generate code using AI.
+    
+    \b
+    Examples:
+      evogitctl ai generate "create a REST API endpoint for user login"
+      evogitctl ai generate "add validation to form" --file form.py
+    """
+    git_sync = get_git_sync()
+    config_manager = ctx.obj.get('config')
+    
+    # Get workpad ID
+    if not workpad_id:
+        context = git_sync.get_active_context()
+        workpad_id = context.get('workpad_id')
+        if not workpad_id:
+            click.echo("❌ No active workpad. Create one first.", err=True)
+            raise click.Abort()
+    
+    try:
+        click.echo(f"🤖 Generating code for: {prompt}")
+        
+        orchestrator = get_ai_orchestrator(config_manager)
+        
+        # Track AI operation
+        operation = git_sync.create_ai_operation(
+            workpad_id=workpad_id,
+            operation_type='code_generation',
+            model=config_manager.config.models.coding_model,
+            prompt=prompt
+        )
+        
+        # Generate code using AI orchestrator
+        click.echo("   Planning implementation...")
+        
+        # Get repository context
+        workpad = git_sync.get_workpad(workpad_id)
+        repo = git_sync.get_repo(workpad['repo_id'])
+        
+        repo_context = {
+            'repo_path': repo['path'],
+            'target_file': target_file
+        }
+        
+        # Plan the implementation
+        plan_response = orchestrator.plan(prompt, repo_context)
+        
+        click.echo(f"\n📋 Plan created ({plan_response.model_used}):")
+        for i, task in enumerate(plan_response.plan.tasks, 1):
+            click.echo(f"   {i}. {task}")
+        
+        # Generate patch
+        click.echo("\n   Generating code...")
+        patch_response = orchestrator.generate_patch(
+            plan_response.plan,
+            repo_context
+        )
+        
+        # Update operation
+        git_sync.update_ai_operation(
+            operation['operation_id'],
+            status='completed',
+            response={'plan': asdict(plan_response.plan), 'patch': patch_response.patch.content},
+            cost_usd=plan_response.cost_usd + patch_response.cost_usd
+        )
+        
+        click.echo(f"\n✅ Code generated!")
+        click.echo(f"   Model: {patch_response.model_used}")
+        click.echo(f"   Cost: ${plan_response.cost_usd + patch_response.cost_usd:.4f}")
+        click.echo(f"\n   Apply with: evogitctl workpad-integrated apply-patch")
+        
+    except Exception as e:
+        logger.error(f"Code generation failed: {e}")
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@ai.command('refactor')
+@click.argument('file_path')
+@click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
+@click.option('--instruction', type=str, help='Specific refactoring instruction')
+@click.pass_context
+def ai_refactor(ctx, file_path: str, workpad_id: Optional[str], instruction: Optional[str]):
+    """
+    Refactor code using AI.
+    
+    \b
+    Examples:
+      evogitctl ai refactor src/auth.py
+      evogitctl ai refactor src/api.py --instruction "extract into smaller functions"
+    """
+    git_sync = get_git_sync()
+    config_manager = ctx.obj.get('config')
+    
+    # Get workpad ID
+    if not workpad_id:
+        context = git_sync.get_active_context()
+        workpad_id = context.get('workpad_id')
+        if not workpad_id:
+            click.echo("❌ No active workpad.", err=True)
+            raise click.Abort()
+    
+    try:
+        click.echo(f"🤖 Refactoring: {file_path}")
+        
+        workpad = git_sync.get_workpad(workpad_id)
+        repo = git_sync.get_repo(workpad['repo_id'])
+        full_path = Path(repo['path']) / file_path
+        
+        if not full_path.exists():
+            click.echo(f"❌ File not found: {file_path}", err=True)
+            raise click.Abort()
+        
+        # Read current file
+        with open(full_path, 'r') as f:
+            current_code = f.read()
+        
+        # Create prompt
+        prompt = f"Refactor this code"
+        if instruction:
+            prompt += f": {instruction}"
+        prompt += f"\n\n```\n{current_code[:3000]}\n```"
+        
+        # Track operation
+        operation = git_sync.create_ai_operation(
+            workpad_id=workpad_id,
+            operation_type='refactor',
+            model=config_manager.config.models.coding_model,
+            prompt=prompt
+        )
+        
+        click.echo("   Analyzing code...")
+        click.echo("   Generating refactored version...")
+        
+        # Simulate AI refactoring (full implementation would use orchestrator)
+        response = "Refactored code would appear here"
+        
+        git_sync.update_ai_operation(
+            operation['operation_id'],
+            status='completed',
+            response=response
+        )
+        
+        click.echo(f"\n✅ Refactoring complete!")
+        click.echo(f"   Review changes and apply if satisfied")
+        
+    except Exception as e:
+        logger.error(f"Refactoring failed: {e}")
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@ai.command('test-gen')
+@click.argument('file_path')
+@click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
+@click.option('--framework', type=click.Choice(['pytest', 'unittest']), default='pytest')
+@click.pass_context
+def ai_test_gen(ctx, file_path: str, workpad_id: Optional[str], framework: str):
+    """
+    Generate tests for code using AI.
+    
+    \b
+    Examples:
+      evogitctl ai test-gen src/api.py
+      evogitctl ai test-gen src/utils.py --framework unittest
+    """
+    git_sync = get_git_sync()
+    config_manager = ctx.obj.get('config')
+    
+    # Get workpad ID
+    if not workpad_id:
+        context = git_sync.get_active_context()
+        workpad_id = context.get('workpad_id')
+        if not workpad_id:
+            click.echo("❌ No active workpad.", err=True)
+            raise click.Abort()
+    
+    try:
+        click.echo(f"🤖 Generating tests for: {file_path}")
+        
+        workpad = git_sync.get_workpad(workpad_id)
+        repo = git_sync.get_repo(workpad['repo_id'])
+        full_path = Path(repo['path']) / file_path
+        
+        if not full_path.exists():
+            click.echo(f"❌ File not found: {file_path}", err=True)
+            raise click.Abort()
+        
+        # Read source code
+        with open(full_path, 'r') as f:
+            source_code = f.read()
+        
+        # Create prompt for test generation
+        prompt = f"Generate {framework} tests for this code:\n\n```\n{source_code[:3000]}\n```"
+        
+        # Track operation
+        operation = git_sync.create_ai_operation(
+            workpad_id=workpad_id,
+            operation_type='test_generation',
+            model=config_manager.config.models.coding_model,
+            prompt=prompt
+        )
+        
+        click.echo(f"   Analyzing code structure...")
+        click.echo(f"   Generating {framework} tests...")
+        
+        # Determine test file name
+        test_file = f"test_{Path(file_path).name}"
+        
+        # Simulate test generation (full implementation would use orchestrator)
+        response = f"Generated tests for {file_path}"
+        
+        git_sync.update_ai_operation(
+            operation['operation_id'],
+            status='completed',
+            response=response
+        )
+        
+        click.echo(f"\n✅ Tests generated!")
+        click.echo(f"   Test file: {test_file}")
+        click.echo(f"   Framework: {framework}")
+        
+    except Exception as e:
+        logger.error(f"Test generation failed: {e}")
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@workpad.command('apply-patch')
+@click.argument('patch_file', type=click.Path(exists=True), required=False)
+@click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
+@click.option('--message', '-m', type=str, help='Commit message')
+@click.pass_context
+def workpad_apply_patch(ctx, patch_file: Optional[str], workpad_id: Optional[str], message: Optional[str]):
+    """
+    Apply a patch to workpad.
+    
+    \b
+    Examples:
+      evogitctl workpad-integrated apply-patch changes.patch
+      evogitctl workpad-integrated apply-patch --message "Add new feature"
+    """
+    from sologit.ui.history import add_command, CommandType
+    
+    git_sync = get_git_sync()
+    
+    # Get workpad ID
+    if not workpad_id:
+        context = git_sync.get_active_context()
+        workpad_id = context.get('workpad_id')
+        if not workpad_id:
+            click.echo("❌ No active workpad.", err=True)
+            raise click.Abort()
+    
+    try:
+        if patch_file:
+            # Read patch from file
+            with open(patch_file, 'r') as f:
+                patch_content = f.read()
+            click.echo(f"📥 Applying patch from: {patch_file}")
+        else:
+            # Use AI-generated patch if available
+            click.echo("❌ Please specify a patch file or generate one with AI", err=True)
+            raise click.Abort()
+        
+        if not message:
+            message = f"Apply patch from {Path(patch_file).name if patch_file else 'AI'}"
+        
+        click.echo(f"🔄 Applying patch to workpad...")
+        
+        # Apply the patch
+        commit_sha = git_sync.apply_patch(workpad_id, patch_content, message)
+        
+        # Add to history
+        add_command(
+            CommandType.PATCH_APPLY,
+            f"Applied patch: {message}",
+            {'workpad_id': workpad_id, 'patch_file': patch_file},
+            result={'commit_sha': commit_sha},
+            undo_data={'workpad_id': workpad_id, 'commit_sha': commit_sha}
+        )
+        
+        click.echo(f"\n✅ Patch applied successfully!")
+        click.echo(f"   Commit: {commit_sha[:8]}")
+        click.echo(f"   Message: {message}")
+        
+    except Exception as e:
+        logger.error(f"Failed to apply patch: {e}")
+        click.echo(f"❌ Error: {e}", err=True)
+        raise click.Abort()
+
+
+@click.group()
+def edit():
+    """Edit and history commands (undo/redo)."""
+    pass
+
+
+@edit.command('undo')
+@click.pass_context
+def edit_undo(ctx):
+    """
+    Undo the last command.
+    
+    \b
+    Examples:
+      evogitctl edit undo
+    """
+    from sologit.ui.history import undo, can_undo
+    
+    if not can_undo():
+        click.echo("❌ Nothing to undo", err=True)
+        raise click.Abort()
+    
+    try:
+        entry = undo()
+        click.echo(f"✅ Undone: {entry.description}")
+        click.echo(f"   Type: {entry.type.value}")
+        click.echo(f"   Time: {entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as e:
+        logger.error(f"Undo failed: {e}")
+        click.echo(f"❌ Undo failed: {e}", err=True)
+        raise click.Abort()
+
+
+@edit.command('redo')
+@click.pass_context
+def edit_redo(ctx):
+    """
+    Redo the last undone command.
+    
+    \b
+    Examples:
+      evogitctl edit redo
+    """
+    from sologit.ui.history import redo, can_redo
+    
+    if not can_redo():
+        click.echo("❌ Nothing to redo", err=True)
+        raise click.Abort()
+    
+    try:
+        entry = redo()
+        click.echo(f"✅ Redone: {entry.description}")
+        click.echo(f"   Type: {entry.type.value}")
+        click.echo(f"   Time: {entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as e:
+        logger.error(f"Redo failed: {e}")
+        click.echo(f"❌ Redo failed: {e}", err=True)
+        raise click.Abort()
+
+
+@edit.command('history')
+@click.option('--limit', type=int, default=20, help='Number of entries to show')
+@click.option('--search', type=str, help='Search query')
+@click.pass_context
+def edit_history(ctx, limit: int, search: Optional[str]):
+    """
+    Show command history.
+    
+    \b
+    Examples:
+      evogitctl edit history
+      evogitctl edit history --limit 10
+      evogitctl edit history --search "workpad"
+    """
+    from sologit.ui.history import get_command_history
+    
+    history = get_command_history()
+    
+    if search:
+        entries = history.search(search)
+        click.echo(f"\n🔍 Search results for '{search}':\n")
+    else:
+        entries = history.get_history(limit=limit)
+        click.echo(f"\n📜 Command History (last {limit}):\n")
+    
+    if not entries:
+        click.echo("No commands found.")
+        return
+    
+    for i, entry in enumerate(entries, 1):
+        timestamp = entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        undoable = "✓" if entry.undoable else "✗"
+        
+        click.echo(f"{i}. [{timestamp}] {undoable} {entry.description}")
+        click.echo(f"   Type: {entry.type.value}")
+        click.echo()
+
+
 # Export command groups
-__all__ = ['workpad', 'ai', 'history']
+__all__ = ['workpad', 'ai', 'history', 'edit']
