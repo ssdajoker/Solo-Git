@@ -125,6 +125,9 @@ class PatchEngine:
                 logger.warning(f"Patch validation failed: {e}")
                 raise PatchConflictError(f"Patch has conflicts: {e}")
                 
+        except PatchConflictError:
+            # Re-raise PatchConflictError without wrapping
+            raise
         except Exception as e:
             logger.error(f"Patch validation error: {e}")
             raise PatchEngineError(f"Patch validation error: {e}")
