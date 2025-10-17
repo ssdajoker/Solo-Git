@@ -1,0 +1,119 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.6, pytest-8.4.2, pluggy-1.6.0 -- /opt/computersetup/.pyenv/versions/3.11.6/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/code_artifacts/solo-git
+configfile: pytest.ini
+plugins: asyncio-1.2.0, cov-7.0.0, anyio-4.10.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 67 items
+
+tests/test_model_router.py::test_router_initialization PASSED            [  1%]
+tests/test_model_router.py::test_load_models PASSED                      [  2%]
+tests/test_model_router.py::test_analyze_complexity_simple PASSED        [  4%]
+tests/test_model_router.py::test_analyze_complexity_security PASSED      [  5%]
+tests/test_model_router.py::test_analyze_complexity_architecture PASSED  [  7%]
+tests/test_model_router.py::test_select_model_simple PASSED              [  8%]
+tests/test_model_router.py::test_select_model_complex PASSED             [ 10%]
+tests/test_model_router.py::test_select_model_forced_tier PASSED         [ 11%]
+tests/test_model_router.py::test_select_model_low_budget PASSED          [ 13%]
+tests/test_model_router.py::test_estimate_patch_size PASSED              [ 14%]
+tests/test_model_router.py::test_escalate_model PASSED                   [ 16%]
+tests/test_model_router.py::test_escalate_from_planning PASSED           [ 17%]
+tests/test_model_router.py::test_complexity_score_calculation PASSED     [ 19%]
+tests/test_cost_guard.py::test_tracker_initialization PASSED             [ 20%]
+tests/test_cost_guard.py::test_record_usage PASSED                       [ 22%]
+tests/test_cost_guard.py::test_record_multiple_usage PASSED              [ 23%]
+tests/test_cost_guard.py::test_track_by_model PASSED                     [ 25%]
+tests/test_cost_guard.py::test_track_by_task PASSED                      [ 26%]
+tests/test_cost_guard.py::test_persistence PASSED                        [ 28%]
+tests/test_cost_guard.py::test_check_budget_within_limit PASSED          [ 29%]
+tests/test_cost_guard.py::test_check_budget_exceeds_limit PASSED         [ 31%]
+tests/test_cost_guard.py::test_budget_alert_threshold PASSED             [ 32%]
+tests/test_cost_guard.py::test_get_remaining_budget PASSED               [ 34%]
+tests/test_cost_guard.py::test_record_usage_through_guard PASSED         [ 35%]
+tests/test_cost_guard.py::test_get_status PASSED                         [ 37%]
+tests/test_cost_guard.py::test_daily_usage_serialization PASSED          [ 38%]
+tests/test_cost_guard.py::test_weekly_stats PASSED                       [ 40%]
+tests/test_planning_engine.py::test_engine_initialization PASSED         [ 41%]
+tests/test_planning_engine.py::test_generate_plan_mock PASSED            [ 43%]
+tests/test_planning_engine.py::test_generate_plan_with_context PASSED    [ 44%]
+tests/test_planning_engine.py::test_file_change_creation PASSED          [ 46%]
+tests/test_planning_engine.py::test_code_plan_to_dict PASSED             [ 47%]
+tests/test_planning_engine.py::test_code_plan_str_representation PASSED  [ 49%]
+tests/test_planning_engine.py::test_parse_plan_response PASSED           [ 50%]
+tests/test_planning_engine.py::test_parse_plan_response_with_markdown PASSED [ 52%]
+tests/test_planning_engine.py::test_generate_mock_plan_add_feature PASSED [ 53%]
+tests/test_planning_engine.py::test_generate_mock_plan_fix_bug PASSED    [ 55%]
+tests/test_planning_engine.py::test_fallback_plan_creation PASSED        [ 56%]
+tests/test_planning_engine.py::test_format_file_tree PASSED              [ 58%]
+tests/test_code_generator.py::test_generator_initialization PASSED       [ 59%]
+tests/test_code_generator.py::test_generate_patch_mock PASSED            [ 61%]
+tests/test_code_generator.py::test_generated_patch_str PASSED            [ 62%]
+tests/test_code_generator.py::test_extract_diff_from_markdown PASSED     [ 64%]
+tests/test_code_generator.py::test_extract_files_from_diff PASSED        [ 65%]
+tests/test_code_generator.py::test_count_changes PASSED                  [ 67%]
+tests/test_code_generator.py::test_generate_mock_patch_create PASSED     [ 68%]
+tests/test_code_generator.py::test_generate_mock_patch_modify PASSED     [ 70%]
+tests/test_code_generator.py::test_generate_mock_patch_delete PASSED     [ 71%]
+tests/test_code_generator.py::test_create_fallback_patch PASSED          [ 73%]
+tests/test_code_generator.py::test_generate_patch_with_file_contents PASSED [ 74%]
+tests/test_code_generator.py::test_generate_patch_from_feedback PASSED   [ 76%]
+tests/test_ai_orchestrator.py::test_orchestrator_initialization PASSED   [ 77%]
+tests/test_ai_orchestrator.py::test_plan_simple_task PASSED              [ 79%]
+tests/test_ai_orchestrator.py::test_plan_complex_task PASSED             [ 80%]
+tests/test_ai_orchestrator.py::test_plan_with_context PASSED             [ 82%]
+tests/test_ai_orchestrator.py::test_plan_budget_exceeded PASSED          [ 83%]
+tests/test_ai_orchestrator.py::test_generate_patch PASSED                [ 85%]
+tests/test_ai_orchestrator.py::test_generate_patch_with_files PASSED     [ 86%]
+tests/test_ai_orchestrator.py::test_review_patch PASSED                  [ 88%]
+tests/test_ai_orchestrator.py::test_review_large_patch PASSED            [ 89%]
+tests/test_ai_orchestrator.py::test_review_patch_without_tests PASSED    [ 91%]
+tests/test_ai_orchestrator.py::test_diagnose_failure PASSED              [ 92%]
+tests/test_ai_orchestrator.py::test_get_status PASSED                    [ 94%]
+tests/test_ai_orchestrator.py::test_force_model_selection PASSED         [ 95%]
+tests/test_ai_orchestrator.py::test_model_escalation_on_failure PASSED   [ 97%]
+tests/test_ai_orchestrator.py::test_find_model_by_name PASSED            [ 98%]
+tests/test_ai_orchestrator.py::test_find_model_by_name_not_found PASSED  [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.6-final-0 ________________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+sologit/__init__.py                            3      0   100%
+sologit/analysis/__init__.py                   2      2     0%   5-7
+sologit/analysis/test_analyzer.py            196    196     0%   7-423
+sologit/api/__init__.py                        0      0   100%
+sologit/api/client.py                         87     60    31%   68-69, 72-73, 94-120, 154-195, 230-272
+sologit/cli/__init__.py                        0      0   100%
+sologit/cli/commands.py                      353    353     0%   8-622
+sologit/cli/config_commands.py               135    135     0%   8-224
+sologit/cli/main.py                           72     72     0%   9-144
+sologit/config/__init__.py                     0      0   100%
+sologit/config/manager.py                    154     39    75%   29, 197-200, 218-220, 230-232, 236, 238, 250, 252, 256, 260, 267-294, 298, 302, 306-309, 318-338
+sologit/config/templates.py                    2      2     0%   7-80
+sologit/core/__init__.py                       0      0   100%
+sologit/core/repository.py                    32     32     0%   9-68
+sologit/core/workpad.py                       49     49     0%   9-118
+sologit/engines/__init__.py                    0      0   100%
+sologit/engines/git_engine.py                606    606     0%   9-1414
+sologit/engines/patch_engine.py              209    209     0%   8-560
+sologit/engines/test_orchestrator.py         134    134     0%   9-339
+sologit/orchestration/__init__.py              6      0   100%
+sologit/orchestration/ai_orchestrator.py     131     19    85%   123, 171-185, 211-213, 235, 263-276
+sologit/orchestration/code_generator.py      138     22    84%   124, 141-149, 171-174, 187-208
+sologit/orchestration/cost_guard.py          134     10    93%   103-104, 122-123, 135-137, 166, 172, 177
+sologit/orchestration/model_router.py        133     14    89%   37, 51, 245-248, 320-321, 324-325, 329, 331, 353-354, 386
+sologit/orchestration/planning_engine.py     114     24    79%   86-91, 180, 199-207, 229-232, 238, 251, 259-271, 295, 311, 334
+sologit/utils/__init__.py                      0      0   100%
+sologit/utils/logger.py                       63     37    41%   39-40, 43-49, 61-95, 110, 119-121, 124-126, 129
+sologit/workflows/__init__.py                  5      5     0%   7-12
+sologit/workflows/auto_merge.py              133    133     0%   7-240
+sologit/workflows/ci_orchestrator.py         117    117     0%   7-271
+sologit/workflows/promotion_gate.py          120    120     0%   7-247
+sologit/workflows/rollback_handler.py         91     91     0%   7-228
+------------------------------------------------------------------------
+TOTAL                                       3219   2481    23%
+Coverage HTML written to dir htmlcov
+Coverage JSON written to file coverage.json
+============================= 67 passed in 12.56s ==============================

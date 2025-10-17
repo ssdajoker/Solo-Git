@@ -1,0 +1,238 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.6, pytest-8.4.2, pluggy-1.6.0 -- /opt/computersetup/.pyenv/versions/3.11.6/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/code_artifacts/solo-git
+configfile: pytest.ini
+plugins: asyncio-1.2.0, cov-7.0.0, anyio-4.10.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 141 items
+
+tests/test_model_router.py::test_router_initialization PASSED            [  0%]
+tests/test_model_router.py::test_load_models PASSED                      [  1%]
+tests/test_model_router.py::test_analyze_complexity_simple PASSED        [  2%]
+tests/test_model_router.py::test_analyze_complexity_security PASSED      [  2%]
+tests/test_model_router.py::test_analyze_complexity_architecture PASSED  [  3%]
+tests/test_model_router.py::test_select_model_simple PASSED              [  4%]
+tests/test_model_router.py::test_select_model_complex PASSED             [  4%]
+tests/test_model_router.py::test_select_model_forced_tier PASSED         [  5%]
+tests/test_model_router.py::test_select_model_low_budget PASSED          [  6%]
+tests/test_model_router.py::test_estimate_patch_size PASSED              [  7%]
+tests/test_model_router.py::test_escalate_model PASSED                   [  7%]
+tests/test_model_router.py::test_escalate_from_planning PASSED           [  8%]
+tests/test_model_router.py::test_complexity_score_calculation PASSED     [  9%]
+tests/test_model_router_coverage.py::test_model_config_str_representation PASSED [  9%]
+tests/test_model_router_coverage.py::test_complexity_metrics_str_representation FAILED [ 10%]
+tests/test_model_router_coverage.py::test_complexity_score_large_patch_branches PASSED [ 11%]
+tests/test_model_router_coverage.py::test_select_tier_architecture_task PASSED [ 12%]
+tests/test_model_router_coverage.py::test_select_tier_large_patch PASSED [ 12%]
+tests/test_model_router_coverage.py::test_select_tier_medium_complexity PASSED [ 13%]
+tests/test_model_router_coverage.py::test_get_model_for_tier_no_models FAILED [ 14%]
+tests/test_model_router_coverage.py::test_escalate_from_coding_tier PASSED [ 14%]
+tests/test_model_router_coverage.py::test_escalate_from_planning_tier_returns_none PASSED [ 15%]
+tests/test_model_router_coverage.py::test_complexity_with_multiple_files_in_prompt PASSED [ 16%]
+tests/test_model_router_coverage.py::test_complexity_with_test_mention PASSED [ 17%]
+tests/test_model_router_coverage.py::test_estimate_patch_size_with_keywords PASSED [ 17%]
+tests/test_model_router_coverage.py::test_get_model_for_tier_with_low_budget PASSED [ 18%]
+tests/test_cost_guard.py::test_tracker_initialization PASSED             [ 19%]
+tests/test_cost_guard.py::test_record_usage PASSED                       [ 19%]
+tests/test_cost_guard.py::test_record_multiple_usage PASSED              [ 20%]
+tests/test_cost_guard.py::test_track_by_model PASSED                     [ 21%]
+tests/test_cost_guard.py::test_track_by_task PASSED                      [ 21%]
+tests/test_cost_guard.py::test_persistence PASSED                        [ 22%]
+tests/test_cost_guard.py::test_check_budget_within_limit PASSED          [ 23%]
+tests/test_cost_guard.py::test_check_budget_exceeds_limit PASSED         [ 24%]
+tests/test_cost_guard.py::test_budget_alert_threshold PASSED             [ 24%]
+tests/test_cost_guard.py::test_get_remaining_budget PASSED               [ 25%]
+tests/test_cost_guard.py::test_record_usage_through_guard PASSED         [ 26%]
+tests/test_cost_guard.py::test_get_status PASSED                         [ 26%]
+tests/test_cost_guard.py::test_daily_usage_serialization PASSED          [ 27%]
+tests/test_cost_guard.py::test_weekly_stats PASSED                       [ 28%]
+tests/test_cost_guard_coverage.py::test_load_history_with_corrupt_file PASSED [ 29%]
+tests/test_cost_guard_coverage.py::test_save_history_error_handling PASSED [ 29%]
+tests/test_cost_guard_coverage.py::test_record_usage_day_rollover PASSED [ 30%]
+tests/test_cost_guard_coverage.py::test_get_today_cost_with_no_usage PASSED [ 31%]
+tests/test_cost_guard_coverage.py::test_get_today_tokens_with_no_usage PASSED [ 31%]
+tests/test_cost_guard_coverage.py::test_get_usage_breakdown_with_no_usage PASSED [ 32%]
+tests/test_cost_guard_coverage.py::test_record_usage_new_model PASSED    [ 33%]
+tests/test_cost_guard_coverage.py::test_record_usage_new_task_type PASSED [ 34%]
+tests/test_cost_guard_coverage.py::test_daily_usage_from_dict_with_missing_fields PASSED [ 34%]
+tests/test_cost_guard_coverage.py::test_weekly_stats_multiple_days PASSED [ 35%]
+tests/test_cost_guard_coverage.py::test_cost_guard_with_zero_remaining_budget PASSED [ 36%]
+tests/test_cost_guard_coverage.py::test_budget_alert_not_triggered_below_threshold PASSED [ 36%]
+tests/test_planning_engine.py::test_engine_initialization PASSED         [ 37%]
+tests/test_planning_engine.py::test_generate_plan_mock PASSED            [ 38%]
+tests/test_planning_engine.py::test_generate_plan_with_context PASSED    [ 39%]
+tests/test_planning_engine.py::test_file_change_creation PASSED          [ 39%]
+tests/test_planning_engine.py::test_code_plan_to_dict PASSED             [ 40%]
+tests/test_planning_engine.py::test_code_plan_str_representation PASSED  [ 41%]
+tests/test_planning_engine.py::test_parse_plan_response PASSED           [ 41%]
+tests/test_planning_engine.py::test_parse_plan_response_with_markdown PASSED [ 42%]
+tests/test_planning_engine.py::test_generate_mock_plan_add_feature PASSED [ 43%]
+tests/test_planning_engine.py::test_generate_mock_plan_fix_bug PASSED    [ 43%]
+tests/test_planning_engine.py::test_fallback_plan_creation PASSED        [ 44%]
+tests/test_planning_engine.py::test_format_file_tree PASSED              [ 45%]
+tests/test_planning_engine_coverage.py::test_code_plan_str_with_dependencies PASSED [ 46%]
+tests/test_planning_engine_coverage.py::test_generate_plan_with_recent_changes_context PASSED [ 46%]
+tests/test_planning_engine_coverage.py::test_generate_plan_with_deployment_credentials FAILED [ 47%]
+tests/test_planning_engine_coverage.py::test_generate_plan_exception_fallback PASSED [ 48%]
+tests/test_planning_engine_coverage.py::test_format_file_tree_with_string PASSED [ 48%]
+tests/test_planning_engine_coverage.py::test_parse_plan_response_with_markdown_variations PASSED [ 49%]
+tests/test_planning_engine_coverage.py::test_parse_plan_response_invalid_json_fallback PASSED [ 50%]
+tests/test_planning_engine_coverage.py::test_parse_plan_response_partial_json PASSED [ 51%]
+tests/test_planning_engine_coverage.py::test_generate_mock_plan_with_test_keyword PASSED [ 51%]
+tests/test_planning_engine_coverage.py::test_generate_mock_plan_with_cli_keyword PASSED [ 52%]
+tests/test_planning_engine_coverage.py::test_generate_mock_plan_with_refactor_keyword PASSED [ 53%]
+tests/test_planning_engine_coverage.py::test_generate_mock_plan_with_api_keyword PASSED [ 53%]
+tests/test_planning_engine_coverage.py::test_generate_mock_plan_default_case PASSED [ 54%]
+tests/test_planning_engine_coverage.py::test_format_file_tree_with_list PASSED [ 55%]
+tests/test_planning_engine_coverage.py::test_code_plan_str_without_dependencies PASSED [ 56%]
+tests/test_planning_engine_coverage.py::test_file_change_with_zero_lines PASSED [ 56%]
+tests/test_planning_engine_coverage.py::test_generate_plan_with_language_context PASSED [ 57%]
+tests/test_code_generator.py::test_generator_initialization PASSED       [ 58%]
+tests/test_code_generator.py::test_generate_patch_mock PASSED            [ 58%]
+tests/test_code_generator.py::test_generated_patch_str PASSED            [ 59%]
+tests/test_code_generator.py::test_extract_diff_from_markdown PASSED     [ 60%]
+tests/test_code_generator.py::test_extract_files_from_diff PASSED        [ 60%]
+tests/test_code_generator.py::test_count_changes PASSED                  [ 61%]
+tests/test_code_generator.py::test_generate_mock_patch_create PASSED     [ 62%]
+tests/test_code_generator.py::test_generate_mock_patch_modify PASSED     [ 63%]
+tests/test_code_generator.py::test_generate_mock_patch_delete PASSED     [ 63%]
+tests/test_code_generator.py::test_create_fallback_patch PASSED          [ 64%]
+tests/test_code_generator.py::test_generate_patch_with_file_contents PASSED [ 65%]
+tests/test_code_generator.py::test_generate_patch_from_feedback PASSED   [ 65%]
+tests/test_code_generator_coverage.py::test_generate_patch_with_large_file_content PASSED [ 66%]
+tests/test_code_generator_coverage.py::test_generate_patch_with_deployment_credentials FAILED [ 67%]
+tests/test_code_generator_coverage.py::test_generate_patch_exception_fallback PASSED [ 68%]
+tests/test_code_generator_coverage.py::test_extract_diff_with_markdown_code_block PASSED [ 68%]
+tests/test_code_generator_coverage.py::test_extract_diff_with_generic_code_block PASSED [ 69%]
+tests/test_code_generator_coverage.py::test_extract_diff_with_diff_markers PASSED [ 70%]
+tests/test_code_generator_coverage.py::test_extract_diff_plain_text_fallback PASSED [ 70%]
+tests/test_code_generator_coverage.py::test_extract_files_from_diff_with_dev_null PASSED [ 71%]
+tests/test_code_generator_coverage.py::test_extract_files_duplicate_handling FAILED [ 72%]
+tests/test_code_generator_coverage.py::test_count_changes_with_various_markers PASSED [ 73%]
+tests/test_code_generator_coverage.py::test_generate_mock_patch_all_actions PASSED [ 73%]
+tests/test_code_generator_coverage.py::test_generate_mock_patch_multiple_files PASSED [ 74%]
+tests/test_code_generator_coverage.py::test_create_fallback_patch PASSED [ 75%]
+tests/test_code_generator_coverage.py::test_generate_patch_without_file_contents PASSED [ 75%]
+tests/test_code_generator_coverage.py::test_generate_patch_from_feedback_returns_original PASSED [ 76%]
+tests/test_ai_orchestrator.py::test_orchestrator_initialization PASSED   [ 77%]
+tests/test_ai_orchestrator.py::test_plan_simple_task PASSED              [ 78%]
+tests/test_ai_orchestrator.py::test_plan_complex_task PASSED             [ 78%]
+tests/test_ai_orchestrator.py::test_plan_with_context PASSED             [ 79%]
+tests/test_ai_orchestrator.py::test_plan_budget_exceeded PASSED          [ 80%]
+tests/test_ai_orchestrator.py::test_generate_patch PASSED                [ 80%]
+tests/test_ai_orchestrator.py::test_generate_patch_with_files PASSED     [ 81%]
+tests/test_ai_orchestrator.py::test_review_patch PASSED                  [ 82%]
+tests/test_ai_orchestrator.py::test_review_large_patch PASSED            [ 82%]
+tests/test_ai_orchestrator.py::test_review_patch_without_tests PASSED    [ 83%]
+tests/test_ai_orchestrator.py::test_diagnose_failure PASSED              [ 84%]
+tests/test_ai_orchestrator.py::test_get_status PASSED                    [ 85%]
+tests/test_ai_orchestrator.py::test_force_model_selection PASSED         [ 85%]
+tests/test_ai_orchestrator.py::test_model_escalation_on_failure PASSED   [ 86%]
+tests/test_ai_orchestrator.py::test_find_model_by_name PASSED            [ 87%]
+tests/test_ai_orchestrator.py::test_find_model_by_name_not_found PASSED  [ 87%]
+tests/test_ai_orchestrator_coverage.py::test_plan_with_invalid_force_model PASSED [ 88%]
+tests/test_ai_orchestrator_coverage.py::test_plan_with_escalation_on_failure PASSED [ 89%]
+tests/test_ai_orchestrator_coverage.py::test_plan_escalation_budget_check PASSED [ 90%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_with_invalid_force_model PASSED [ 90%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_budget_exceeded PASSED [ 91%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_with_escalation_on_failure PASSED [ 92%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_escalation_no_budget PASSED [ 92%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_for_low_complexity PASSED [ 93%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_for_high_complexity PASSED [ 94%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_with_file_contents PASSED [ 95%]
+tests/test_ai_orchestrator_coverage.py::test_review_patch_with_test_files PASSED [ 95%]
+tests/test_ai_orchestrator_coverage.py::test_diagnose_failure_with_context PASSED [ 96%]
+tests/test_ai_orchestrator_coverage.py::test_get_status_with_no_api_key PASSED [ 97%]
+tests/test_ai_orchestrator_coverage.py::test_find_model_by_name_in_different_tiers PASSED [ 97%]
+tests/test_ai_orchestrator_coverage.py::test_plan_with_repo_context_and_force_model PASSED [ 98%]
+tests/test_ai_orchestrator_coverage.py::test_orchestrator_cost_tracking FAILED [ 99%]
+tests/test_ai_orchestrator_coverage.py::test_generate_patch_cost_estimation_with_large_plan PASSED [100%]
+
+=================================== FAILURES ===================================
+__________________ test_complexity_metrics_str_representation __________________
+tests/test_model_router_coverage.py:101: in test_complexity_metrics_str_representation
+    assert 'security=True' in result.lower()
+E   AssertionError: assert 'security=True' in 'complexitymetrics(score=0.75, security=true, patch_lines=150, files=3)'
+E    +  where 'complexitymetrics(score=0.75, security=true, patch_lines=150, files=3)' = <built-in method lower of str object at 0x7fb4285728b0>()
+E    +    where <built-in method lower of str object at 0x7fb4285728b0> = 'ComplexityMetrics(score=0.75, security=True, patch_lines=150, files=3)'.lower
+______________________ test_get_model_for_tier_no_models _______________________
+tests/test_model_router_coverage.py:194: in test_get_model_for_tier_no_models
+    assert model.tier == ModelTier.FAST
+E   AssertionError: assert <ModelTier.CODING: 'coding'> == <ModelTier.FAST: 'fast'>
+E    +  where <ModelTier.CODING: 'coding'> = ModelConfig(name='deepseek-coder-33b', tier=<ModelTier.CODING: 'coding'>, max_tokens=2048, temperature=0.1, cost_per_1k_tokens=0.0005, provider='abacus').tier
+E    +  and   <ModelTier.FAST: 'fast'> = ModelTier.FAST
+________________ test_generate_plan_with_deployment_credentials ________________
+tests/test_planning_engine_coverage.py:65: in test_generate_plan_with_deployment_credentials
+    mock_response = ChatResponse(
+E   TypeError: ChatResponse.__init__() got an unexpected keyword argument 'usage'
+_______________ test_generate_patch_with_deployment_credentials ________________
+tests/test_code_generator_coverage.py:90: in test_generate_patch_with_deployment_credentials
+    mock_response = ChatResponse(
+E   TypeError: ChatResponse.__init__() got an unexpected keyword argument 'usage'
+____________________ test_extract_files_duplicate_handling _____________________
+tests/test_code_generator_coverage.py:237: in test_extract_files_duplicate_handling
+    assert files.count('test.py') == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = <built-in method count of list object at 0x7fb4284f2d40>('test.py')
+E    +    where <built-in method count of list object at 0x7fb4284f2d40> = ['test.py', 'test.py'].count
+_______________________ test_orchestrator_cost_tracking ________________________
+tests/test_ai_orchestrator_coverage.py:415: in test_orchestrator_cost_tracking
+    initial_cost = orchestrator.cost_guard.get_today_cost()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'CostGuard' object has no attribute 'get_today_cost'
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.6-final-0 ________________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+sologit/__init__.py                            3      0   100%
+sologit/analysis/__init__.py                   2      2     0%   5-7
+sologit/analysis/test_analyzer.py            196    196     0%   7-423
+sologit/api/__init__.py                        0      0   100%
+sologit/api/client.py                         87     60    31%   68-69, 72-73, 94-120, 154-195, 230-272
+sologit/cli/__init__.py                        0      0   100%
+sologit/cli/commands.py                      353    353     0%   8-622
+sologit/cli/config_commands.py               135    135     0%   8-224
+sologit/cli/main.py                           72     72     0%   9-144
+sologit/config/__init__.py                     0      0   100%
+sologit/config/manager.py                    154     39    75%   29, 197-200, 218-220, 230-232, 236, 238, 250, 252, 256, 260, 267-294, 298, 302, 306-309, 318-338
+sologit/config/templates.py                    2      2     0%   7-80
+sologit/core/__init__.py                       0      0   100%
+sologit/core/repository.py                    32     32     0%   9-68
+sologit/core/workpad.py                       49     49     0%   9-118
+sologit/engines/__init__.py                    0      0   100%
+sologit/engines/git_engine.py                606    606     0%   9-1414
+sologit/engines/patch_engine.py              209    209     0%   8-560
+sologit/engines/test_orchestrator.py         134    134     0%   9-339
+sologit/orchestration/__init__.py              6      0   100%
+sologit/orchestration/ai_orchestrator.py     131      1    99%   276
+sologit/orchestration/code_generator.py      138      1    99%   149
+sologit/orchestration/cost_guard.py          134      1    99%   136
+sologit/orchestration/model_router.py        133      2    98%   353-354
+sologit/orchestration/planning_engine.py     114      3    97%   207, 267-268
+sologit/utils/__init__.py                      0      0   100%
+sologit/utils/logger.py                       63     37    41%   39-40, 43-49, 61-95, 110, 119-121, 124-126, 129
+sologit/workflows/__init__.py                  5      5     0%   7-12
+sologit/workflows/auto_merge.py              133    133     0%   7-240
+sologit/workflows/ci_orchestrator.py         117    117     0%   7-271
+sologit/workflows/promotion_gate.py          120    120     0%   7-247
+sologit/workflows/rollback_handler.py         91     91     0%   7-228
+------------------------------------------------------------------------
+TOTAL                                       3219   2400    25%
+Coverage HTML written to dir htmlcov
+Coverage JSON written to file coverage.json
+=========================== short test summary info ============================
+FAILED tests/test_model_router_coverage.py::test_complexity_metrics_str_representation - AssertionError: assert 'security=True' in 'complexitymetrics(score=0.75, security=true, patch_lines=150, files=3)'
+ +  where 'complexitymetrics(score=0.75, security=true, patch_lines=150, files=3)' = <built-in method lower of str object at 0x7fb4285728b0>()
+ +    where <built-in method lower of str object at 0x7fb4285728b0> = 'ComplexityMetrics(score=0.75, security=True, patch_lines=150, files=3)'.lower
+FAILED tests/test_model_router_coverage.py::test_get_model_for_tier_no_models - AssertionError: assert <ModelTier.CODING: 'coding'> == <ModelTier.FAST: 'fast'>
+ +  where <ModelTier.CODING: 'coding'> = ModelConfig(name='deepseek-coder-33b', tier=<ModelTier.CODING: 'coding'>, max_tokens=2048, temperature=0.1, cost_per_1k_tokens=0.0005, provider='abacus').tier
+ +  and   <ModelTier.FAST: 'fast'> = ModelTier.FAST
+FAILED tests/test_planning_engine_coverage.py::test_generate_plan_with_deployment_credentials - TypeError: ChatResponse.__init__() got an unexpected keyword argument 'usage'
+FAILED tests/test_code_generator_coverage.py::test_generate_patch_with_deployment_credentials - TypeError: ChatResponse.__init__() got an unexpected keyword argument 'usage'
+FAILED tests/test_code_generator_coverage.py::test_extract_files_duplicate_handling - AssertionError: assert 2 == 1
+ +  where 2 = <built-in method count of list object at 0x7fb4284f2d40>('test.py')
+ +    where <built-in method count of list object at 0x7fb4284f2d40> = ['test.py', 'test.py'].count
+FAILED tests/test_ai_orchestrator_coverage.py::test_orchestrator_cost_tracking - AttributeError: 'CostGuard' object has no attribute 'get_today_cost'
+======================== 6 failed, 135 passed in 12.77s ========================
