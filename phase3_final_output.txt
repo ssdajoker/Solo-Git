@@ -1,0 +1,1136 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.6, pytest-8.4.2, pluggy-1.6.0 -- /opt/computersetup/.pyenv/versions/3.11.6/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ubuntu/code_artifacts/solo-git
+configfile: pytest.ini
+plugins: asyncio-1.2.0, cov-7.0.0, anyio-4.10.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 158 items
+
+tests/test_test_analyzer.py::TestTestAnalyzer::test_analyzer_initialization PASSED [  0%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_analyze_passing_tests PASSED [  1%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_analyze_failing_tests PASSED [  1%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_identify_assertion_error PASSED [  2%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_identify_import_error PASSED [  3%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_identify_syntax_error PASSED [  3%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_identify_timeout PASSED [  4%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_suggested_actions_for_import_error PASSED [  5%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_suggested_actions_for_timeout PASSED [  5%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_complexity_estimation_low PASSED [  6%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_complexity_estimation_medium PASSED [  6%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_merge_similar_patterns PASSED [  7%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_format_analysis PASSED [  8%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_mixed_results PASSED [  8%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_extract_error_message PASSED [  9%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_extract_file_location PASSED [ 10%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_categorize_network_error PASSED [ 10%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_categorize_permission_error PASSED [ 11%]
+tests/test_test_analyzer.py::TestTestAnalyzer::test_categorize_unknown_error PASSED [ 12%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_analyze_with_error_field PASSED [ 12%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_extract_error_message_with_empty_output PASSED [ 13%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_network_error_suggestions PASSED [ 13%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_permission_error_suggestions PASSED [ 14%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_resource_error_suggestions PASSED [ 15%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_multiple_failures_suggestions PASSED [ 15%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_complexity_multiple_categories PASSED [ 16%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_complexity_many_failures PASSED [ 17%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_format_analysis_with_timeout PASSED [ 17%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_format_analysis_with_file_location PASSED [ 18%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_format_analysis_with_multiple_occurrences PASSED [ 18%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_dependency_error_categorization PASSED [ 19%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_resource_error_categorization PASSED [ 20%]
+tests/test_test_analyzer_coverage_boost.py::TestTestAnalyzerCoverageMissing::test_analyze_all_error_statuses PASSED [ 20%]
+tests/test_promotion_gate.py::TestPromotionRules::test_default_rules PASSED [ 21%]
+tests/test_promotion_gate.py::TestPromotionRules::test_custom_rules PASSED [ 22%]
+tests/test_promotion_gate.py::TestPromotionDecision::test_decision_creation PASSED [ 22%]
+tests/test_promotion_gate.py::TestPromotionDecision::test_add_reason PASSED [ 23%]
+tests/test_promotion_gate.py::TestPromotionDecision::test_add_warning PASSED [ 24%]
+tests/test_promotion_gate.py::TestPromotionGate::test_gate_initialization PASSED [ 24%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_nonexistent_workpad PASSED [ 25%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_without_tests_required PASSED [ 25%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_tests_required_but_not_run PASSED [ 26%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_tests_passed PASSED [ 27%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_tests_failed PASSED [ 27%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_fast_forward_possible PASSED [ 28%]
+tests/test_promotion_gate.py::TestPromotionGate::test_evaluate_all_checks_pass PASSED [ 29%]
+tests/test_promotion_gate.py::TestPromotionGate::test_format_decision PASSED [ 29%]
+tests/test_promotion_gate.py::TestPromotionGate::test_format_reject_decision PASSED [ 30%]
+tests/test_promotion_gate.py::TestPromotionGate::test_format_manual_review_decision PASSED [ 31%]
+tests/test_promotion_gate.py::TestPromotionGateIntegration::test_full_workflow_approve PASSED [ 31%]
+tests/test_promotion_gate.py::TestPromotionGateIntegration::test_full_workflow_reject PASSED [ 32%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_coverage_tracking_warning PASSED [ 32%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_fast_forward_not_possible_with_merge_allowed PASSED [ 33%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_fast_forward_not_possible_reject PASSED [ 34%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_max_files_exceeded PASSED [ 34%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_max_lines_exceeded PASSED [ 35%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_diff_analysis_error PASSED [ 36%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_ai_review_required PASSED [ 36%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_manual_review_decision_reasons PASSED [ 37%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_tests_not_required PASSED [ 37%]
+tests/test_promotion_gate_coverage_boost.py::TestPromotionGateCoverageMissing::test_comprehensive_approval_flow PASSED [ 38%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_workpad_not_found PASSED [ 39%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_cannot_promote_exception FAILED [ 39%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_tests_required_but_status_red FAILED [ 40%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_tests_required_but_status_yellow FAILED [ 41%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_tests_not_required ERROR [ 41%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_fast_forward_not_possible FAILED [ 42%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_format_decision_reject FAILED [ 43%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_format_decision_manual_review FAILED [ 43%]
+tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_format_decision_with_empty_lists FAILED [ 44%]
+tests/test_promotion_gate_enhanced.py::TestPromotionRulesDefaults::test_default_rules FAILED [ 44%]
+tests/test_promotion_gate_enhanced.py::TestPromotionDecisionMethods::test_add_reason PASSED [ 45%]
+tests/test_promotion_gate_enhanced.py::TestPromotionDecisionMethods::test_add_warning PASSED [ 46%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_workpad_not_found PASSED [ 46%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_test_execution_fails PASSED [ 47%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_test_analysis_fails PASSED [ 48%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_promotion_gate_evaluation_fails PASSED [ 48%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_promotion_fails PASSED [ 49%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_with_test_timeout_and_errors PASSED [ 50%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_with_manual_review_required PASSED [ 50%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowEnhanced::test_execute_ready_to_promote_but_auto_promote_disabled PASSED [ 51%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeResultDataclass::test_auto_merge_result_creation PASSED [ 51%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeResultDataclass::test_auto_merge_result_with_details PASSED [ 52%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeResultDataclass::test_auto_merge_result_post_init PASSED [ 53%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowFormatResult::test_format_result_success PASSED [ 53%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowFormatResult::test_format_result_failure PASSED [ 54%]
+tests/test_auto_merge_enhanced.py::TestAutoMergeWorkflowFormatResult::test_format_result_with_empty_details PASSED [ 55%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_run_smoke_tests_with_progress_callback PASSED [ 55%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_run_smoke_tests_cleanup_failure PASSED [ 56%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_run_smoke_tests_with_failure_and_progress PASSED [ 56%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_run_smoke_tests_async PASSED [ 57%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_format_result_unstable_status PASSED [ 58%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_format_result_other_status PASSED [ 58%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_format_result_with_timeout_tests PASSED [ 59%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_run_smoke_tests_with_mixed_results PASSED [ 60%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_run_smoke_tests_with_timeout_results PASSED [ 60%]
+tests/test_ci_orchestrator_coverage_boost.py::TestCIOrchestratorCoverageMissing::test_ci_result_properties PASSED [ 61%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_repo_not_found FAILED [ 62%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_get_history_fails FAILED [ 62%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_no_commits FAILED [ 63%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_orchestrator_exception FAILED [ 63%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_with_failures FAILED [ 64%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_format_ci_result_with_empty_tests FAILED [ 65%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_format_ci_result_with_long_commit_hash FAILED [ 65%]
+tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_ci_status_enum_values PASSED [ 66%]
+tests/test_ci_orchestrator_enhanced.py::TestCIResultProperties::test_is_green_with_success PASSED [ 67%]
+tests/test_ci_orchestrator_enhanced.py::TestCIResultProperties::test_is_red_with_failure PASSED [ 67%]
+tests/test_ci_orchestrator_enhanced.py::TestCIResultProperties::test_is_red_with_unstable PASSED [ 68%]
+tests/test_ci_orchestrator_enhanced.py::TestCIResultProperties::test_neither_green_nor_red_with_pending PASSED [ 68%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_handle_failed_ci_successful_rollback_no_workpad PASSED [ 69%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_handle_failed_ci_successful_rollback_with_workpad PASSED [ 70%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_handle_failed_ci_revert_fails PASSED [ 70%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_handle_failed_ci_workpad_creation_fails PASSED [ 71%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_handle_passed_ci_no_rollback PASSED [ 72%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_format_result_success_with_workpad PASSED [ 72%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_format_result_success_without_workpad PASSED [ 73%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerComprehensive::test_format_result_failure PASSED [ 74%]
+tests/test_rollback_handler_comprehensive.py::TestCIMonitor::test_monitor_initialization PASSED [ 74%]
+tests/test_rollback_handler_comprehensive.py::TestCIMonitor::test_monitor_and_rollback_failed_ci_with_auto_rollback PASSED [ 75%]
+tests/test_rollback_handler_comprehensive.py::TestCIMonitor::test_monitor_and_rollback_failed_ci_without_auto_rollback PASSED [ 75%]
+tests/test_rollback_handler_comprehensive.py::TestCIMonitor::test_monitor_and_rollback_passed_ci PASSED [ 76%]
+tests/test_rollback_handler_comprehensive.py::TestCIMonitor::test_monitor_and_rollback_failed_rollback PASSED [ 77%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackResultDataclass::test_rollback_result_creation PASSED [ 77%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackResultDataclass::test_rollback_result_defaults PASSED [ 78%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerEdgeCases::test_handle_failed_ci_with_get_repo_failure PASSED [ 79%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerEdgeCases::test_handle_failed_ci_short_commit_hash PASSED [ 79%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerEdgeCases::test_format_result_with_empty_message PASSED [ 80%]
+tests/test_rollback_handler_comprehensive.py::TestRollbackHandlerEdgeCases::test_format_result_with_very_long_commit_hash PASSED [ 81%]
+tests/test_phase3_enhanced_mocks.py::TestAutoMergeWorkflowMocked::test_execute_with_green_tests_and_auto_promote PASSED [ 81%]
+tests/test_phase3_enhanced_mocks.py::TestAutoMergeWorkflowMocked::test_execute_with_red_tests_no_promote PASSED [ 82%]
+tests/test_phase3_enhanced_mocks.py::TestAutoMergeWorkflowMocked::test_execute_with_test_failure_shows_patterns PASSED [ 82%]
+tests/test_phase3_enhanced_mocks.py::TestAutoMergeWorkflowMocked::test_execute_without_auto_promote PASSED [ 83%]
+tests/test_phase3_enhanced_mocks.py::TestAutoMergeWorkflowMocked::test_format_result_success PASSED [ 84%]
+tests/test_phase3_enhanced_mocks.py::TestAutoMergeWorkflowMocked::test_format_result_failure PASSED [ 84%]
+tests/test_phase3_enhanced_mocks.py::TestCIOrchestratorMocked::test_run_smoke_tests_all_pass PASSED [ 85%]
+tests/test_phase3_enhanced_mocks.py::TestCIOrchestratorMocked::test_run_smoke_tests_with_failures PASSED [ 86%]
+tests/test_phase3_enhanced_mocks.py::TestCIOrchestratorMocked::test_run_smoke_tests_with_timeouts PASSED [ 86%]
+tests/test_phase3_enhanced_mocks.py::TestCIOrchestratorMocked::test_run_smoke_tests_repo_not_found PASSED [ 87%]
+tests/test_phase3_enhanced_mocks.py::TestCIOrchestratorMocked::test_format_result_success PASSED [ 87%]
+tests/test_phase3_enhanced_mocks.py::TestCIOrchestratorMocked::test_format_result_failure PASSED [ 88%]
+tests/test_phase3_enhanced_mocks.py::TestIntegrationWorkflow::test_full_workflow_green_path PASSED [ 89%]
+tests/test_phase3_enhanced_mocks.py::TestIntegrationWorkflow::test_full_workflow_red_path PASSED [ 89%]
+tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_workflow_initialization ERROR [ 90%]
+tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_workflow_with_custom_rules ERROR [ 91%]
+tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_execute_nonexistent_workpad ERROR [ 91%]
+tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_format_result ERROR [ 92%]
+tests/test_phase3_workflows.py::TestCIOrchestrator::test_orchestrator_initialization ERROR [ 93%]
+tests/test_phase3_workflows.py::TestCIOrchestrator::test_run_smoke_tests_nonexistent_repo ERROR [ 93%]
+tests/test_phase3_workflows.py::TestCIOrchestrator::test_ci_result_is_green PASSED [ 94%]
+tests/test_phase3_workflows.py::TestCIOrchestrator::test_ci_result_is_red PASSED [ 94%]
+tests/test_phase3_workflows.py::TestCIOrchestrator::test_format_ci_result ERROR [ 95%]
+tests/test_phase3_workflows.py::TestRollbackHandler::test_handler_initialization PASSED [ 96%]
+tests/test_phase3_workflows.py::TestRollbackHandler::test_handle_passing_ci PASSED [ 96%]
+tests/test_phase3_workflows.py::TestRollbackHandler::test_handle_failed_ci_nonexistent_repo PASSED [ 97%]
+tests/test_phase3_workflows.py::TestRollbackHandler::test_format_rollback_result PASSED [ 98%]
+tests/test_phase3_workflows.py::TestPhase3Integration::test_ci_status_enum PASSED [ 98%]
+tests/test_phase3_workflows.py::TestPhase3Integration::test_auto_merge_result_dataclass PASSED [ 99%]
+tests/test_phase3_workflows.py::TestPhase3Integration::test_rollback_result_dataclass PASSED [100%]/home/ubuntu/.local/lib/python3.11/site-packages/coverage/inorout.py:521: CoverageWarning: Module sologit/analysis/test_analyzer was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/ubuntu/.local/lib/python3.11/site-packages/coverage/inorout.py:521: CoverageWarning: Module sologit/workflows/promotion_gate was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/ubuntu/.local/lib/python3.11/site-packages/coverage/inorout.py:521: CoverageWarning: Module sologit/workflows/auto_merge was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/ubuntu/.local/lib/python3.11/site-packages/coverage/inorout.py:521: CoverageWarning: Module sologit/workflows/ci_orchestrator was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/ubuntu/.local/lib/python3.11/site-packages/coverage/inorout.py:521: CoverageWarning: Module sologit/workflows/rollback_handler was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.11.0/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+
+
+==================================== ERRORS ====================================
+_ ERROR at setup of TestPromotionGateEnhanced.test_evaluate_tests_not_required _
+tests/test_promotion_gate_enhanced.py:35: in custom_gate
+    rules = PromotionRules(
+E   TypeError: PromotionRules.__init__() got an unexpected keyword argument 'min_coverage'
+_____ ERROR at setup of TestAutoMergeWorkflow.test_workflow_initialization _____
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+___ ERROR at setup of TestAutoMergeWorkflow.test_workflow_with_custom_rules ____
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+___ ERROR at setup of TestAutoMergeWorkflow.test_execute_nonexistent_workpad ___
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+__________ ERROR at setup of TestAutoMergeWorkflow.test_format_result __________
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+____ ERROR at setup of TestCIOrchestrator.test_orchestrator_initialization _____
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+__ ERROR at setup of TestCIOrchestrator.test_run_smoke_tests_nonexistent_repo __
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+__________ ERROR at setup of TestCIOrchestrator.test_format_ci_result __________
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   FileNotFoundError: [Errno 2] No such file or directory
+
+During handling of the above exception, another exception occurred:
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:667: in send
+    resp = conn.urlopen(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/util/util.py:38: in reraise
+    raise value.with_traceback(tb)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connectionpool.py:493: in _make_request
+    conn.request(
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/urllib3/connection.py:494: in request
+    self.endheaders()
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1281: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:1041: in _send_output
+    self.send(msg)
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/http/client.py:979: in send
+    self.connect()
+../../.local/lib/python3.11/site-packages/docker/transport/unixconn.py:26: in connect
+    sock.connect(self.unix_socket)
+E   urllib3.exceptions.ProtocolError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+../../.local/lib/python3.11/site-packages/docker/api/client.py:223: in _retrieve_server_version
+    return self.version(api_version=False)["ApiVersion"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/daemon.py:181: in version
+    return self._result(self._get(url), json=True)
+                        ^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/utils/decorators.py:44: in inner
+    return f(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:246: in _get
+    return self.get(url, **self._set_request_timeout(kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:602: in get
+    return self.request("GET", url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/site-packages/requests/adapters.py:682: in send
+    raise ConnectionError(err, request=request)
+E   requests.exceptions.ConnectionError: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+The above exception was the direct cause of the following exception:
+sologit/engines/test_orchestrator.py:86: in __init__
+    self.docker_client = docker.from_env()
+                         ^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/client.py:94: in from_env
+    return cls(
+../../.local/lib/python3.11/site-packages/docker/client.py:45: in __init__
+    self.api = APIClient(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:207: in __init__
+    self._version = self._retrieve_server_version()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/lib/python3.11/site-packages/docker/api/client.py:230: in _retrieve_server_version
+    raise DockerException(
+E   docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+
+During handling of the above exception, another exception occurred:
+tests/test_phase3_workflows.py:35: in test_orchestrator
+    return TestOrchestrator(git_engine)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/engines/test_orchestrator.py:90: in __init__
+    raise TestOrchestratorError(f"Docker not available: {e}")
+E   sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+------------------------------ Captured log setup ------------------------------
+ERROR    sologit.engines.test_orchestrator:test_orchestrator.py:89 Failed to connect to Docker: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+=================================== FAILURES ===================================
+_______ TestPromotionGateEnhanced.test_evaluate_cannot_promote_exception _______
+tests/test_promotion_gate_enhanced.py:72: in test_evaluate_cannot_promote_exception
+    decision = gate.evaluate("test-pad", analysis)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/workflows/promotion_gate.py:134: in evaluate
+    decision.add_reason(f"✅ All tests passed ({test_analysis.passed}/{test_analysis.total_tests})")
+                                               ^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/unittest/mock.py:653: in __getattr__
+    raise AttributeError("Mock object has no attribute %r" % name)
+E   AttributeError: Mock object has no attribute 'passed'
+____ TestPromotionGateEnhanced.test_evaluate_tests_required_but_status_red _____
+tests/test_promotion_gate_enhanced.py:94: in test_evaluate_tests_required_but_status_red
+    decision = gate.evaluate("test-pad", analysis)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/workflows/promotion_gate.py:130: in evaluate
+    f"{test_analysis.timeout} timeout, {test_analysis.error} error"
+       ^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/unittest/mock.py:653: in __getattr__
+    raise AttributeError("Mock object has no attribute %r" % name)
+E   AttributeError: Mock object has no attribute 'timeout'
+___ TestPromotionGateEnhanced.test_evaluate_tests_required_but_status_yellow ___
+tests/test_promotion_gate_enhanced.py:117: in test_evaluate_tests_required_but_status_yellow
+    decision = gate.evaluate("test-pad", analysis)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/workflows/promotion_gate.py:130: in evaluate
+    f"{test_analysis.timeout} timeout, {test_analysis.error} error"
+       ^^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/unittest/mock.py:653: in __getattr__
+    raise AttributeError("Mock object has no attribute %r" % name)
+E   AttributeError: Mock object has no attribute 'timeout'
+______ TestPromotionGateEnhanced.test_evaluate_fast_forward_not_possible _______
+tests/test_promotion_gate_enhanced.py:155: in test_evaluate_fast_forward_not_possible
+    decision = gate.evaluate("test-pad", analysis)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sologit/workflows/promotion_gate.py:134: in evaluate
+    decision.add_reason(f"✅ All tests passed ({test_analysis.passed}/{test_analysis.total_tests})")
+                                               ^^^^^^^^^^^^^^^^^^^^
+/opt/computersetup/.pyenv/versions/3.11.6/lib/python3.11/unittest/mock.py:653: in __getattr__
+    raise AttributeError("Mock object has no attribute %r" % name)
+E   AttributeError: Mock object has no attribute 'passed'
+____________ TestPromotionGateEnhanced.test_format_decision_reject _____________
+tests/test_promotion_gate_enhanced.py:173: in test_format_decision_reject
+    assert "PROMOTION GATE DECISION" in formatted
+E   AssertionError: assert 'PROMOTION GATE DECISION' in '============================================================\nPROMOTION GATE EVALUATION\n============================================================\n\n\u274c REJECTED - Cannot promote\n\nReasons:\n  \u274c Tests failed\n  \u274c Cannot fast-forward\n\n============================================================'
+_________ TestPromotionGateEnhanced.test_format_decision_manual_review _________
+tests/test_promotion_gate_enhanced.py:190: in test_format_decision_manual_review
+    assert "PROMOTION GATE DECISION" in formatted
+E   AssertionError: assert 'PROMOTION GATE DECISION' in '============================================================\nPROMOTION GATE EVALUATION\n============================================================\n\n\U0001f440 MANUAL REVIEW REQUIRED\n\nReasons:\n  \u26a0\ufe0f Some concerns\n\nWarnings:\n  Warning 1\n  Warning 2\n\n============================================================'
+_______ TestPromotionGateEnhanced.test_format_decision_with_empty_lists ________
+tests/test_promotion_gate_enhanced.py:207: in test_format_decision_with_empty_lists
+    assert "PROMOTION GATE DECISION" in formatted
+E   AssertionError: assert 'PROMOTION GATE DECISION' in '============================================================\nPROMOTION GATE EVALUATION\n============================================================\n\n\u2705 APPROVED - Ready to promote\n\n============================================================'
+________________ TestPromotionRulesDefaults.test_default_rules _________________
+tests/test_promotion_gate_enhanced.py:220: in test_default_rules
+    assert rules.min_coverage == 0
+           ^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'PromotionRules' object has no attribute 'min_coverage'
+________ TestCIOrchestratorEnhanced.test_run_smoke_tests_repo_not_found ________
+tests/test_ci_orchestrator_enhanced.py:46: in test_run_smoke_tests_repo_not_found
+    result = orchestrator.run_smoke_tests("nonexistent-repo", smoke_tests)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+______ TestCIOrchestratorEnhanced.test_run_smoke_tests_get_history_fails _______
+tests/test_ci_orchestrator_enhanced.py:62: in test_run_smoke_tests_get_history_fails
+    result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+__________ TestCIOrchestratorEnhanced.test_run_smoke_tests_no_commits __________
+tests/test_ci_orchestrator_enhanced.py:77: in test_run_smoke_tests_no_commits
+    result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+____ TestCIOrchestratorEnhanced.test_run_smoke_tests_orchestrator_exception ____
+tests/test_ci_orchestrator_enhanced.py:95: in test_run_smoke_tests_orchestrator_exception
+    result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+________ TestCIOrchestratorEnhanced.test_run_smoke_tests_with_failures _________
+tests/test_ci_orchestrator_enhanced.py:132: in test_run_smoke_tests_with_failures
+    result = orchestrator.run_smoke_tests("test-repo", smoke_tests)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+______ TestCIOrchestratorEnhanced.test_format_ci_result_with_empty_tests _______
+tests/test_ci_orchestrator_enhanced.py:153: in test_format_ci_result_with_empty_tests
+    assert "CI SMOKE TESTS" in formatted
+E   AssertionError: assert 'CI SMOKE TESTS' in '============================================================\nCI SMOKE TEST RESULT\n============================================================\n\n\u2705 SUCCESS\n   No tests to run\n\nRepository: test-repo\nCommit: abc123\nDuration: 1.0s\n\n\n============================================================'
+____ TestCIOrchestratorEnhanced.test_format_ci_result_with_long_commit_hash ____
+tests/test_ci_orchestrator_enhanced.py:170: in test_format_ci_result_with_long_commit_hash
+    assert "CI SMOKE TESTS" in formatted
+E   AssertionError: assert 'CI SMOKE TESTS' in '============================================================\nCI SMOKE TEST RESULT\n============================================================\n\n\u2705 SUCCESS\n   \n\nRepository: test-repo\nCommit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nDuration: 1.0s\n\n\n============================================================'
+=============================== warnings summary ===============================
+sologit/analysis/test_analyzer.py:55
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:55: PytestCollectionWarning: cannot collect test class 'TestAnalyzer' because it has a __init__ constructor (from: tests/test_test_analyzer.py)
+    class TestAnalyzer:
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_test_analyzer.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_test_analyzer.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_test_analyzer.py)
+    class TestStatus(Enum):
+
+sologit/analysis/test_analyzer.py:55
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:55: PytestCollectionWarning: cannot collect test class 'TestAnalyzer' because it has a __init__ constructor (from: tests/test_test_analyzer_coverage_boost.py)
+    class TestAnalyzer:
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_test_analyzer_coverage_boost.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_test_analyzer_coverage_boost.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_test_analyzer_coverage_boost.py)
+    class TestStatus(Enum):
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_promotion_gate.py)
+    @dataclass
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_promotion_gate_coverage_boost.py)
+    @dataclass
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_promotion_gate_enhanced.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:63
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:63: PytestCollectionWarning: cannot collect test class 'TestOrchestrator' because it has a __init__ constructor (from: tests/test_auto_merge_enhanced.py)
+    class TestOrchestrator:
+
+sologit/engines/test_orchestrator.py:33
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:33: PytestCollectionWarning: cannot collect test class 'TestConfig' because it has a __init__ constructor (from: tests/test_auto_merge_enhanced.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_auto_merge_enhanced.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_auto_merge_enhanced.py)
+    class TestStatus(Enum):
+
+sologit/analysis/test_analyzer.py:55
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:55: PytestCollectionWarning: cannot collect test class 'TestAnalyzer' because it has a __init__ constructor (from: tests/test_auto_merge_enhanced.py)
+    class TestAnalyzer:
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_auto_merge_enhanced.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:33
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:33: PytestCollectionWarning: cannot collect test class 'TestConfig' because it has a __init__ constructor (from: tests/test_ci_orchestrator_coverage_boost.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_ci_orchestrator_coverage_boost.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_ci_orchestrator_coverage_boost.py)
+    class TestStatus(Enum):
+
+sologit/engines/test_orchestrator.py:63
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:63: PytestCollectionWarning: cannot collect test class 'TestOrchestrator' because it has a __init__ constructor (from: tests/test_ci_orchestrator_enhanced.py)
+    class TestOrchestrator:
+
+sologit/engines/test_orchestrator.py:33
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:33: PytestCollectionWarning: cannot collect test class 'TestConfig' because it has a __init__ constructor (from: tests/test_ci_orchestrator_enhanced.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_ci_orchestrator_enhanced.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_ci_orchestrator_enhanced.py)
+    class TestStatus(Enum):
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_rollback_handler_comprehensive.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_rollback_handler_comprehensive.py)
+    class TestStatus(Enum):
+
+sologit/analysis/test_analyzer.py:55
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:55: PytestCollectionWarning: cannot collect test class 'TestAnalyzer' because it has a __init__ constructor (from: tests/test_phase3_enhanced_mocks.py)
+    class TestAnalyzer:
+
+sologit/analysis/test_analyzer.py:41
+  /home/ubuntu/code_artifacts/solo-git/sologit/analysis/test_analyzer.py:41: PytestCollectionWarning: cannot collect test class 'TestAnalysis' because it has a __init__ constructor (from: tests/test_phase3_enhanced_mocks.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:33
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:33: PytestCollectionWarning: cannot collect test class 'TestConfig' because it has a __init__ constructor (from: tests/test_phase3_enhanced_mocks.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:46
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:46: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_phase3_enhanced_mocks.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_phase3_enhanced_mocks.py)
+    class TestStatus(Enum):
+
+sologit/engines/test_orchestrator.py:63
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:63: PytestCollectionWarning: cannot collect test class 'TestOrchestrator' because it has a __init__ constructor (from: tests/test_phase3_workflows.py)
+    class TestOrchestrator:
+
+sologit/engines/test_orchestrator.py:33
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:33: PytestCollectionWarning: cannot collect test class 'TestConfig' because it has a __init__ constructor (from: tests/test_phase3_workflows.py)
+    @dataclass
+
+sologit/engines/test_orchestrator.py:25
+  /home/ubuntu/code_artifacts/solo-git/sologit/engines/test_orchestrator.py:25: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_phase3_workflows.py)
+    class TestStatus(Enum):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.6-final-0 ________________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+sologit/__init__.py                            3      0   100%
+sologit/analysis/__init__.py                   2      0   100%
+sologit/analysis/test_analyzer.py            196      0   100%
+sologit/api/__init__.py                        0      0   100%
+sologit/api/client.py                         87     87     0%   17-272
+sologit/cli/__init__.py                        0      0   100%
+sologit/cli/commands.py                      353    353     0%   8-622
+sologit/cli/config_commands.py               135    135     0%   8-224
+sologit/cli/main.py                           72     72     0%   9-144
+sologit/config/__init__.py                     0      0   100%
+sologit/config/manager.py                    154    154     0%   10-338
+sologit/config/templates.py                    2      2     0%   7-80
+sologit/core/__init__.py                       0      0   100%
+sologit/core/repository.py                    32      1    97%   68
+sologit/core/workpad.py                       49      3    94%   66, 106, 118
+sologit/engines/__init__.py                    0      0   100%
+sologit/engines/git_engine.py                606    454    25%   59, 91, 93, 95, 142-147, 161-206, 222, 224, 231, 272-274, 289-341, 355, 370-372, 384-428, 443-458, 473, 487-489, 501-507, 511, 519, 523-526, 545-572, 585-619, 638-659, 669-705, 715-751, 763-808, 822-823, 835-861, 873-897, 918-962, 974-1004, 1017-1036, 1048-1068, 1080-1098, 1121-1139, 1152-1198, 1210-1256, 1275-1301, 1306, 1310-1311, 1331-1366, 1373-1381, 1386-1394
+sologit/engines/patch_engine.py              209    209     0%   8-560
+sologit/engines/test_orchestrator.py         134     81    40%   87, 109-128, 147, 155-167, 176-225, 242-305, 328-331, 335, 339
+sologit/orchestration/__init__.py              6      6     0%   9-15
+sologit/orchestration/ai_orchestrator.py     131    131     0%   8-397
+sologit/orchestration/code_generator.py      138    138     0%   8-349
+sologit/orchestration/cost_guard.py          134    134     0%   8-310
+sologit/orchestration/model_router.py        133    133     0%   9-389
+sologit/orchestration/planning_engine.py     114    114     0%   8-365
+sologit/utils/__init__.py                      0      0   100%
+sologit/utils/logger.py                       63     37    41%   39-40, 43-49, 61-95, 110, 119-121, 124-126, 129
+sologit/workflows/__init__.py                  5      0   100%
+sologit/workflows/auto_merge.py              133      0   100%
+sologit/workflows/ci_orchestrator.py         117      0   100%
+sologit/workflows/promotion_gate.py          120      0   100%
+sologit/workflows/rollback_handler.py         91      0   100%
+------------------------------------------------------------------------
+TOTAL                                       3219   2244    30%
+Coverage HTML written to dir htmlcov
+Coverage JSON written to file phase3_final_coverage.json
+=========================== short test summary info ============================
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_cannot_promote_exception - AttributeError: Mock object has no attribute 'passed'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_tests_required_but_status_red - AttributeError: Mock object has no attribute 'timeout'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_tests_required_but_status_yellow - AttributeError: Mock object has no attribute 'timeout'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_fast_forward_not_possible - AttributeError: Mock object has no attribute 'passed'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_format_decision_reject - AssertionError: assert 'PROMOTION GATE DECISION' in '============================================================\nPROMOTION GATE EVALUATION\n============================================================\n\n\u274c REJECTED - Cannot promote\n\nReasons:\n  \u274c Tests failed\n  \u274c Cannot fast-forward\n\n============================================================'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_format_decision_manual_review - AssertionError: assert 'PROMOTION GATE DECISION' in '============================================================\nPROMOTION GATE EVALUATION\n============================================================\n\n\U0001f440 MANUAL REVIEW REQUIRED\n\nReasons:\n  \u26a0\ufe0f Some concerns\n\nWarnings:\n  Warning 1\n  Warning 2\n\n============================================================'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_format_decision_with_empty_lists - AssertionError: assert 'PROMOTION GATE DECISION' in '============================================================\nPROMOTION GATE EVALUATION\n============================================================\n\n\u2705 APPROVED - Ready to promote\n\n============================================================'
+FAILED tests/test_promotion_gate_enhanced.py::TestPromotionRulesDefaults::test_default_rules - AttributeError: 'PromotionRules' object has no attribute 'min_coverage'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_repo_not_found - TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_get_history_fails - TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_no_commits - TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_orchestrator_exception - TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_run_smoke_tests_with_failures - TypeError: CIOrchestrator.run_smoke_tests() missing 1 required positional argument: 'smoke_tests'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_format_ci_result_with_empty_tests - AssertionError: assert 'CI SMOKE TESTS' in '============================================================\nCI SMOKE TEST RESULT\n============================================================\n\n\u2705 SUCCESS\n   No tests to run\n\nRepository: test-repo\nCommit: abc123\nDuration: 1.0s\n\n\n============================================================'
+FAILED tests/test_ci_orchestrator_enhanced.py::TestCIOrchestratorEnhanced::test_format_ci_result_with_long_commit_hash - AssertionError: assert 'CI SMOKE TESTS' in '============================================================\nCI SMOKE TEST RESULT\n============================================================\n\n\u2705 SUCCESS\n   \n\nRepository: test-repo\nCommit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nDuration: 1.0s\n\n\n============================================================'
+ERROR tests/test_promotion_gate_enhanced.py::TestPromotionGateEnhanced::test_evaluate_tests_not_required - TypeError: PromotionRules.__init__() got an unexpected keyword argument 'min_coverage'
+ERROR tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_workflow_initialization - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+ERROR tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_workflow_with_custom_rules - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+ERROR tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_execute_nonexistent_workpad - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+ERROR tests/test_phase3_workflows.py::TestAutoMergeWorkflow::test_format_result - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+ERROR tests/test_phase3_workflows.py::TestCIOrchestrator::test_orchestrator_initialization - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+ERROR tests/test_phase3_workflows.py::TestCIOrchestrator::test_run_smoke_tests_nonexistent_repo - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+ERROR tests/test_phase3_workflows.py::TestCIOrchestrator::test_format_ci_result - sologit.engines.test_orchestrator.TestOrchestratorError: Docker not available: Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+============ 15 failed, 135 passed, 34 warnings, 8 errors in 14.20s ============
