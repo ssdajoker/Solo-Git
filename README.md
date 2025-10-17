@@ -36,6 +36,13 @@ Solo Git introduces three core innovations:
 
 ## Key Features
 
+### 🎨 **Heaven Interface** (New in Phase 4!)
+- **Enhanced CLI**: Rich formatting with colors, panels, and ASCII commit graphs
+- **Interactive TUI**: Full-screen, keyboard-driven interface with live updates
+- **Optional GUI**: Tauri-based companion app with visual commit graph
+- **Autocomplete Shell**: Fuzzy command completion and history
+- See the [Heaven Interface Guide](docs/HEAVEN_INTERFACE.md) for details
+
 ### ✨ **Frictionless Workflow**
 - **No Branch Management**: Say goodbye to `git checkout -b feature/...`
 - **No Pull Requests**: Tests replace human review
@@ -353,6 +360,10 @@ evogitctl rollback --last           # Rollback last commit
 # CI/CD Integration (Phase 3)
 evogitctl ci smoke                  # Run smoke tests
 evogitctl ci status                 # CI job status
+
+# Heaven Interface (Phase 4)
+evogitctl tui                       # Launch interactive TUI
+evogitctl interactive               # Launch autocomplete shell
 
 # Utilities
 evogitctl version                   # Show version info
