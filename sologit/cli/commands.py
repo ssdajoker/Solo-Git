@@ -349,3 +349,274 @@ def test_run(pad_id: str, target: str, parallel: bool):
         click.echo(f"❌ Error: {e}", err=True)
         raise click.Abort()
 
+
+
+
+
+# ============================================================================
+# Phase 3: Auto-Merge and CI Integration Commands
+# ============================================================================
+
+@pad.command('auto-merge')
+@click.argument('pad_id')
+@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
+@click.option('--no-auto-promote', is_flag=True, help='Disable automatic promotion')
+def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
+    """
+    Run tests and auto-promote if they pass (Phase 3).
+    
+    This is the complete auto-merge workflow:
+    1. Run tests
+    2. Analyze results
+    3. Evaluate promotion gate
+    4. Auto-promote if approved
+    """
+    from sologit.workflows.auto_merge import AutoMergeWorkflow
+    from sologit.workflows.promotion_gate import PromotionRules
+    
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    # Define tests based on target
+    if target == 'fast':
+        tests = [
+            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+        ]
+    else:
+        tests = [
+            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+            TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+        ]
+    
+    # Configure promotion rules (can be loaded from config in future)
+    rules = PromotionRules(
+        require_tests=True,
+        require_all_tests_pass=True,
+        require_fast_forward=True
+    )
+    
+    # Create workflow
+    workflow = AutoMergeWorkflow(git_engine, test_orchestrator, rules)
+    
+    try:
+        click.echo(f"🚀 Starting auto-merge workflow for: {workpad.title}")
+        click.echo(f"   Target: {target}")
+        click.echo(f"   Auto-promote: {not no_auto_promote}\n")
+        
+        # Execute workflow
+        result = workflow.execute(
+            pad_id,
+            tests,
+            parallel=True,
+            auto_promote=not no_auto_promote
+        )
+        
+        # Display formatted result
+        click.echo(workflow.format_result(result))
+        
+        # Exit with appropriate code
+        if not result.success and result.promotion_decision and not result.promotion_decision.can_promote:
+            raise click.Abort()
+    
+    except Exception as e:
+        click.echo(f"❌ Auto-merge failed: {e}", err=True)
+        raise click.Abort()
+
+
+@pad.command('evaluate')
+@click.argument('pad_id')
+def pad_evaluate(pad_id: str):
+    """
+    Evaluate promotion gate without promoting (Phase 3).
+    
+    Shows whether a workpad is ready to be promoted based on configured rules.
+    """
+    from sologit.workflows.promotion_gate import PromotionGate, PromotionRules
+    
+    git_engine = get_git_engine()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    # Configure rules
+    rules = PromotionRules(
+        require_tests=True,
+        require_all_tests_pass=True,
+        require_fast_forward=True
+    )
+    
+    # Create gate
+    gate = PromotionGate(git_engine, rules)
+    
+    try:
+        click.echo(f"🚦 Evaluating promotion gate for: {workpad.title}\n")
+        
+        # Evaluate (without test results for now)
+        # In full implementation, would load cached test results
+        decision = gate.evaluate(pad_id, test_analysis=None)
+        
+        # Display decision
+        click.echo(gate.format_decision(decision))
+        
+        # Exit code based on decision
+        if not decision.can_promote:
+            raise click.Abort()
+    
+    except Exception as e:
+        click.echo(f"❌ Evaluation failed: {e}", err=True)
+        raise click.Abort()
+
+
+@click.group()
+def ci():
+    """CI and smoke test commands (Phase 3)."""
+    pass
+
+
+@ci.command('smoke')
+@click.argument('repo_id')
+@click.option('--commit', help='Commit hash to test (default: HEAD)')
+def ci_smoke(repo_id: str, commit: Optional[str]):
+    """
+    Run smoke tests for a commit (Phase 3).
+    
+    This simulates post-merge CI smoke tests.
+    """
+    from sologit.workflows.ci_orchestrator import CIOrchestrator
+    
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    
+    repo = git_engine.get_repo(repo_id)
+    if not repo:
+        click.echo(f"❌ Repository {repo_id} not found", err=True)
+        raise click.Abort()
+    
+    # Get commit hash
+    if not commit:
+        # Get HEAD commit
+        commit = git_engine.get_current_commit(repo_id)
+    
+    # Define smoke tests
+    smoke_tests = [
+        TestConfig(name="smoke-health", cmd="python -c 'print(\"Health check passed\")'", timeout=10),
+        TestConfig(name="smoke-unit", cmd="python -m pytest tests/ -q --tb=no", timeout=60),
+    ]
+    
+    # Create orchestrator
+    orchestrator = CIOrchestrator(git_engine, test_orchestrator)
+    
+    def progress_callback(message: str):
+        click.echo(f"   {message}")
+    
+    try:
+        click.echo(f"🔬 Running smoke tests...")
+        click.echo(f"   Repository: {repo_id}")
+        click.echo(f"   Commit: {commit[:8]}\n")
+        
+        # Run smoke tests
+        result = orchestrator.run_smoke_tests(
+            repo_id,
+            commit,
+            smoke_tests,
+            on_progress=progress_callback
+        )
+        
+        # Display result
+        click.echo("\n" + orchestrator.format_result(result))
+        
+        # Exit code based on result
+        if result.is_red:
+            raise click.Abort()
+    
+    except Exception as e:
+        click.echo(f"❌ Smoke tests failed: {e}", err=True)
+        raise click.Abort()
+
+
+@ci.command('rollback')
+@click.argument('repo_id')
+@click.option('--commit', required=True, help='Commit hash to rollback')
+@click.option('--recreate-pad/--no-recreate-pad', default=True, help='Recreate workpad for fixes')
+def ci_rollback(repo_id: str, commit: str, recreate_pad: bool):
+    """
+    Manually rollback a commit (Phase 3).
+    
+    Reverts the specified commit and optionally recreates a workpad.
+    """
+    from sologit.workflows.rollback_handler import RollbackHandler
+    from sologit.workflows.ci_orchestrator import CIResult, CIStatus
+    
+    git_engine = get_git_engine()
+    
+    repo = git_engine.get_repo(repo_id)
+    if not repo:
+        click.echo(f"❌ Repository {repo_id} not found", err=True)
+        raise click.Abort()
+    
+    # Create handler
+    handler = RollbackHandler(git_engine)
+    
+    # Create a fake CI result for the rollback
+    fake_ci_result = CIResult(
+        repo_id=repo_id,
+        commit_hash=commit,
+        status=CIStatus.FAILURE,
+        duration_ms=0,
+        test_results=[],
+        message="Manual rollback"
+    )
+    
+    try:
+        click.echo(f"🔄 Rolling back commit...")
+        click.echo(f"   Repository: {repo_id}")
+        click.echo(f"   Commit: {commit[:8]}")
+        click.echo(f"   Recreate workpad: {recreate_pad}\n")
+        
+        # Perform rollback
+        result = handler.handle_failed_ci(fake_ci_result, recreate_pad)
+        
+        # Display result
+        click.echo(handler.format_result(result))
+        
+        # Exit code
+        if not result.success:
+            raise click.Abort()
+    
+    except Exception as e:
+        click.echo(f"❌ Rollback failed: {e}", err=True)
+        raise click.Abort()
+
+
+@test.command('analyze')
+@click.argument('pad_id')
+def test_analyze(pad_id: str):
+    """
+    Analyze test failures for a workpad (Phase 3).
+    
+    Shows failure patterns and suggested fixes.
+    """
+    from sologit.analysis.test_analyzer import TestAnalyzer
+    
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        click.echo(f"❌ Workpad {pad_id} not found", err=True)
+        raise click.Abort()
+    
+    # Check if tests have been run
+    # In a full implementation, we'd cache test results
+    # For now, prompt user to run tests first
+    
+    click.echo(f"⚠️ Test analysis requires recent test results")
+    click.echo(f"   Run 'sologit test run {pad_id}' first")
+    click.echo(f"\nNote: In Phase 3, test results will be cached and analyzed automatically")

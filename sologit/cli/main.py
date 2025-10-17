@@ -114,6 +114,10 @@ cli.add_command(repo)
 cli.add_command(pad)
 cli.add_command(test)
 
+# Phase 3 command groups
+from sologit.cli.commands import ci
+cli.add_command(ci)
+
 
 @cli.command()
 def pair():
