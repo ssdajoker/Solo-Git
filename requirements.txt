@@ -12,6 +12,11 @@ gitpython>=3.1.40
 # Docker operations (Phase 1)
 docker>=7.0.0
 
+# Heaven Interface - CLI/TUI (Phase 4)
+rich>=13.7.0
+textual>=0.47.0
+prompt-toolkit>=3.0.43
+
 # Testing framework
 pytest>=7.4.0
 pytest-cov>=4.1.0
