@@ -410,6 +410,19 @@ class GitStateSync:
         
         self.state_manager.update_ai_operation(operation_id, **updates)
     
+    def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List AI operations for a workpad.
+        
+        Args:
+            workpad_id: Optional workpad ID to filter by
+            
+        Returns:
+            List of AI operation dictionaries
+        """
+        operations = self.state_manager.list_ai_operations(workpad_id)
+        return [op.to_dict() for op in operations]
+    
     # Git Operations
     
     def get_status(self, repo_id: str, pad_id: Optional[str] = None) -> Dict[str, Any]:
