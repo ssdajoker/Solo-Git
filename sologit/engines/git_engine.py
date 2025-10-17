@@ -811,29 +811,16 @@ class GitEngine:
         """
         Clean up workpads older than specified days.
         
+        Deprecated: Use cleanup_workpads() instead for more flexible filtering.
+        
         Args:
             days: Age threshold in days
             
         Returns:
             List of deleted workpad IDs
         """
-        logger.info(f"Cleaning up workpads older than {days} days")
-        
-        from datetime import timedelta
-        threshold = datetime.now() - timedelta(days=days)
-        deleted_pads = []
-        
-        for pad_id, workpad in list(self.workpad_db.items()):
-            if workpad.status == "active" and workpad.last_activity < threshold:
-                try:
-                    self.delete_workpad(pad_id, force=True)
-                    deleted_pads.append(pad_id)
-                    logger.info(f"Cleaned up stale workpad: {pad_id}")
-                except Exception as e:
-                    logger.error(f"Failed to cleanup workpad {pad_id}: {e}")
-        
-        logger.info(f"Cleaned up {len(deleted_pads)} stale workpads")
-        return deleted_pads
+        logger.warning("cleanup_stale_workpads is deprecated, use cleanup_workpads instead")
+        return self.cleanup_workpads(days=days, status="active")
     
     def list_branches(self, repo_id: str) -> List[dict]:
         """
@@ -1047,6 +1034,271 @@ class GitEngine:
         except Exception as e:
             logger.error(f"Failed to list files: {e}")
             raise GitEngineError(f"Failed to list files: {e}")
+    
+    def switch_workpad(self, pad_id: str) -> None:
+        """
+        Switch to a workpad (checkout its branch).
+        
+        Args:
+            pad_id: Workpad ID
+            
+        Raises:
+            WorkpadNotFoundError: If workpad not found
+        """
+        logger.info(f"Switching to workpad {pad_id}")
+        
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+        
+        repository = self.repo_db[workpad.repo_id]
+        
+        try:
+            repo = Repo(repository.path)
+            branch = getattr(repo.heads, workpad.branch_name)
+            branch.checkout()
+            
+            workpad.last_activity = datetime.now()
+            self._save_metadata()
+            
+            logger.info(f"Switched to workpad {pad_id} (branch: {workpad.branch_name})")
+            
+        except Exception as e:
+            logger.error(f"Failed to switch workpad: {e}")
+            raise GitEngineError(f"Failed to switch workpad: {e}")
+    
+    def get_active_workpad(self, repo_id: str) -> Optional[Workpad]:
+        """
+        Get currently active workpad for a repository.
+        
+        Args:
+            repo_id: Repository ID
+            
+        Returns:
+            Active workpad or None if on trunk
+        """
+        repository = self.repo_db.get(repo_id)
+        if not repository:
+            raise RepositoryNotFoundError(f"Repository {repo_id} not found")
+        
+        try:
+            repo = Repo(repository.path)
+            current_branch = repo.active_branch.name
+            
+            # Check if current branch is a workpad
+            if current_branch.startswith('pads/'):
+                for workpad in self.workpad_db.values():
+                    if workpad.branch_name == current_branch:
+                        return workpad
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to get active workpad: {e}")
+            return None
+    
+    def list_workpads_filtered(
+        self,
+        repo_id: Optional[str] = None,
+        status: Optional[str] = None,
+        test_status: Optional[str] = None,
+        sort_by: str = "created_at",
+        reverse: bool = False
+    ) -> List[Workpad]:
+        """
+        List workpads with filtering and sorting.
+        
+        Args:
+            repo_id: Filter by repository ID
+            status: Filter by status (active, promoted, deleted)
+            test_status: Filter by test status (green, red)
+            sort_by: Sort field (created_at, last_activity, title)
+            reverse: Sort in reverse order
+            
+        Returns:
+            Filtered and sorted list of workpads
+        """
+        workpads = list(self.workpad_db.values())
+        
+        # Apply filters
+        if repo_id:
+            workpads = [w for w in workpads if w.repo_id == repo_id]
+        if status:
+            workpads = [w for w in workpads if w.status == status]
+        if test_status:
+            workpads = [w for w in workpads if w.test_status == test_status]
+        
+        # Sort
+        if sort_by == "created_at":
+            workpads.sort(key=lambda w: w.created_at, reverse=reverse)
+        elif sort_by == "last_activity":
+            workpads.sort(key=lambda w: w.last_activity, reverse=reverse)
+        elif sort_by == "title":
+            workpads.sort(key=lambda w: w.title, reverse=reverse)
+        
+        return workpads
+    
+    def compare_workpads(self, pad_id_1: str, pad_id_2: str) -> dict:
+        """
+        Compare two workpads.
+        
+        Args:
+            pad_id_1: First workpad ID
+            pad_id_2: Second workpad ID
+            
+        Returns:
+            Comparison dictionary with diff stats
+        """
+        workpad1 = self.workpad_db.get(pad_id_1)
+        workpad2 = self.workpad_db.get(pad_id_2)
+        
+        if not workpad1:
+            raise WorkpadNotFoundError(f"Workpad {pad_id_1} not found")
+        if not workpad2:
+            raise WorkpadNotFoundError(f"Workpad {pad_id_2} not found")
+        
+        repository = self.repo_db[workpad1.repo_id]
+        
+        try:
+            repo = Repo(repository.path)
+            
+            # Get diff between workpads
+            diff = repo.git.diff(workpad1.branch_name, workpad2.branch_name)
+            
+            # Get diff stats
+            diff_index = repo.commit(workpad1.branch_name).diff(
+                repo.commit(workpad2.branch_name)
+            )
+            
+            files_changed = []
+            for diff_item in diff_index:
+                files_changed.append({
+                    'file': diff_item.a_path or diff_item.b_path,
+                    'change_type': diff_item.change_type,
+                })
+            
+            return {
+                'pad_1': {
+                    'id': pad_id_1,
+                    'title': workpad1.title,
+                    'checkpoints': len(workpad1.checkpoints),
+                },
+                'pad_2': {
+                    'id': pad_id_2,
+                    'title': workpad2.title,
+                    'checkpoints': len(workpad2.checkpoints),
+                },
+                'files_changed': len(files_changed),
+                'files_details': files_changed,
+                'diff': diff,
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to compare workpads: {e}")
+            raise GitEngineError(f"Failed to compare workpads: {e}")
+    
+    def get_workpad_merge_preview(self, pad_id: str) -> dict:
+        """
+        Preview what will happen when workpad is promoted.
+        
+        Args:
+            pad_id: Workpad ID
+            
+        Returns:
+            Preview dictionary with merge information
+        """
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+        
+        repository = self.repo_db[workpad.repo_id]
+        
+        try:
+            repo = Repo(repository.path)
+            
+            # Check if can fast-forward
+            can_ff = self.can_promote(pad_id)
+            
+            # Get ahead/behind info
+            ahead_behind = self.get_commits_ahead_behind(pad_id)
+            
+            # Get file changes
+            diff_index = repo.commit(repository.trunk_branch).diff(
+                repo.commit(workpad.branch_name)
+            )
+            
+            files_changed = []
+            total_additions = 0
+            total_deletions = 0
+            
+            for diff_item in diff_index:
+                # Count changes if possible
+                change_info = {
+                    'file': diff_item.a_path or diff_item.b_path,
+                    'change_type': diff_item.change_type,
+                }
+                files_changed.append(change_info)
+            
+            return {
+                'pad_id': pad_id,
+                'title': workpad.title,
+                'can_fast_forward': can_ff,
+                'commits_ahead': ahead_behind['ahead'],
+                'commits_behind': ahead_behind['behind'],
+                'files_changed': len(files_changed),
+                'files_details': files_changed,
+                'conflicts': [] if can_ff else ['Trunk has diverged - manual merge required'],
+                'ready_to_promote': can_ff and ahead_behind['ahead'] > 0,
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to generate merge preview: {e}")
+            raise GitEngineError(f"Failed to generate merge preview: {e}")
+    
+    def cleanup_workpads(
+        self,
+        repo_id: Optional[str] = None,
+        days: Optional[int] = None,
+        status: Optional[str] = None
+    ) -> List[str]:
+        """
+        Clean up workpads with enhanced filtering.
+        
+        Args:
+            repo_id: Only cleanup workpads from this repository
+            days: Age threshold in days (default: from config or 7)
+            status: Only cleanup workpads with this status
+            
+        Returns:
+            List of deleted workpad IDs
+        """
+        if days is None:
+            days = 7
+        
+        logger.info(f"Cleaning up workpads (repo_id={repo_id}, days={days}, status={status})")
+        
+        from datetime import timedelta
+        threshold = datetime.now() - timedelta(days=days)
+        deleted_pads = []
+        
+        for pad_id, workpad in list(self.workpad_db.items()):
+            # Apply filters
+            if repo_id and workpad.repo_id != repo_id:
+                continue
+            if status and workpad.status != status:
+                continue
+            
+            # Check if stale
+            if workpad.last_activity < threshold:
+                try:
+                    self.delete_workpad(pad_id, force=True)
+                    deleted_pads.append(pad_id)
+                    logger.info(f"Cleaned up workpad: {pad_id}")
+                except Exception as e:
+                    logger.error(f"Failed to cleanup workpad {pad_id}: {e}")
+        
+        logger.info(f"Cleaned up {len(deleted_pads)} workpads")
+        return deleted_pads
     
     def _validate_repo_id(self, repo_id: str) -> None:
         """Validate repository ID format."""
