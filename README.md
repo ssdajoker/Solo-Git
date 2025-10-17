@@ -36,12 +36,27 @@ Solo Git introduces three core innovations:
 
 ## Key Features
 
-### 🎨 **Heaven Interface** (New in Phase 4!)
-- **Enhanced CLI**: Rich formatting with colors, panels, and ASCII commit graphs
-- **Interactive TUI**: Full-screen, keyboard-driven interface with live updates
-- **Optional GUI**: Tauri-based companion app with visual commit graph
-- **Autocomplete Shell**: Fuzzy command completion and history
-- See the [Heaven Interface Guide](docs/HEAVEN_INTERFACE.md) for details
+### 🎨 **Heaven Interface** - Minimalist Design System
+Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and Dieter Rams design principles ("as little design as possible"). Available in three modes:
+
+- **Enhanced CLI**: Rich formatting with colors, panels, and ASCII commit graphs using Python Rich library
+- **Interactive TUI**: Full-screen terminal interface built with Textual - keyboard-driven with live updates, command palette, file tree, and visual commit graph
+- **Desktop GUI**: Tauri-based companion app (Rust + React) featuring:
+  - Monaco code editor (center stage)
+  - Retractable side rails (left: file/commit tree, right: AI assistant, bottom: logs/tests)
+  - D3.js commit graph visualization with Jenkins build status indicators
+  - 5 engagement levels (Idle → Navigation → Planning → Coding/Test → Commit/Resolve)
+  - Dark theme with minimal accent colors (#61AFEF blue, #98C379 green, #E06C75 red)
+  - JSON-based state synchronization between CLI/TUI/GUI
+
+**Design Tokens**:
+- Typography: JetBrains Mono/SF Mono for code, SF Pro/Roboto for UI
+- Color: Dark base (#1E1E1E), light text (#DDD), 2-3 accent colors only
+- Spacing: 8px grid system, generous margins (16-24px)
+- Icons: Monoline 2px stroke, 24×24px, monochrome
+- Motion: Subtle 150-300ms animations with ease-in-out
+
+See the [Heaven Interface Design System](docs/HEAVEN_INTERFACE.md) and [Heaven Interface Guide](docs/HEAVEN_INTERFACE_GUIDE.md) for complete specifications
 
 ### ✨ **Frictionless Workflow**
 - **No Branch Management**: Say goodbye to `git checkout -b feature/...`
@@ -475,23 +490,100 @@ flake8 sologit/
 
 ```
 solo-git/
-├── sologit/                    # Main package
-│   ├── cli/                    # CLI commands
+├── sologit/                    # Main Python package
+│   ├── cli/                    # CLI commands (evogitctl)
+│   │   ├── main.py            # Entry point
+│   │   ├── commands.py        # Core commands
+│   │   ├── config_commands.py # Config management
+│   │   └── integrated_commands.py # AI pairing commands
+│   ├── ui/                     # Heaven Interface (CLI/TUI)
+│   │   ├── formatter.py       # Rich formatting
+│   │   ├── heaven_tui.py      # Main TUI app
+│   │   ├── tui_app.py         # TUI components
+│   │   ├── command_palette.py # Command palette widget
+│   │   ├── file_tree.py       # File browser
+│   │   ├── graph.py           # Commit graph ASCII renderer
+│   │   ├── test_runner.py     # Test results display
+│   │   ├── theme.py           # Heaven theme tokens
+│   │   ├── autocomplete.py    # Shell autocomplete
+│   │   └── history.py         # Command history
+│   ├── state/                  # State management
+│   │   ├── manager.py         # State manager
+│   │   ├── schema.py          # State schema
+│   │   └── git_sync.py        # Git ↔ State sync
 │   ├── config/                 # Configuration management
-│   ├── api/                    # API clients
+│   ├── api/                    # API clients (Abacus.ai)
 │   ├── core/                   # Core models (Repository, Workpad)
 │   ├── engines/                # Git, Patch, Test engines
-│   ├── orchestration/          # AI orchestration
+│   ├── orchestration/          # AI orchestration (multi-model)
 │   ├── analysis/               # Test analysis
 │   ├── workflows/              # Auto-merge, CI, rollback
 │   └── utils/                  # Utilities and logging
-├── tests/                      # Test suite (555 tests)
+│
+├── heaven-gui/                 # Desktop GUI (Tauri + React)
+│   ├── src/                    # React frontend
+│   │   ├── components/        # UI components
+│   │   │   ├── CodeEditor.tsx # Monaco editor wrapper
+│   │   │   ├── CommandPalette.tsx
+│   │   │   ├── CommitGraph.tsx # D3.js visualization
+│   │   │   ├── FileTree.tsx
+│   │   │   ├── TestDashboard.tsx
+│   │   │   └── AIAssistant.tsx
+│   │   ├── hooks/             # React hooks
+│   │   ├── services/          # API clients
+│   │   ├── styles/            # CSS/design tokens
+│   │   └── App.tsx
+│   ├── src-tauri/             # Rust backend
+│   │   ├── src/
+│   │   │   ├── main.rs        # Tauri setup
+│   │   │   ├── state.rs       # State bridge
+│   │   │   └── commands.rs    # Tauri commands
+│   │   └── Cargo.toml
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── tests/                      # Test suite (555 tests, 76% coverage)
+│   ├── test_core*.py          # Core component tests
+│   ├── test_*_engine*.py      # Engine tests
+│   ├── test_ai_*.py           # AI orchestration tests
+│   ├── test_phase*.py         # Phase workflow tests
+│   └── test_workflow_e2e.py   # End-to-end tests
+│
 ├── docs/                       # Documentation
 │   ├── wiki/                   # Comprehensive wiki
+│   │   ├── architecture/      # Architecture docs
+│   │   ├── guides/            # User guides
+│   │   ├── phases/            # Phase reports
+│   │   └── timeline/          # Project timeline
 │   ├── SETUP.md               # Setup guide
-│   └── API.md                 # API reference
-└── [config files]              # setup.py, LICENSE, etc.
+│   ├── API.md                 # API reference
+│   ├── HEAVEN_INTERFACE.md    # Design system spec
+│   ├── HEAVEN_INTERFACE_GUIDE.md # Implementation guide
+│   ├── KEYBOARD_SHORTCUTS.md  # Keyboard reference
+│   ├── TESTING_GUIDE.md       # Testing guide
+│   └── BETA_LAUNCH_CHECKLIST.md
+│
+├── infrastructure/             # Deployment configs
+│   ├── docker/                # Docker images
+│   ├── jenkins/               # Jenkins pipelines
+│   └── sandbox/               # Test sandbox configs
+│
+├── .archive/                   # Historical artifacts
+│   └── historical_coverage/   # Old coverage reports
+│
+├── data/                       # Runtime data
+│   ├── repos/                 # Repository storage
+│   └── logs/                  # Application logs
+│
+├── requirements.txt            # Python dependencies
+├── setup.py                   # Package setup
+├── pyproject.toml             # Build config
+├── pytest.ini                 # Test config
+├── README.md                  # This file
+└── LICENSE                    # MIT license
 ```
+
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
