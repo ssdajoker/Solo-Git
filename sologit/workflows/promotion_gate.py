@@ -32,7 +32,8 @@ class PromotionRules:
     allow_skipped_tests: bool = False
     
     # Coverage requirements (optional)
-    min_coverage_percent: Optional[float] = None
+    min_coverage: float = 0  # Minimum coverage percentage (0-100)
+    min_coverage_percent: Optional[float] = None  # Alias for backwards compatibility
     
     # Fast-forward requirement
     require_fast_forward: bool = True
@@ -214,7 +215,7 @@ class PromotionGate:
         lines = []
         
         lines.append("=" * 60)
-        lines.append("PROMOTION GATE EVALUATION")
+        lines.append("PROMOTION GATE DECISION")
         lines.append("=" * 60)
         lines.append("")
         

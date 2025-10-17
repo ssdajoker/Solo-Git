@@ -220,7 +220,7 @@ class CIOrchestrator:
         lines = []
         
         lines.append("=" * 60)
-        lines.append("CI SMOKE TEST RESULT")
+        lines.append("CI SMOKE TESTS")
         lines.append("=" * 60)
         lines.append("")
         
