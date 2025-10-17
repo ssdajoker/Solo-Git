@@ -120,6 +120,63 @@ cli.add_command(ci)
 
 
 @cli.command()
+def tui():
+    """
+    Launch the Heaven Interface TUI (Text User Interface).
+    
+    The TUI provides an interactive, full-screen interface with:
+    - Real-time commit graph visualization
+    - Live workpad status
+    - Test run monitoring
+    - Keyboard-driven navigation
+    
+    \b
+    Keyboard Shortcuts:
+      q - Quit
+      r - Refresh
+      c - Clear log
+      g - Show commit graph
+      w - Show workpads
+      ? - Help
+    """
+    try:
+        from sologit.ui.tui_app import run_tui
+        run_tui()
+    except ImportError as e:
+        click.echo("❌ Error: TUI dependencies not installed", err=True)
+        click.echo("Install with: pip install textual", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ TUI launch failed: {e}", err=True)
+        raise click.Abort()
+
+
+@cli.command()
+def interactive():
+    """
+    Launch interactive shell with autocomplete.
+    
+    Provides an enhanced command-line experience with:
+    - Command history (persisted across sessions)
+    - Fuzzy autocomplete (Tab to complete)
+    - Auto-suggest from history
+    - Syntax highlighting
+    
+    Press Ctrl+C to exit.
+    """
+    try:
+        from sologit.ui.autocomplete import interactive_prompt
+        interactive_prompt()
+    except ImportError as e:
+        click.echo("❌ Error: Interactive shell dependencies not installed", err=True)
+        click.echo("Install with: pip install prompt-toolkit", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Interactive shell failed: {e}", err=True)
+        raise click.Abort()
+
+
+@cli.command()
 @click.argument('prompt', required=False)
 @click.option('--repo', 'repo_id', type=str, help='Repository ID (auto-selects if only one)')
 @click.option('--title', type=str, help='Workpad title (derived from prompt if not provided)')
