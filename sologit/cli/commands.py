@@ -3,6 +3,7 @@
 Command implementations for Solo Git CLI.
 
 Phase 1: Repository and workpad management.
+Phase 4: Heaven Interface integration with Rich formatting.
 """
 
 import click
@@ -13,8 +14,12 @@ from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
 from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
 from sologit.utils.logger import get_logger
+from sologit.ui.formatter import RichFormatter
 
 logger = get_logger(__name__)
+
+# Initialize Rich formatter
+formatter = RichFormatter()
 
 
 # Initialize engines (singleton pattern)
@@ -109,16 +114,25 @@ def repo_list():
     repos = git_engine.list_repos()
     
     if not repos:
-        click.echo("No repositories found.")
+        formatter.print_info("No repositories found.")
+        formatter.print("\n💡 Create a repository with: evogitctl repo init --zip app.zip")
         return
     
-    click.echo(f"Repositories ({len(repos)}):\n")
-    for i, repo in enumerate(repos, 1):
-        click.echo(f"  {i}. {repo.id} - {repo.name}")
-        click.echo(f"     Trunk: {repo.trunk_branch}")
-        click.echo(f"     Workpads: {repo.workpad_count}")
-        click.echo(f"     Created: {repo.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-        click.echo()
+    # Create a Rich table
+    formatter.print_header(f"Repositories ({len(repos)})")
+    table = formatter.table(headers=["ID", "Name", "Trunk", "Workpads", "Created"])
+    
+    for repo in repos:
+        table.add_row(
+            f"[cyan]{repo.id}[/cyan]",
+            f"[bold]{repo.name}[/bold]",
+            repo.trunk_branch,
+            str(repo.workpad_count),
+            repo.created_at.strftime('%Y-%m-%d %H:%M')
+        )
+    
+    formatter.console.print(table)
+    formatter.console.print()
 
 
 @repo.command('info')
@@ -129,18 +143,22 @@ def repo_info(repo_id: str):
     repo = git_engine.get_repo(repo_id)
     
     if not repo:
-        click.echo(f"❌ Repository {repo_id} not found", err=True)
+        formatter.print_error(f"Repository {repo_id} not found")
         raise click.Abort()
     
-    click.echo(f"Repository: {repo.id}")
-    click.echo(f"Name: {repo.name}")
-    click.echo(f"Path: {repo.path}")
-    click.echo(f"Trunk: {repo.trunk_branch}")
-    click.echo(f"Created: {repo.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-    click.echo(f"Workpads: {repo.workpad_count} active")
-    click.echo(f"Source: {repo.source_type}")
+    # Create formatted info panel
+    info = f"""[bold cyan]Repository:[/bold cyan] {repo.id}
+[bold]Name:[/bold] {repo.name}
+[bold]Path:[/bold] {repo.path}
+[bold]Trunk:[/bold] {repo.trunk_branch}
+[bold]Created:[/bold] {repo.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+[bold]Workpads:[/bold] {repo.workpad_count} active
+[bold]Source:[/bold] {repo.source_type}"""
+    
     if repo.source_url:
-        click.echo(f"URL: {repo.source_url}")
+        info += f"\n[bold]URL:[/bold] {repo.source_url}"
+    
+    formatter.print_panel(info, title=f"📦 Repository: {repo.name}")
 
 
 @click.group()
@@ -193,18 +211,40 @@ def pad_list(repo_id: Optional[str]):
     workpads = git_engine.list_workpads(repo_id)
     
     if not workpads:
-        click.echo("No workpads found.")
+        formatter.print_info("No workpads found.")
+        formatter.print("\n💡 Create a workpad with: evogitctl pad create \"add feature\"")
         return
     
-    click.echo(f"Workpads ({len(workpads)}):\n")
-    for i, pad in enumerate(workpads, 1):
-        click.echo(f"  {i}. {pad.id} - {pad.title}")
-        click.echo(f"     Status: {pad.status}")
-        click.echo(f"     Checkpoints: {len(pad.checkpoints)}")
-        click.echo(f"     Created: {pad.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    # Create a Rich table
+    title = f"Workpads ({len(workpads)})"
+    if repo_id:
+        title += f" for repo {repo_id}"
+    
+    formatter.print_header(title)
+    table = formatter.table(headers=["ID", "Title", "Status", "Checkpoints", "Tests", "Created"])
+    
+    for pad in workpads:
+        # Color-code status
+        status_color = "green" if pad.status == "active" else "yellow" if pad.status == "pending" else "red"
+        status_display = f"[{status_color}]{pad.status}[/{status_color}]"
+        
+        # Test status with icon
+        test_display = ""
         if pad.test_status:
-            click.echo(f"     Tests: {pad.test_status}")
-        click.echo()
+            test_icon = "✅" if pad.test_status == "passed" else "❌" if pad.test_status == "failed" else "⏳"
+            test_display = f"{test_icon} {pad.test_status}"
+        
+        table.add_row(
+            f"[cyan]{pad.id[:8]}[/cyan]",
+            f"[bold]{pad.title}[/bold]",
+            status_display,
+            str(len(pad.checkpoints)),
+            test_display,
+            pad.created_at.strftime('%Y-%m-%d %H:%M')
+        )
+    
+    formatter.console.print(table)
+    formatter.console.print()
 
 
 @pad.command('info')
@@ -320,33 +360,65 @@ def test_run(pad_id: str, target: str, parallel: bool):
         ]
     
     try:
-        click.echo(f"🧪 Running {target} tests for {workpad.title}")
-        click.echo(f"   Tests: {len(tests)}")
-        click.echo(f"   Parallel: {parallel}\n")
+        # Show test info panel
+        info = f"""[bold]Workpad:[/bold] {workpad.title}
+[bold]Tests:[/bold] {len(tests)}
+[bold]Mode:[/bold] {'Parallel' if parallel else 'Sequential'}
+[bold]Target:[/bold] {target}"""
+        formatter.print_panel(info, title="🧪 Test Execution")
         
-        results = test_orchestrator.run_tests_sync(pad_id, tests, parallel)
+        # Run tests with progress indicator
+        with formatter.create_progress() as progress:
+            task = progress.add_task(f"Running {target} tests...", total=len(tests))
+            
+            # Note: We're using sync version here for simplicity
+            # In production, we'd stream results and update progress
+            results = test_orchestrator.run_tests_sync(pad_id, tests, parallel)
+            progress.update(task, completed=len(tests))
         
-        # Display results
+        formatter.console.print()
+        
+        # Display results table
+        table = formatter.table(headers=["Test", "Status", "Duration", "Output"])
+        
         for result in results:
-            status_icon = "✅" if result.status.value == "passed" else "❌"
+            status_icon = "✅" if result.status.value == "passed" else "❌" if result.status.value == "failed" else "⏭️"
+            status_text = f"{status_icon} {result.status.value}"
             duration_s = result.duration_ms / 1000
-            click.echo(f"{status_icon} {result.name} ({duration_s:.1f}s)")
-            if result.status.value != "passed":
-                click.echo(f"   {result.stdout}")
+            
+            # Truncate output
+            output = result.stdout[:50] + "..." if len(result.stdout) > 50 else result.stdout
+            output = output.replace("\n", " ")
+            
+            table.add_row(
+                result.name,
+                status_text,
+                f"{duration_s:.2f}s",
+                output if result.status.value != "passed" else ""
+            )
         
-        # Summary
+        formatter.console.print(table)
+        
+        # Summary panel
         summary = test_orchestrator.get_summary(results)
-        click.echo(f"\nSummary:")
-        click.echo(f"  Total: {summary['total']}")
-        click.echo(f"  Passed: {summary['passed']}")
-        click.echo(f"  Failed: {summary['failed']}")
-        click.echo(f"  Status: {summary['status'].upper()}")
+        status_color = "green" if summary['status'] == 'passed' else "red"
+        summary_text = f"""[bold]Total:[/bold] {summary['total']}
+[bold]Passed:[/bold] [green]{summary['passed']}[/green]
+[bold]Failed:[/bold] [red]{summary['failed']}[/red]
+[bold]Status:[/bold] [{status_color}]{summary['status'].upper()}[/{status_color}]"""
+        
+        formatter.print_panel(summary_text, title="📊 Test Summary")
         
         # Update workpad test status
         workpad.test_status = summary['status']
         
+        if summary['status'] == 'passed':
+            formatter.print_success("All tests passed! Ready to promote.")
+        else:
+            formatter.print_error("Some tests failed. Fix issues before promoting.")
+        
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        formatter.print_error(f"Test execution failed: {e}")
         raise click.Abort()
 
 
