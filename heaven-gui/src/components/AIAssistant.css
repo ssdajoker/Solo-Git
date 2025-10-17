@@ -1,0 +1,405 @@
+
+.ai-assistant {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1E1E1E;
+  border-left: 1px solid #333;
+}
+
+.ai-assistant.collapsed {
+  width: 48px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid #333;
+  transition: background 0.2s;
+}
+
+.ai-assistant.collapsed:hover {
+  background: #252525;
+}
+
+.collapsed-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+}
+
+.collapsed-indicator .icon {
+  font-size: 24px;
+}
+
+.collapsed-indicator .label {
+  font-size: 10px;
+  color: #6A737D;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.ai-assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+}
+
+.ai-assistant-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #DDDDDD;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select {
+  background: #252525;
+  color: #DDDDDD;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.collapse-btn {
+  background: transparent;
+  border: none;
+  color: #6A737D;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+
+.collapse-btn:hover {
+  color: #DDDDDD;
+}
+
+.ai-assistant-tabs {
+  display: flex;
+  border-bottom: 1px solid #333;
+}
+
+.ai-assistant-tabs button {
+  flex: 1;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: #6A737D;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+}
+
+.ai-assistant-tabs button:hover {
+  color: #DDDDDD;
+  background: #252525;
+}
+
+.ai-assistant-tabs button.active {
+  color: #61AFEF;
+  border-bottom-color: #61AFEF;
+}
+
+.ai-assistant-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty-chat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 32px;
+}
+
+.empty-chat .hint {
+  color: #6A737D;
+  margin-bottom: 24px;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.suggestions button {
+  background: #252525;
+  border: 1px solid #333;
+  color: #DDDDDD;
+  padding: 12px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.suggestions button:hover {
+  background: #2A2A2A;
+  border-color: #61AFEF;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 4px;
+  background: #252525;
+}
+
+.message-user {
+  background: #1A3A52;
+  border-left: 3px solid #61AFEF;
+}
+
+.message-assistant {
+  background: #252525;
+  border-left: 3px solid #98C379;
+}
+
+.message-system {
+  background: #3A2A1A;
+  border-left: 3px solid #E06C75;
+}
+
+.message.loading {
+  opacity: 0.7;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #6A737D;
+}
+
+.role {
+  font-size: 16px;
+}
+
+.timestamp, .model, .cost {
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.message-content {
+  color: #DDDDDD;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.loading-dots {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.input-container {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid #333;
+  background: #1A1A1A;
+}
+
+.input-container textarea {
+  flex: 1;
+  background: #252525;
+  color: #DDDDDD;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  resize: none;
+  line-height: 1.5;
+}
+
+.input-container textarea:focus {
+  outline: none;
+  border-color: #61AFEF;
+}
+
+.send-btn {
+  background: #61AFEF;
+  border: none;
+  color: #1E1E1E;
+  padding: 0 24px;
+  border-radius: 4px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: #7FC1FF;
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.operations-list, .cost-dashboard {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.operation-item {
+  background: #252525;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-left: 3px solid #333;
+}
+
+.operation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.operation-type {
+  color: #61AFEF;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.operation-cost {
+  margin-left: auto;
+  color: #6A737D;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.operation-prompt {
+  color: #DDDDDD;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.operation-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #6A737D;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.status {
+  font-size: 14px;
+}
+
+.status-completed { color: #98C379; }
+.status-failed { color: #E06C75; }
+.status-running { color: #D19A66; }
+
+.cost-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.cost-card {
+  background: #252525;
+  padding: 16px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.cost-card h4 {
+  font-size: 11px;
+  color: #6A737D;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+}
+
+.cost-value {
+  font-size: 24px;
+  color: #61AFEF;
+  font-weight: 700;
+  margin: 0;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.cost-breakdown {
+  background: #252525;
+  padding: 16px;
+  border-radius: 4px;
+}
+
+.cost-breakdown h4 {
+  font-size: 12px;
+  color: #DDDDDD;
+  margin: 0 0 12px 0;
+}
+
+.cost-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+  font-size: 12px;
+}
+
+.cost-item:last-child {
+  border-bottom: none;
+}
+
+.model-name {
+  color: #DDDDDD;
+  flex: 1;
+}
+
+.model-count {
+  color: #6A737D;
+}
+
+.model-cost {
+  color: #61AFEF;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-weight: 600;
+}
+
+.empty-message {
+  color: #6A737D;
+  text-align: center;
+  padding: 32px;
+}

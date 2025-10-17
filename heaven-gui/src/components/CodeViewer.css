@@ -1,0 +1,72 @@
+
+.code-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #1E1E1E;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.code-viewer.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.code-viewer .empty-state {
+  text-align: center;
+  padding: 48px;
+}
+
+.code-viewer .empty-state h3 {
+  color: #DDDDDD;
+  font-size: 18px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.code-viewer .empty-state .hint {
+  color: #6A737D;
+  font-size: 14px;
+}
+
+.code-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #252525;
+  border-bottom: 1px solid #333;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+}
+
+.file-path {
+  color: #DDDDDD;
+  flex: 1;
+}
+
+.file-language {
+  color: #61AFEF;
+  margin-left: 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.editor-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.loading-indicator {
+  margin-left: 16px;
+  color: #61AFEF;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,178 @@
+
+.command-palette-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.command-palette {
+  width: 600px;
+  max-height: 500px;
+  background: #1E1E1E;
+  border: 1px solid #333;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.command-palette-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #333;
+}
+
+.search-icon {
+  font-size: 18px;
+  color: #61AFEF;
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #DDDDDD;
+  font-size: 16px;
+  outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.search-input::placeholder {
+  color: #6A737D;
+}
+
+.hint {
+  font-size: 11px;
+  color: #6A737D;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.command-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.no-results {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  color: #6A737D;
+  font-size: 14px;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s;
+  margin-bottom: 4px;
+}
+
+.command-item:hover, .command-item.selected {
+  background: #252525;
+}
+
+.command-item.selected {
+  border-left: 3px solid #61AFEF;
+}
+
+.command-content {
+  flex: 1;
+}
+
+.command-label {
+  color: #DDDDDD;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.command-description {
+  color: #6A737D;
+  font-size: 12px;
+}
+
+.command-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.command-category {
+  font-size: 10px;
+  color: #6A737D;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.command-shortcut {
+  font-size: 11px;
+  color: #61AFEF;
+  font-family: 'SF Mono', Consolas, monospace;
+  background: #1A1A1A;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #333;
+}
+
+.command-palette-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #333;
+  background: #1A1A1A;
+}
+
+.footer-hints {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: #6A737D;
+}
+
+.footer-hints kbd {
+  font-family: 'SF Mono', Consolas, monospace;
+  background: #252525;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #333;
+  font-size: 10px;
+  color: #DDDDDD;
+}
