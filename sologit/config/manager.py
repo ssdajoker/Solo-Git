@@ -111,6 +111,51 @@ class SoloGitConfig:
             self.budget = BudgetConfig()
         if self.tests is None:
             self.tests = TestConfig()
+    
+    def to_dict(self) -> dict:
+        """Convert configuration to dictionary format."""
+        return {
+            'repos_path': self.repos_path,
+            'workpad_ttl_days': self.workpad_ttl_days,
+            'promote_on_green': self.promote_on_green,
+            'rollback_on_ci_red': self.rollback_on_ci_red,
+            'abacus': {
+                'endpoint': self.abacus.endpoint,
+                'api_key': self.abacus.api_key
+            },
+            'ai': {
+                'models': {
+                    'fast': {
+                        'primary': self.models.fast_model,
+                        'max_tokens': 1024,
+                        'temperature': 0.1
+                    },
+                    'coding': {
+                        'primary': self.models.coding_model,
+                        'max_tokens': 2048,
+                        'temperature': 0.1
+                    },
+                    'planning': {
+                        'primary': self.models.planning_model,
+                        'max_tokens': 4096,
+                        'temperature': 0.2
+                    }
+                }
+            },
+            'escalation': {
+                'triggers': []
+            },
+            'budget': {
+                'daily_usd_cap': self.budget.daily_usd_cap,
+                'alert_threshold': self.budget.alert_threshold,
+                'track_by_model': self.budget.track_by_model
+            },
+            'tests': {
+                'sandbox_image': self.tests.sandbox_image,
+                'timeout_seconds': self.tests.timeout_seconds,
+                'parallel_max': self.tests.parallel_max
+            }
+        }
 
 
 class ConfigManager:
