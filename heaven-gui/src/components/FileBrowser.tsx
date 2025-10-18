@@ -41,7 +41,7 @@ export default function FileBrowser({ repoId, onFileSelect, selectedFile }: File
     }
   }
 
-  const toggleDirectory = async (node: FileNode, path: string[]) => {
+  const toggleDirectory = async (_node: FileNode, path: string[]) => {
     const newTree = [...fileTree]
     let current: FileNode[] = newTree
     

@@ -98,10 +98,17 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   if (!isOpen) return null
 
   return (
-    <div className="command-palette-overlay" onClick={onClose}>
+    <div 
+      className="command-palette-overlay" 
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="command-palette-title"
+    >
       <div className="command-palette" onClick={(e) => e.stopPropagation()}>
+        <h2 id="command-palette-title" className="sr-only">Command Palette</h2>
         <div className="command-palette-search">
-          <span className="search-icon">⌘</span>
+          <span className="search-icon" aria-hidden="true">⌘</span>
           <input
             ref={inputRef}
             type="text"
@@ -110,30 +117,44 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
             onKeyDown={handleKeyDown}
             placeholder="Type a command or search..."
             className="search-input"
+            aria-label="Search commands"
+            aria-autocomplete="list"
+            aria-controls="command-list"
+            aria-activedescendant={filteredCommands[selectedIndex]?.id}
           />
-          <span className="hint">ESC to close</span>
+          <span className="hint" aria-live="polite">ESC to close</span>
         </div>
 
-        <div className="command-list" ref={listRef}>
+        <div 
+          className="command-list" 
+          ref={listRef}
+          id="command-list"
+          role="listbox"
+          aria-label="Available commands"
+        >
           {filteredCommands.length === 0 ? (
-            <div className="no-results">
+            <div className="no-results" role="status">
               <p>No commands found</p>
             </div>
           ) : (
             filteredCommands.map((cmd, index) => (
               <div
                 key={cmd.id}
+                id={cmd.id}
                 className={`command-item ${index === selectedIndex ? 'selected' : ''}`}
                 onClick={() => executeCommand(cmd)}
                 onMouseEnter={() => setSelectedIndex(index)}
+                role="option"
+                aria-selected={index === selectedIndex}
+                aria-label={`${cmd.label}: ${cmd.description}`}
               >
                 <div className="command-content">
                   <div className="command-label">{cmd.label}</div>
                   <div className="command-description">{cmd.description}</div>
                 </div>
                 <div className="command-meta">
-                  <span className="command-category">{cmd.category}</span>
-                  {cmd.shortcut && <span className="command-shortcut">{cmd.shortcut}</span>}
+                  <span className="command-category" aria-label={`Category: ${cmd.category}`}>{cmd.category}</span>
+                  {cmd.shortcut && <span className="command-shortcut" aria-label={`Keyboard shortcut: ${cmd.shortcut}`}>{cmd.shortcut}</span>}
                 </div>
               </div>
             ))

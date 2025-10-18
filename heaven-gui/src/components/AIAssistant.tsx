@@ -124,9 +124,16 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
 
   if (collapsed) {
     return (
-      <div className="ai-assistant collapsed" onClick={onToggle}>
+      <div 
+        className="ai-assistant collapsed" 
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        aria-label="Expand AI Assistant"
+        onKeyPress={(e) => e.key === 'Enter' && onToggle?.()}
+      >
         <div className="collapsed-indicator">
-          <span className="icon">🤖</span>
+          <span className="icon" aria-hidden="true">🤖</span>
           <span className="label">AI</span>
         </div>
       </div>
@@ -134,40 +141,57 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
   }
 
   return (
-    <div className="ai-assistant">
+    <div className="ai-assistant" role="region" aria-label="AI Assistant">
       <div className="ai-assistant-header">
-        <h3>AI Assistant</h3>
+        <h3 id="ai-assistant-title">AI Assistant</h3>
         <div className="header-actions">
           <select 
             value={selectedModel} 
             onChange={(e) => setSelectedModel(e.target.value)}
             className="model-select"
+            aria-label="Select AI model"
           >
             <option value="gpt-4">GPT-4 (Planning)</option>
             <option value="gpt-3.5-turbo">GPT-3.5 (Fast)</option>
             <option value="claude-3-opus">Claude Opus</option>
             <option value="gpt-oss-120b">OSS-120B (Local)</option>
           </select>
-          <button className="collapse-btn" onClick={onToggle}>→</button>
+          <button 
+            className="collapse-btn" 
+            onClick={onToggle}
+            aria-label="Collapse AI Assistant"
+          >→</button>
         </div>
       </div>
 
-      <div className="ai-assistant-tabs">
+      <div className="ai-assistant-tabs" role="tablist" aria-label="AI Assistant sections">
         <button 
           className={activeTab === 'chat' ? 'active' : ''} 
           onClick={() => setActiveTab('chat')}
+          role="tab"
+          aria-selected={activeTab === 'chat'}
+          aria-controls="chat-panel"
+          id="chat-tab"
         >
           Chat
         </button>
         <button 
           className={activeTab === 'history' ? 'active' : ''} 
           onClick={() => setActiveTab('history')}
+          role="tab"
+          aria-selected={activeTab === 'history'}
+          aria-controls="history-panel"
+          id="history-tab"
         >
           History ({operations.length})
         </button>
         <button 
           className={activeTab === 'cost' ? 'active' : ''} 
           onClick={() => setActiveTab('cost')}
+          role="tab"
+          aria-selected={activeTab === 'cost'}
+          aria-controls="cost-panel"
+          id="cost-tab"
         >
           Cost (${totalCost.toFixed(2)})
         </button>
@@ -175,8 +199,12 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
 
       <div className="ai-assistant-content">
         {activeTab === 'chat' && (
-          <>
-            <div className="messages-container">
+          <div 
+            role="tabpanel" 
+            id="chat-panel" 
+            aria-labelledby="chat-tab"
+          >
+            <div className="messages-container" role="log" aria-live="polite" aria-label="Chat messages">
               {messages.length === 0 && (
                 <div className="empty-chat">
                   <p className="hint">Start a conversation with the AI assistant</p>
@@ -229,20 +257,29 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
                 placeholder="Ask AI to plan, code, or explain... (Enter to send, Shift+Enter for new line)"
                 disabled={loading || !repoId}
                 rows={3}
+                aria-label="AI chat input"
+                aria-describedby="chat-input-hint"
               />
+              <span id="chat-input-hint" className="sr-only">Type your message and press Enter to send, or Shift+Enter for a new line</span>
               <button 
                 onClick={handleSend} 
                 disabled={loading || !input.trim() || !repoId}
                 className="send-btn"
+                aria-label={loading ? 'Sending message' : 'Send message'}
               >
                 {loading ? '⟳' : '→'}
               </button>
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === 'history' && (
-          <div className="operations-list">
+          <div 
+            className="operations-list"
+            role="tabpanel"
+            id="history-panel"
+            aria-labelledby="history-tab"
+          >
             {operations.length === 0 ? (
               <p className="empty-message">No operations yet</p>
             ) : (
@@ -268,7 +305,12 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
         )}
 
         {activeTab === 'cost' && (
-          <div className="cost-dashboard">
+          <div 
+            className="cost-dashboard"
+            role="tabpanel"
+            id="cost-panel"
+            aria-labelledby="cost-tab"
+          >
             <div className="cost-summary">
               <div className="cost-card">
                 <h4>Total Cost</h4>

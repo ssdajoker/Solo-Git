@@ -76,11 +76,21 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
   if (!isOpen) return null
 
   return (
-    <div className="settings-overlay" onClick={onClose}>
+    <div 
+      className="settings-overlay" 
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>Settings</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <h2 id="settings-title">Settings</h2>
+          <button 
+            className="close-btn" 
+            onClick={onClose}
+            aria-label="Close settings"
+          >×</button>
         </div>
 
         <div className="settings-content">
@@ -88,21 +98,27 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
             <h3>Editor</h3>
             
             <div className="setting-item">
-              <label>Font Size</label>
+              <label htmlFor="font-size">Font Size</label>
               <input
+                id="font-size"
                 type="number"
                 value={settings.editor_font_size}
                 onChange={(e) => updateSetting('editor_font_size', parseInt(e.target.value))}
                 min="10"
                 max="24"
+                aria-label="Editor font size"
+                aria-describedby="font-size-hint"
               />
+              <span id="font-size-hint" className="sr-only">Font size for code editor, between 10 and 24 pixels</span>
             </div>
 
             <div className="setting-item">
-              <label>Font Family</label>
+              <label htmlFor="font-family">Font Family</label>
               <select
+                id="font-family"
                 value={settings.editor_font_family}
                 onChange={(e) => updateSetting('editor_font_family', e.target.value)}
+                aria-label="Editor font family"
               >
                 <option value="JetBrains Mono">JetBrains Mono</option>
                 <option value="SF Mono">SF Mono</option>

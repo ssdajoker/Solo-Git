@@ -245,20 +245,22 @@ function App() {
     <ErrorBoundary>
       <div className={`app-container view-mode-${viewMode}`}>
         {/* Header */}
-        <header className="app-header">
+        <header className="app-header" role="banner">
           <h1>Heaven</h1>
-          <div className="header-subtitle">Solo Git Interface</div>
+          <div className="header-subtitle" aria-label="Application subtitle">Solo Git Interface</div>
           <div className="header-actions">
             <button 
               className="icon-btn" 
               onClick={() => setShowShortcutsHelp(true)}
-              title="Keyboard Shortcuts (?)">
+              title="Keyboard Shortcuts (?)"
+              aria-label="Show keyboard shortcuts">
               ⌨️
             </button>
             <button 
               className="icon-btn" 
               onClick={() => setShowSettings(true)}
-              title="Settings (Cmd+,)">
+              title="Settings (Cmd+,)"
+              aria-label="Open settings">
               ⚙️
             </button>
           </div>
@@ -270,12 +272,12 @@ function App() {
           {showLeftSidebar && (
             <aside className="sidebar-left">
               <FileBrowser 
-                repoId={globalState?.active_repo} 
+                repoId={globalState?.active_repo ?? null} 
                 onFileSelect={setSelectedFile}
                 selectedFile={selectedFile}
               />
-              <CommitGraph repoId={globalState?.active_repo} />
-              <WorkpadList repoId={globalState?.active_repo} />
+              <CommitGraph repoId={globalState?.active_repo ?? null} />
+              <WorkpadList repoId={globalState?.active_repo ?? null} />
             </aside>
           )}
 
@@ -283,19 +285,19 @@ function App() {
           <main className="center-panel">
             <div className="center-top">
               <CodeViewer 
-                repoId={globalState?.active_repo}
+                repoId={globalState?.active_repo ?? null}
                 filePath={selectedFile}
               />
             </div>
             <div className="center-bottom">
-              <TestDashboard workpadId={globalState?.active_workpad} />
+              <TestDashboard workpadId={globalState?.active_workpad ?? null} />
             </div>
           </main>
 
           {/* Right Sidebar - AI Assistant */}
           <AIAssistant 
-            repoId={globalState?.active_repo}
-            workpadId={globalState?.active_workpad}
+            repoId={globalState?.active_repo ?? null}
+            workpadId={globalState?.active_workpad ?? null}
             collapsed={!showRightSidebar}
             onToggle={() => setShowRightSidebar(prev => !prev)}
           />

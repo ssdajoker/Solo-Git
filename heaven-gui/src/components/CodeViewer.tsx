@@ -11,7 +11,7 @@ interface CodeViewerProps {
   diffContent?: string
 }
 
-export default function CodeViewer({ repoId, filePath, showDiff = false, diffContent }: CodeViewerProps) {
+export default function CodeViewer({ repoId, filePath, showDiff: _showDiff = false, diffContent: _diffContent }: CodeViewerProps) {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
   const [language, setLanguage] = useState('plaintext')
