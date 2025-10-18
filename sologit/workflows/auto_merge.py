@@ -4,7 +4,7 @@ Auto-merge workflow for Solo Git.
 Coordinates testing, analysis, and promotion in a single workflow.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from sologit.engines.git_engine import GitEngine
@@ -25,11 +25,7 @@ class AutoMergeResult:
     test_analysis: Optional[TestAnalysis] = None
     promotion_decision: Optional[PromotionDecision] = None
     message: str = ""
-    details: List[str] = None
-    
-    def __post_init__(self):
-        if self.details is None:
-            self.details = []
+    details: List[str] = field(default_factory=list)
 
 
 class AutoMergeWorkflow:
