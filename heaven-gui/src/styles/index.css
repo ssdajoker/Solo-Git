@@ -21,7 +21,7 @@
   }
   
   ::-webkit-scrollbar-thumb {
-    @apply bg-heaven-text-muted rounded;
+    @apply bg-heaven-text-tertiary rounded;
   }
   
   ::-webkit-scrollbar-thumb:hover {
