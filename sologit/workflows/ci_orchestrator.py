@@ -117,6 +117,9 @@ class CIOrchestrator:
         try:
             # Note: In production, we'd checkout the specific commit
             # For now, we assume trunk is at the commit we want to test
+            history = self.git_engine.get_history(repo_id, limit=1)
+            if not history:
+                raise Exception("No commits found in repository")
             
             if on_progress:
                 on_progress(f"Running {len(smoke_tests)} smoke tests...")
