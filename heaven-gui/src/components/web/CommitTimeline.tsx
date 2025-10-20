@@ -1,10 +1,12 @@
 /**
- * Commit Timeline Component with Git Graph Visualization
+ * Minimalist Commit Timeline - Faded & Contextual
+ * Following the "No UI" philosophy: subtle timeline, hover-to-reveal details
  */
 
 import { useState } from 'react'
 import { CommitTimelineProps, Commit, CommitStatus } from '../shared/types'
 import { cn } from '../shared/utils'
+import { useContextualVisibility } from '../../hooks/useContextualVisibility'
 
 export function CommitTimeline({
   repoId,
@@ -17,11 +19,21 @@ export function CommitTimeline({
   className,
 }: CommitTimelineProps) {
   const [hoveredCommit, setHoveredCommit] = useState<string | null>(null)
+  const [hoveredHeader, setHoveredHeader] = useState(false)
   const [compareMode, setCompareMode] = useState(false)
   const [compareCommits, setCompareCommits] = useState<string[]>([])
   
+  // Auto-hide after 5 seconds of inactivity
+  const { isVisible, triggerActivity } = useContextualVisibility(5000)
+  
   // Mock commits - in production, this would come from Tauri or props
-  const mockCommits: Commit[] = [
+  const mockCommits: (Commit & { 
+    type?: 'trunk' | 'workpad' | 'tag'
+    aiAssisted?: boolean
+    testStatus?: 'pending' | 'running' | 'passed' | 'failed'
+    ciStatus?: 'pending' | 'running' | 'success' | 'failed'
+    buildNumber?: number
+  })[] = [
     {
       id: 'c1',
       sha: 'a9b8c7d6',
@@ -31,6 +43,11 @@ export function CommitTimeline({
       status: 'success',
       branch: 'main',
       tags: ['AI', 'feature'],
+      type: 'trunk',
+      aiAssisted: true,
+      testStatus: 'passed',
+      ciStatus: 'success',
+      buildNumber: 384,
     },
     {
       id: 'c2',
@@ -40,6 +57,10 @@ export function CommitTimeline({
       timestamp: '2025-10-20T11:00:00Z',
       status: 'success',
       branch: 'main',
+      type: 'trunk',
+      testStatus: 'passed',
+      ciStatus: 'success',
+      buildNumber: 383,
     },
     {
       id: 'c3',
@@ -49,6 +70,11 @@ export function CommitTimeline({
       timestamp: '2025-10-20T10:00:00Z',
       status: 'failed',
       branch: 'feature/mobile-fix',
+      type: 'workpad',
+      aiAssisted: true,
+      testStatus: 'failed',
+      ciStatus: 'failed',
+      buildNumber: 382,
     },
     {
       id: 'c4',
@@ -58,10 +84,18 @@ export function CommitTimeline({
       timestamp: '2025-10-20T09:00:00Z',
       status: 'success',
       branch: 'main',
+      type: 'trunk',
+      testStatus: 'passed',
+      ciStatus: 'success',
+      buildNumber: 381,
     },
   ]
   
   const commits = externalCommits || mockCommits
+  
+  const handleInteraction = () => {
+    triggerActivity()
+  }
   
   const getStatusColor = (status: CommitStatus) => {
     switch (status) {
@@ -138,28 +172,40 @@ export function CommitTimeline({
   }
   
   return (
-    <div className={cn('w-sidebar bg-heaven-bg-secondary border-l border-white/5 flex flex-col', className)}>
-      <div className="h-header flex items-center justify-between px-3 border-b border-white/5">
-        <span className="text-sm font-medium text-heaven-text-primary">COMMITS</span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setCompareMode(!compareMode)
-              setCompareCommits([])
-            }}
-            className={cn(
-              'px-2 py-1 text-xs rounded transition-colors',
-              compareMode 
-                ? 'bg-heaven-accent-cyan text-heaven-bg-primary' 
-                : 'text-heaven-text-secondary hover:text-heaven-text-primary'
-            )}
-            aria-label="Toggle compare mode"
-          >
-            Compare
-          </button>
+    <div className={cn('w-sidebar bg-heaven-bg-secondary border-l border-white/5 flex flex-col', className)}
+      onMouseEnter={handleInteraction}
+      onMouseMove={handleInteraction}
+      onClick={handleInteraction}
+    >
+      {/* Minimalist Header */}
+      <div 
+        className="h-header flex items-center justify-between px-3 border-b border-white/5"
+        onMouseEnter={() => setHoveredHeader(true)}
+        onMouseLeave={() => setHoveredHeader(false)}
+      >
+        <span className="text-xs font-medium text-heaven-text-secondary">COMMITS</span>
+        <div className="flex items-center gap-1">
+          {/* Contextual Compare Button (show on hover or when active) */}
+          {(hoveredHeader || compareMode) && (
+            <button
+              onClick={() => {
+                setCompareMode(!compareMode)
+                setCompareCommits([])
+              }}
+              className={cn(
+                'px-2 py-1 text-xs rounded transition-all duration-150',
+                compareMode 
+                  ? 'bg-heaven-accent-cyan text-heaven-bg-primary' 
+                  : 'text-heaven-text-secondary hover:text-heaven-text-primary'
+              )}
+              aria-label="Toggle compare mode"
+            >
+              Compare
+            </button>
+          )}
           <button
             onClick={onToggleCollapse}
-            className="p-1 text-heaven-text-secondary hover:text-heaven-text-primary transition-colors"
+            className="p-1 text-heaven-text-secondary hover:text-heaven-text-primary transition-colors duration-150"
             aria-label="Collapse commit timeline"
           >
             ▶
@@ -171,35 +217,49 @@ export function CommitTimeline({
         {repoId ? (
           commits.length > 0 ? (
             <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-7 top-0 bottom-0 w-0.5 bg-white/10" />
+              {/* Faded Timeline line */}
+              <div className="absolute left-7 top-0 bottom-0 w-0.5 bg-white/5" />
               
               {commits.map((commit) => {
                 const isSelected = selectedCommit === commit.id
                 const isHovered = hoveredCommit === commit.id
                 const isInCompare = compareCommits.includes(commit.id)
                 const statusColors = getStatusColor(commit.status)
+                const isWorkpad = commit.type === 'workpad'
                 
                 return (
                   <div
                     key={commit.id}
                     className={cn(
-                      'relative pl-12 pr-3 pb-6 transition-all duration-200',
+                      'relative pl-12 pr-3 pb-6 transition-all duration-150',
                       (isSelected || isHovered) && 'bg-heaven-bg-hover/30'
                     )}
-                    onMouseEnter={() => setHoveredCommit(commit.id)}
+                    onMouseEnter={() => {
+                      setHoveredCommit(commit.id)
+                      handleInteraction()
+                    }}
                     onMouseLeave={() => setHoveredCommit(null)}
                   >
+                    {/* Workpad Line (dotted vs solid) */}
+                    {isWorkpad && (
+                      <div 
+                        className="absolute left-7 top-0 h-full w-0.5 bg-heaven-accent-green/30" 
+                        style={{ 
+                          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(76, 209, 117, 0.3) 4px, rgba(76, 209, 117, 0.3) 8px)'
+                        }}
+                      />
+                    )}
+                    
                     {/* Graph node */}
                     <div className="absolute left-3 top-0">
                       <button
                         onClick={() => handleCommitClick(commit.id)}
                         className={cn(
                           'w-8 h-8 rounded-full border-2 flex items-center justify-center',
-                          'transition-all duration-200 hover:scale-110',
+                          'transition-all duration-150 hover:scale-110',
                           isSelected && 'ring-2 ring-offset-2 ring-offset-heaven-bg-secondary scale-110',
                           isInCompare && 'ring-2 ring-offset-2 ring-offset-heaven-bg-secondary ring-heaven-accent-cyan',
-                          statusColors
+                          isWorkpad ? 'border-heaven-accent-green/50 border-dashed' : statusColors
                         )}
                         aria-label={`Select commit ${commit.sha}`}
                         aria-pressed={isSelected}
@@ -209,8 +269,15 @@ export function CommitTimeline({
                         </span>
                       </button>
                       
+                      {/* AI-Assisted Indicator */}
+                      {commit.aiAssisted && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-heaven-accent-cyan border border-heaven-bg-secondary flex items-center justify-center">
+                          <span className="text-xs">✨</span>
+                        </div>
+                      )}
+                      
                       {/* Branch indicator */}
-                      {commit.branch !== 'main' && (
+                      {commit.branch !== 'main' && !commit.aiAssisted && (
                         <div className="absolute -right-1 -bottom-1 w-3 h-3 rounded-full bg-heaven-accent-purple border border-heaven-bg-secondary" />
                       )}
                     </div>
@@ -224,7 +291,11 @@ export function CommitTimeline({
                         <span className="text-xs font-mono text-heaven-accent-blue">
                           {commit.sha}
                         </span>
-                        <span className="text-xs text-heaven-text-tertiary">
+                        {/* Timestamp - hover-to-reveal */}
+                        <span className={cn(
+                          "text-xs text-heaven-text-tertiary transition-opacity duration-150",
+                          isHovered ? "opacity-100" : "opacity-0"
+                        )}>
                           {formatRelativeTime(commit.timestamp)}
                         </span>
                       </div>
@@ -233,7 +304,43 @@ export function CommitTimeline({
                         {commit.message}
                       </p>
                       
-                      <div className="flex items-center gap-2">
+                      {/* Status Indicators */}
+                      <div className="flex items-center gap-2 mb-1">
+                        {/* Test Status */}
+                        {commit.testStatus && (
+                          <span className={cn(
+                            'text-xs',
+                            commit.testStatus === 'passed' && 'text-heaven-accent-green',
+                            commit.testStatus === 'failed' && 'text-heaven-accent-red',
+                            commit.testStatus === 'running' && 'text-heaven-accent-orange',
+                            commit.testStatus === 'pending' && 'text-heaven-text-tertiary'
+                          )}>
+                            {commit.testStatus === 'passed' && '✓ Tests'}
+                            {commit.testStatus === 'failed' && '✗ Tests'}
+                            {commit.testStatus === 'running' && '◉ Tests'}
+                            {commit.testStatus === 'pending' && '○ Tests'}
+                          </span>
+                        )}
+                        
+                        {/* CI/Build Status */}
+                        {commit.ciStatus && commit.buildNumber && (
+                          <span className={cn(
+                            'text-xs',
+                            commit.ciStatus === 'success' && 'text-heaven-accent-green',
+                            commit.ciStatus === 'failed' && 'text-heaven-accent-red',
+                            commit.ciStatus === 'running' && 'text-heaven-accent-orange',
+                            commit.ciStatus === 'pending' && 'text-heaven-text-tertiary'
+                          )}>
+                            🏗️ #{commit.buildNumber}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Author and Tags - hover-to-reveal */}
+                      <div className={cn(
+                        "flex items-center gap-2 transition-opacity duration-150",
+                        isHovered ? "opacity-100" : "opacity-0"
+                      )}>
                         <span className="text-xs text-heaven-text-secondary">
                           {commit.author.name}
                         </span>
@@ -252,8 +359,12 @@ export function CommitTimeline({
                         )}
                       </div>
                       
+                      {/* Branch - hover-to-reveal */}
                       {commit.branch && commit.branch !== 'main' && (
-                        <div className="mt-1 flex items-center gap-1 text-xs text-heaven-accent-purple">
+                        <div className={cn(
+                          "mt-1 flex items-center gap-1 text-xs text-heaven-accent-purple transition-opacity duration-150",
+                          isHovered ? "opacity-100" : "opacity-0"
+                        )}>
                           <span>⎇</span>
                           <span>{commit.branch}</span>
                         </div>

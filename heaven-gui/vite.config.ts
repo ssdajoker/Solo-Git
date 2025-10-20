@@ -10,6 +10,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Ignore Tauri's target directory to prevent file watcher issues
+      ignored: ['**/src-tauri/target/**']
+    }
   },
   
   // Tauri uses a dynamic base path

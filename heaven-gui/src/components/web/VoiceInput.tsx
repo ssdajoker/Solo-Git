@@ -137,15 +137,15 @@ export function VoiceInput({
           </div>
         )}
         
-        {/* Voice Button */}
+        {/* Voice Button - Faded when idle */}
         <button
           onClick={handleVoiceClick}
           disabled={disabled}
           className={cn(
-            'w-8 h-8 rounded-full flex items-center justify-center transition-all relative',
+            'w-8 h-8 rounded-full flex items-center justify-center transition-all relative duration-150',
             'hover:bg-heaven-bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-heaven-blue-primary',
-            isRecording && 'bg-heaven-accent-cyan text-heaven-bg-primary scale-110',
-            !isRecording && 'text-heaven-accent-cyan'
+            isRecording && 'bg-heaven-accent-cyan text-heaven-bg-primary scale-110 opacity-100',
+            !isRecording && 'text-heaven-accent-cyan opacity-50 hover:opacity-100'
           )}
           aria-label={isRecording ? 'Stop recording (or release Ctrl+Space)' : 'Start voice input (or hold Ctrl+Space)'}
           title={isRecording ? 'Stop recording' : 'Click or Ctrl+Space'}

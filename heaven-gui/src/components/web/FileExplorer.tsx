@@ -1,6 +1,7 @@
 
 /**
- * Enhanced File Explorer Component with Search, Keyboard Navigation, and Context Menu
+ * Minimalist File Explorer Component - Contextual Search & Hover Details
+ * Following the "No UI" philosophy: search on-demand, details on hover
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react'
@@ -18,6 +19,7 @@ export function FileExplorer({
 }: FileExplorerProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['/']))
   const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null)
   const [focusedPath, setFocusedPath] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -99,10 +101,38 @@ export function FileExplorer({
     }
   }, [contextMenu])
   
+  // Keyboard shortcuts (Cmd+F for search, Esc to close)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+F to open search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f' && treeRef.current?.contains(document.activeElement)) {
+        e.preventDefault()
+        setShowSearch(true)
+        setTimeout(() => searchInputRef.current?.focus(), 0)
+      }
+      
+      // Esc to close search
+      if (e.key === 'Escape' && showSearch) {
+        setShowSearch(false)
+        setSearchQuery('')
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showSearch])
+  
+  // Auto-focus search input when shown
+  useEffect(() => {
+    if (showSearch && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [showSearch])
+  
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!focusedPath) return
+      if (!focusedPath || showSearch) return
       
       const allPaths = flattenedFiles.map(f => f.path)
       const currentIndex = allPaths.indexOf(focusedPath)
@@ -132,7 +162,7 @@ export function FileExplorer({
       treeRef.current.addEventListener('keydown', handleKeyDown)
       return () => treeRef.current?.removeEventListener('keydown', handleKeyDown)
     }
-  }, [focusedPath, flattenedFiles])
+  }, [focusedPath, flattenedFiles, showSearch])
   
   const toggleFolder = (path: string) => {
     setExpandedFolders(prev => {
@@ -158,8 +188,16 @@ export function FileExplorer({
     const isFocused = node.path === focusedPath
     const icon = getFileIcon(node.name, isDirectory, isExpanded)
     
+    // Mock git status - in production, this would come from Tauri
+    const getGitStatus = (path: string) => {
+      if (path.includes('auth.ts')) return 'M' // Modified
+      if (path.includes('Input.tsx')) return 'A' // Added
+      return null
+    }
+    const gitStatus = getGitStatus(node.path)
+    
     return (
-      <div key={node.id}>
+      <div key={node.id} className="group">
         <button
           onClick={() => {
             if (isDirectory) {
@@ -192,8 +230,22 @@ export function FileExplorer({
             {icon.icon}
           </span>
           <span className="flex-1 truncate">{node.name}</span>
+          
+          {/* Git Status Badge */}
+          {gitStatus && (
+            <span className={cn(
+              "text-xs px-1 rounded",
+              gitStatus === 'M' && "text-heaven-accent-orange",
+              gitStatus === 'A' && "text-heaven-accent-green",
+              gitStatus === 'D' && "text-heaven-accent-red"
+            )}>
+              {gitStatus}
+            </span>
+          )}
+          
+          {/* Language Badge (hover-to-reveal) */}
           {node.type === 'file' && node.languageId && (
-            <span className="text-xs text-heaven-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-xs text-heaven-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity duration-150">
               {node.languageId === 'typescript' && 'TS'}
               {node.languageId === 'tsx' && 'TSX'}
               {node.languageId === 'javascript' && 'JS'}
@@ -229,32 +281,45 @@ export function FileExplorer({
   
   return (
     <div className={cn('w-sidebar bg-heaven-bg-secondary border-r border-white/5 flex flex-col', className)}>
+      {/* Minimalist Header */}
       <div className="h-header flex items-center justify-between px-3 border-b border-white/5">
-        <span className="text-sm font-medium text-heaven-text-primary">FILES</span>
-        <button
-          onClick={onToggleCollapse}
-          className="p-1 text-heaven-text-secondary hover:text-heaven-text-primary transition-colors"
-          aria-label="Collapse file explorer"
-        >
-          ◀
-        </button>
+        <span className="text-xs font-medium text-heaven-text-secondary">FILES</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowSearch(!showSearch)}
+            className="p-1 text-heaven-text-secondary hover:text-heaven-text-primary transition-colors duration-150"
+            aria-label="Toggle search (Cmd+F)"
+            title="Search (Cmd+F)"
+          >
+            🔍
+          </button>
+          <button
+            onClick={onToggleCollapse}
+            className="p-1 text-heaven-text-secondary hover:text-heaven-text-primary transition-colors duration-150"
+            aria-label="Collapse file explorer"
+          >
+            ◀
+          </button>
+        </div>
       </div>
       
-      {/* Search Bar */}
-      <div className="p-2 border-b border-white/5">
-        <input
-          ref={searchInputRef}
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search files..."
-          className="w-full px-3 py-1.5 text-sm bg-heaven-bg-tertiary border border-white/5 rounded
-                   text-heaven-text-primary placeholder:text-heaven-text-tertiary
-                   focus:outline-none focus:border-heaven-blue-primary focus:ring-1 focus:ring-heaven-blue-primary
-                   transition-colors"
-          aria-label="Search files"
-        />
-      </div>
+      {/* Contextual Search Overlay */}
+      {showSearch && (
+        <div className="p-2 border-b border-white/5 bg-heaven-bg-tertiary/50 animate-in slide-in-from-top duration-150">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files... (Esc to close)"
+            className="w-full px-3 py-1.5 text-sm bg-heaven-bg-tertiary border border-white/5 rounded
+                     text-heaven-text-primary placeholder:text-heaven-text-tertiary
+                     focus:outline-none focus:border-heaven-blue-primary focus:ring-1 focus:ring-heaven-blue-primary
+                     transition-colors duration-150"
+            aria-label="Search files"
+          />
+        </div>
+      )}
       
       <div 
         ref={treeRef}
@@ -307,24 +372,24 @@ export function FileExplorer({
         )}
       </div>
       
-      {/* Context Menu */}
+      {/* Simplified Context Menu */}
       {contextMenu && (
         <div
-          className="fixed z-50 bg-heaven-bg-tertiary border border-white/10 rounded-md shadow-xl py-1 min-w-[160px]"
+          className="fixed z-50 bg-heaven-bg-tertiary/95 backdrop-blur-sm border border-white/10 rounded-md shadow-xl py-1 min-w-[140px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors">
+          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors duration-150">
             Open
           </button>
-          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors">
+          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors duration-150">
             Rename
           </button>
-          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors">
+          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors duration-150">
             Delete
           </button>
           <div className="h-px bg-white/5 my-1" />
-          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors">
+          <button className="w-full px-3 py-1.5 text-sm text-left text-heaven-text-primary hover:bg-heaven-bg-hover transition-colors duration-150">
             Copy Path
           </button>
         </div>
