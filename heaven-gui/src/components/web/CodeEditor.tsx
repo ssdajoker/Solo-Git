@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Editor, { Monaco, OnMount, OnChange } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { heavenTheme, editorOptions } from '../../config/monaco-theme';
+import { EditorHeader } from './EditorHeader';
+import { EditorLoadingState } from './EditorLoadingState';
+import { EditorContextMenu, EditorContextMenuItem } from './EditorContextMenu';
+import { cn } from '../shared/utils';
+import type { GitFileStatus } from '../shared/types';
 
 // Language mappings
 const languageMap: Record<string, string> = {
@@ -59,6 +64,15 @@ export interface CodeEditorProps {
   
   /** Auto-save delay in milliseconds (0 to disable) */
   autoSaveDelay?: number;
+  
+  /** Git status of the file */
+  gitStatus?: GitFileStatus;
+  
+  /** Whether to show the header */
+  showHeader?: boolean;
+  
+  /** Callback when cursor position changes */
+  onCursorPositionChange?: (line: number, column: number) => void;
 }
 
 export interface CodeEditorHandle {
@@ -83,12 +97,14 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       language: propLanguage,
       onChange,
       onSave,
+      onCursorPositionChange,
       readOnly = false,
       loading = false,
       height = '100%',
       className = '',
-      showAutoSave = true,
       autoSaveDelay = 2000,
+      gitStatus,
+      showHeader = true,
     },
     ref
   ) => {
@@ -98,6 +114,9 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [editorValue, setEditorValue] = useState(content);
+    const [showMinimap, setShowMinimap] = useState(true);
+    const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
+    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
     // Determine language from file path or prop
     const language = React.useMemo(() => {
@@ -117,7 +136,12 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       monaco.editor.defineTheme('heaven', heavenTheme);
       monaco.editor.setTheme('heaven');
 
-      // Add keyboard shortcut for save
+      // Track cursor position
+      editor.onDidChangeCursorPosition((e) => {
+        onCursorPositionChange?.(e.position.lineNumber, e.position.column);
+      });
+
+      // Add keyboard shortcut for save (Cmd/Ctrl+S)
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         const value = editor.getValue();
         if (onSave && !readOnly) {
@@ -126,6 +150,25 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
           setLastSaved(new Date());
           setTimeout(() => setIsSaving(false), 500);
         }
+      });
+
+      // Add keyboard shortcut for format (Shift+Alt+F)
+      editor.addCommand(
+        monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+        () => {
+          editor.getAction('editor.action.formatDocument')?.run();
+        }
+      );
+
+      // Add keyboard shortcut for toggle comment (Cmd/Ctrl+/)
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash, () => {
+        editor.getAction('editor.action.commentLine')?.run();
+      });
+
+      // Handle context menu
+      editor.onContextMenu((e) => {
+        e.event.preventDefault();
+        setContextMenuPosition({ x: e.event.posx, y: e.event.posy });
       });
 
       // Configure TypeScript/JavaScript defaults
@@ -159,7 +202,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         allowJs: true,
         jsx: monaco.languages.typescript.JsxEmit.React,
       });
-    }, [onSave, readOnly]);
+    }, [onSave, onCursorPositionChange, readOnly]);
 
     // Handle editor change
     const handleEditorChange: OnChange = useCallback(
@@ -220,81 +263,167 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       };
     }, []);
 
-    // Format last saved time
-    const formatLastSaved = (date: Date) => {
-      const now = new Date();
-      const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-      if (diff < 60) return 'just now';
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-      return date.toLocaleTimeString();
+    // Get editor status
+    const getEditorStatus = (): 'saved' | 'unsaved' | 'saving' | 'read-only' | undefined => {
+      if (readOnly) return 'read-only';
+      if (isSaving) return 'saving';
+      if (lastSaved) return 'saved';
+      if (editorValue !== content) return 'unsaved';
+      return undefined;
     };
+    
+    // Format document handler
+    const handleFormat = useCallback(() => {
+      editorRef.current?.getAction('editor.action.formatDocument')?.run();
+    }, []);
+    
+    // Toggle minimap handler
+    const handleToggleMinimap = useCallback(() => {
+      setShowMinimap(prev => {
+        const newValue = !prev;
+        editorRef.current?.updateOptions({
+          minimap: { enabled: newValue }
+        });
+        return newValue;
+      });
+    }, []);
+    
+    // Toggle word wrap handler
+    const handleToggleWordWrap = useCallback(() => {
+      setWordWrapEnabled(prev => {
+        const newValue = !prev;
+        editorRef.current?.updateOptions({
+          wordWrap: newValue ? 'on' : 'off'
+        });
+        return newValue;
+      });
+    }, []);
+    
+    // Context menu items
+    const contextMenuItems: EditorContextMenuItem[] = [
+      {
+        id: 'cut',
+        label: 'Cut',
+        shortcut: '⌘X',
+        disabled: readOnly,
+        action: () => editorRef.current?.getAction('editor.action.clipboardCutAction')?.run(),
+      },
+      {
+        id: 'copy',
+        label: 'Copy',
+        shortcut: '⌘C',
+        action: () => editorRef.current?.getAction('editor.action.clipboardCopyAction')?.run(),
+      },
+      {
+        id: 'paste',
+        label: 'Paste',
+        shortcut: '⌘V',
+        disabled: readOnly,
+        action: () => editorRef.current?.getAction('editor.action.clipboardPasteAction')?.run(),
+      },
+      {
+        id: 'separator-1',
+        label: '',
+        separator: true,
+      },
+      {
+        id: 'format',
+        label: 'Format Document',
+        shortcut: '⇧⌥F',
+        disabled: readOnly,
+        action: handleFormat,
+      },
+      {
+        id: 'separator-2',
+        label: '',
+        separator: true,
+      },
+      {
+        id: 'find',
+        label: 'Find',
+        shortcut: '⌘F',
+        action: () => editorRef.current?.getAction('actions.find')?.run(),
+      },
+      {
+        id: 'replace',
+        label: 'Replace',
+        shortcut: '⌘H',
+        disabled: readOnly,
+        action: () => editorRef.current?.getAction('editor.action.startFindReplaceAction')?.run(),
+      },
+    ];
+
+    // Determine language display name
+    const languageDisplayName = React.useMemo(() => {
+      const lang = language.toLowerCase();
+      const names: Record<string, string> = {
+        'typescript': 'TypeScript',
+        'javascript': 'JavaScript',
+        'json': 'JSON',
+        'html': 'HTML',
+        'css': 'CSS',
+        'scss': 'SCSS',
+        'markdown': 'Markdown',
+        'python': 'Python',
+        'rust': 'Rust',
+        'go': 'Go',
+        'yaml': 'YAML',
+        'xml': 'XML',
+        'sql': 'SQL',
+        'shell': 'Shell',
+        'plaintext': 'Plain Text',
+      };
+      return names[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
+    }, [language]);
 
     return (
-      <div className={`relative h-full ${className}`}>
-        {/* Auto-save indicator */}
-        {showAutoSave && !readOnly && (
-          <div className="absolute top-2 right-4 z-10 flex items-center gap-2 text-xs">
-            {isSaving ? (
-              <div className="flex items-center gap-2 text-accent-blue">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-accent-blue" />
-                <span>Saving...</span>
-              </div>
-            ) : lastSaved ? (
-              <div className="flex items-center gap-2 text-gray-400">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <span>Saved {formatLastSaved(lastSaved)}</span>
-              </div>
-            ) : null}
-          </div>
-        )}
-
-        {/* Loading skeleton */}
-        {loading ? (
-          <div className="flex h-full items-center justify-center bg-deep-space">
-            <div className="flex flex-col items-center gap-4">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent-blue border-t-transparent" />
-              <p className="text-sm text-gray-400">Loading editor...</p>
-            </div>
-          </div>
-        ) : (
-          /* Monaco Editor */
-          <Editor
-            height={height}
-            language={language}
-            value={editorValue}
-            theme="heaven"
-            options={{
-              ...editorOptions,
-              readOnly,
-            }}
-            onMount={handleEditorMount}
-            onChange={handleEditorChange}
-            loading={
-              <div className="flex h-full items-center justify-center bg-deep-space">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent-blue border-t-transparent" />
-                  <p className="text-sm text-gray-400">Initializing editor...</p>
-                </div>
-              </div>
-            }
+      <div className={cn('flex flex-col h-full border border-white/5 rounded-md shadow-lg overflow-hidden', className)}>
+        {/* Header */}
+        {showHeader && (
+          <EditorHeader
+            filePath={filePath || null}
+            status={getEditorStatus()}
+            language={languageDisplayName}
+            gitStatus={gitStatus}
+            showMinimap={showMinimap}
+            wordWrapEnabled={wordWrapEnabled}
+            onToggleMinimap={handleToggleMinimap}
+            onFormat={handleFormat}
+            onToggleWordWrap={handleToggleWordWrap}
           />
         )}
-
-        {/* File path indicator */}
-        {filePath && (
-          <div className="absolute bottom-2 left-4 z-10 text-xs text-gray-500">
-            {filePath}
-          </div>
-        )}
-
-        {/* Read-only indicator */}
-        {readOnly && (
-          <div className="absolute bottom-2 right-4 z-10 text-xs text-amber-500">
-            Read-only
-          </div>
-        )}
+        
+        {/* Editor Container */}
+        <div className="flex-1 relative bg-heaven-bg-primary">
+          {/* Loading state */}
+          {loading ? (
+            <EditorLoadingState message="Loading editor..." />
+          ) : (
+            /* Monaco Editor */
+            <Editor
+              height={height}
+              language={language}
+              value={editorValue}
+              theme="heaven"
+              options={{
+                ...editorOptions,
+                readOnly,
+                minimap: { ...editorOptions.minimap, enabled: showMinimap },
+                wordWrap: wordWrapEnabled ? 'on' : 'off',
+              }}
+              onMount={handleEditorMount}
+              onChange={handleEditorChange}
+              loading={<EditorLoadingState message="Initializing editor..." />}
+            />
+          )}
+        </div>
+        
+        {/* Context Menu */}
+        <EditorContextMenu
+          items={contextMenuItems}
+          position={contextMenuPosition}
+          onClose={() => setContextMenuPosition(null)}
+        />
       </div>
     );
   }

@@ -6,6 +6,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { FileExplorer } from './FileExplorer'
 import { CodeEditor } from './CodeEditor'
+import { EditorTabs, EditorTab } from './EditorTabs'
+import { EditorEmptyState } from './EditorEmptyState'
 import { CommitTimeline } from './CommitTimeline'
 import { StatusBar } from './StatusBar'
 import { VoiceInput } from './VoiceInput'
@@ -39,12 +41,17 @@ export function MainLayout({
   const [rightPanelWidth, setRightPanelWidth] = useState(320)
   
   // File and editor state
-  const [selectedFile, setSelectedFile] = useState<string | null>(null)
-  const [fileContent, setFileContent] = useState('')
-  const [language, setLanguage] = useState<string>()
+  const [openTabs, setOpenTabs] = useState<EditorTab[]>([])
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const [fileContents, setFileContents] = useState<Record<string, string>>({})
+  const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
   
-  // Mock cursor position - in production, this would come from Monaco editor
-  const cursorPosition = { line: 1, column: 1 }
+  // Cursor position - updated by editor
+  const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 })
+  
+  // Get active tab
+  const activeTab = openTabs.find(tab => tab.id === activeTabId)
+  const activeContent = activeTabId ? fileContents[activeTabId] : ''
   
   // Voice input state
   const [voiceQuery, setVoiceQuery] = useState('')
@@ -58,21 +65,139 @@ export function MainLayout({
   
   const layoutRef = useRef<HTMLDivElement>(null)
   
+  // Helper to determine language from file path
+  const getLanguageFromPath = (path: string): string | undefined => {
+    const ext = path.substring(path.lastIndexOf('.')).toLowerCase()
+    const languageMap: Record<string, string> = {
+      '.ts': 'TypeScript',
+      '.tsx': 'TypeScript React',
+      '.js': 'JavaScript',
+      '.jsx': 'JavaScript React',
+      '.json': 'JSON',
+      '.html': 'HTML',
+      '.css': 'CSS',
+      '.scss': 'SCSS',
+      '.md': 'Markdown',
+      '.py': 'Python',
+      '.rs': 'Rust',
+      '.go': 'Go',
+      '.yml': 'YAML',
+      '.yaml': 'YAML',
+      '.xml': 'XML',
+      '.sql': 'SQL',
+      '.sh': 'Shell',
+      '.bash': 'Shell',
+      '.txt': 'Plain Text',
+    }
+    return languageMap[ext]
+  }
+  
   // Handle file selection
   const handleFileSelect = (path: string) => {
-    setSelectedFile(path)
+    // Check if file is already open
+    const existingTab = openTabs.find(tab => tab.path === path)
     
-    // Mock file content - in production, load from Tauri
-    const mockContent = `// ${path}\n\nfunction example() {\n  console.log('Hello from ${path}');\n}\n\nexport default example;`
-    setFileContent(mockContent)
+    if (existingTab) {
+      // Just switch to existing tab
+      setActiveTabId(existingTab.id)
+    } else {
+      // Create new tab
+      const fileName = path.split('/').pop() || path
+      const tabId = `tab-${Date.now()}-${Math.random()}`
+      
+      const newTab: EditorTab = {
+        id: tabId,
+        path,
+        name: fileName,
+        isDirty: false,
+        gitStatus: undefined, // In production, get from git status
+      }
+      
+      setOpenTabs(prev => [...prev, newTab])
+      setActiveTabId(tabId)
+      
+      // Mock file content - in production, load from Tauri
+      const mockContent = `// ${path}\n\nfunction example() {\n  console.log('Hello from ${path}');\n}\n\nexport default example;`
+      setFileContents(prev => ({ ...prev, [tabId]: mockContent }))
+    }
+  }
+  
+  // Handle tab close
+  const handleTabClose = (tabId: string) => {
+    const tabIndex = openTabs.findIndex(t => t.id === tabId)
+    if (tabIndex === -1) return
     
-    // Determine language from extension
-    if (path.endsWith('.ts')) setLanguage('TypeScript')
-    else if (path.endsWith('.tsx')) setLanguage('TypeScript React')
-    else if (path.endsWith('.js')) setLanguage('JavaScript')
-    else if (path.endsWith('.json')) setLanguage('JSON')
-    else if (path.endsWith('.md')) setLanguage('Markdown')
-    else setLanguage(undefined)
+    // Remove tab
+    setOpenTabs(prev => prev.filter(t => t.id !== tabId))
+    
+    // Clean up content
+    setFileContents(prev => {
+      const newContents = { ...prev }
+      delete newContents[tabId]
+      return newContents
+    })
+    
+    setDirtyFiles(prev => {
+      const newDirty = new Set(prev)
+      newDirty.delete(tabId)
+      return newDirty
+    })
+    
+    // Switch to another tab if this was active
+    if (activeTabId === tabId) {
+      if (openTabs.length > 1) {
+        // Switch to next tab, or previous if this was last
+        const newIndex = tabIndex < openTabs.length - 1 ? tabIndex + 1 : tabIndex - 1
+        setActiveTabId(openTabs[newIndex].id)
+      } else {
+        setActiveTabId(null)
+      }
+    }
+  }
+  
+  // Handle before tab close (ask for confirmation if dirty)
+  const handleBeforeTabClose = async (tabId: string): Promise<boolean> => {
+    if (dirtyFiles.has(tabId)) {
+      // In production, show confirmation dialog
+      // For now, just allow closing
+      return confirm('File has unsaved changes. Close anyway?')
+    }
+    return true
+  }
+  
+  // Handle content change
+  const handleContentChange = (value: string | undefined) => {
+    if (!activeTabId || value === undefined) return
+    
+    setFileContents(prev => ({ ...prev, [activeTabId]: value }))
+    
+    // Mark as dirty
+    const tab = openTabs.find(t => t.id === activeTabId)
+    if (tab) {
+      setDirtyFiles(prev => new Set(prev).add(activeTabId))
+      setOpenTabs(prev => prev.map(t => 
+        t.id === activeTabId ? { ...t, isDirty: true } : t
+      ))
+    }
+  }
+  
+  // Handle save
+  const handleSave = (content: string) => {
+    if (!activeTabId) return
+    
+    // In production, save to file system via Tauri
+    console.log('Saving file:', activeTab?.path, content)
+    
+    // Mark as clean
+    setDirtyFiles(prev => {
+      const newDirty = new Set(prev)
+      newDirty.delete(activeTabId)
+      return newDirty
+    })
+    
+    setOpenTabs(prev => prev.map(t => 
+      t.id === activeTabId ? { ...t, isDirty: false } : t
+    ))
   }
   
   // Handle voice input submission
@@ -209,7 +334,7 @@ export function MainLayout({
             <div style={{ width: leftPanelWidth }}>
               <FileExplorer
                 repoId={repoId}
-                selectedFile={selectedFile}
+                selectedFile={activeTab?.path || null}
                 onFileSelect={handleFileSelect}
                 onToggleCollapse={() => setLeftPanelCollapsed(true)}
               />
@@ -227,31 +352,43 @@ export function MainLayout({
         {leftPanelCollapsed && (
           <FileExplorer
             repoId={repoId}
-            selectedFile={selectedFile}
+            selectedFile={activeTab?.path || null}
             onFileSelect={handleFileSelect}
             collapsed
             onToggleCollapse={() => setLeftPanelCollapsed(false)}
           />
         )}
         
-        {/* Center Panel - Code Editor */}
+        {/* Center Panel - Editor with Tabs */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {selectedFile ? (
+          {/* Editor Tabs */}
+          {openTabs.length > 0 && (
+            <EditorTabs
+              tabs={openTabs}
+              activeTabId={activeTabId}
+              onTabClick={setActiveTabId}
+              onTabClose={handleTabClose}
+              onBeforeTabClose={handleBeforeTabClose}
+            />
+          )}
+          
+          {/* Editor or Empty State */}
+          {activeTab ? (
             <CodeEditor
-              content={fileContent}
-              onChange={(value) => setFileContent(value || '')}
-              language={language?.toLowerCase().replace(' ', '')}
-              filePath={selectedFile}
+              content={activeContent}
+              onChange={handleContentChange}
+              onSave={handleSave}
+              onCursorPositionChange={(line, column) => setCursorPosition({ line, column })}
+              filePath={activeTab.path}
+              gitStatus={activeTab.gitStatus}
+              readOnly={activeTab.isReadOnly}
+              showHeader={false} // Header shown above tabs
               className="flex-1"
             />
           ) : (
-            <div className="flex-1 flex items-center justify-center text-heaven-text-tertiary">
-              <div className="text-center">
-                <div className="text-4xl mb-4">📝</div>
-                <p className="text-lg mb-2">No file selected</p>
-                <p className="text-sm">Select a file from the explorer to start editing</p>
-              </div>
-            </div>
+            <EditorEmptyState
+              onOpenFile={() => setLeftPanelCollapsed(false)}
+            />
           )}
         </div>
         
@@ -290,7 +427,7 @@ export function MainLayout({
         buildInfo={buildInfo}
         gitStatus={gitStatus}
         cursorPosition={cursorPosition}
-        language={language}
+        language={activeTab ? getLanguageFromPath(activeTab.path) : undefined}
       />
       
       {/* Command Palette */}
