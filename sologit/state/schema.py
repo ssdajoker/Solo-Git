@@ -113,6 +113,32 @@ class TestRun:
 
 
 @dataclass
+class PromotionRecord:
+    """Record of a promotion decision."""
+
+    record_id: str
+    repo_id: str
+    workpad_id: str
+    decision: str
+    can_promote: bool
+    auto_promote_requested: bool
+    promoted: bool
+    commit_hash: Optional[str]
+    message: str
+    test_run_id: Optional[str] = None
+    ci_status: Optional[str] = None
+    ci_message: Optional[str] = None
+    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> 'PromotionRecord':
+        return PromotionRecord(**data)
+
+
+@dataclass
 class AIOperation:
     """An AI operation (planning, coding, etc.)."""
     operation_id: str
@@ -216,6 +242,7 @@ class EventType(Enum):
     AI_OPERATION_STARTED = "ai_operation_started"
     AI_OPERATION_COMPLETED = "ai_operation_completed"
     COMMIT_CREATED = "commit_created"
+    PROMOTION_RECORDED = "promotion_recorded"
 
 
 @dataclass

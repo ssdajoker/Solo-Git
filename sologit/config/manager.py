@@ -77,12 +77,25 @@ class TestConfig:
     parallel_max: int = 4
     fast_tests: list = None
     full_tests: list = None
-    
+    smoke_tests: list = None
+
     def __post_init__(self):
         if self.fast_tests is None:
             self.fast_tests = []
         if self.full_tests is None:
             self.full_tests = []
+        if self.smoke_tests is None:
+            self.smoke_tests = []
+
+
+@dataclass
+class CISmokeConfig:
+    """Configuration for CI smoke job triggers."""
+
+    auto_run: bool = False
+    command: Optional[str] = None
+    webhook: Optional[str] = None
+    webhook_timeout: int = 10
 
 
 @dataclass
@@ -101,7 +114,8 @@ class SoloGitConfig:
     models: ModelConfig = None
     budget: BudgetConfig = None
     tests: TestConfig = None
-    
+    ci: CISmokeConfig = None
+
     def __post_init__(self):
         if self.abacus is None:
             self.abacus = AbacusAPIConfig()
@@ -111,6 +125,8 @@ class SoloGitConfig:
             self.budget = BudgetConfig()
         if self.tests is None:
             self.tests = TestConfig()
+        if self.ci is None:
+            self.ci = CISmokeConfig()
     
     def to_dict(self) -> dict:
         """Convert configuration to dictionary format."""
@@ -153,7 +169,16 @@ class SoloGitConfig:
             'tests': {
                 'sandbox_image': self.tests.sandbox_image,
                 'timeout_seconds': self.tests.timeout_seconds,
-                'parallel_max': self.tests.parallel_max
+                'parallel_max': self.tests.parallel_max,
+                'fast_tests': self.tests.fast_tests,
+                'full_tests': self.tests.full_tests,
+                'smoke_tests': self.tests.smoke_tests,
+            },
+            'ci': {
+                'auto_run': self.ci.auto_run,
+                'command': self.ci.command,
+                'webhook': self.ci.webhook,
+                'webhook_timeout': self.ci.webhook_timeout,
             }
         }
 
@@ -230,6 +255,11 @@ class ConfigManager:
             for key, value in override['tests'].items():
                 if hasattr(base.tests, key):
                     setattr(base.tests, key, value)
+
+        if 'ci' in override:
+            for key, value in override['ci'].items():
+                if hasattr(base.ci, key):
+                    setattr(base.ci, key, value)
         
         # Top-level settings
         if 'repos_path' in override:
@@ -279,8 +309,10 @@ class ConfigManager:
                 'timeout_seconds': self.config.tests.timeout_seconds,
                 'parallel_max': self.config.tests.parallel_max,
                 'fast_tests': self.config.tests.fast_tests,
-                'full_tests': self.config.tests.full_tests
+                'full_tests': self.config.tests.full_tests,
+                'smoke_tests': self.config.tests.smoke_tests
             },
+            'ci': asdict(self.config.ci),
             'repos_path': self.config.repos_path,
             'workpad_ttl_days': self.config.workpad_ttl_days,
             'promote_on_green': self.config.promote_on_green,

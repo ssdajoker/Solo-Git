@@ -8,11 +8,15 @@ Phase 4: Heaven Interface integration with Rich formatting.
 
 import click
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
+from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
 from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
+from sologit.workflows.ci_orchestrator import CIOrchestrator
+from sologit.workflows.rollback_handler import RollbackHandler
+from sologit.state.manager import StateManager
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 
@@ -26,6 +30,62 @@ formatter = RichFormatter()
 _git_engine: Optional[GitEngine] = None
 _patch_engine: Optional[PatchEngine] = None
 _test_orchestrator: Optional[TestOrchestrator] = None
+
+
+def _tests_from_config_entries(entries: List[dict], default_timeout: int) -> List[TestConfig]:
+    """Convert config entries to TestConfig objects."""
+    tests: List[TestConfig] = []
+
+    for entry in entries or []:
+        if isinstance(entry, TestConfig):
+            tests.append(entry)
+            continue
+
+        if not isinstance(entry, dict):
+            logger.warning(f"Ignoring invalid test entry: {entry}")
+            continue
+
+        name = entry.get('name')
+        cmd = entry.get('cmd')
+        if not name or not cmd:
+            logger.warning(f"Test entry missing name/cmd: {entry}")
+            continue
+
+        timeout = int(entry.get('timeout', default_timeout)) if entry.get('timeout') is not None else default_timeout
+        depends_on = entry.get('depends_on', []) or []
+
+        tests.append(TestConfig(name=name, cmd=cmd, timeout=timeout, depends_on=depends_on))
+
+    return tests
+
+
+def _parse_test_override(value: str, default_timeout: int) -> TestConfig:
+    """Parse CLI test override in the form NAME=CMD[:TIMEOUT]."""
+    if '=' not in value:
+        raise click.BadParameter("Must be in NAME=CMD[:TIMEOUT] format")
+
+    name, remainder = value.split('=', 1)
+    name = name.strip()
+    remainder = remainder.strip()
+
+    if not name or not remainder:
+        raise click.BadParameter("Both name and command must be provided")
+
+    timeout = default_timeout
+    if ':' in remainder:
+        cmd, timeout_str = remainder.rsplit(':', 1)
+        cmd = cmd.strip()
+        try:
+            timeout = int(timeout_str.strip())
+        except ValueError as exc:
+            raise click.BadParameter("Timeout must be an integer") from exc
+    else:
+        cmd = remainder
+
+    if not cmd:
+        raise click.BadParameter("Command cannot be empty")
+
+    return TestConfig(name=name, cmd=cmd, timeout=timeout)
 
 
 def get_git_engine() -> GitEngine:
@@ -433,7 +493,12 @@ def test_run(pad_id: str, target: str, parallel: bool):
 @click.argument('pad_id')
 @click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
 @click.option('--no-auto-promote', is_flag=True, help='Disable automatic promotion')
-def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
+@click.option(
+    '--test', 'test_overrides', multiple=True,
+    help='Override tests as NAME=CMD[:TIMEOUT] (repeat for multiple tests)'
+)
+@click.pass_context
+def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_overrides: Tuple[str, ...]):
     """
     Run tests and auto-promote if they pass (Phase 3).
     
@@ -445,35 +510,59 @@ def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
     """
     from sologit.workflows.auto_merge import AutoMergeWorkflow
     from sologit.workflows.promotion_gate import PromotionRules
-    
+
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
-    
+    state_manager = StateManager()
+
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
         click.echo(f"❌ Workpad {pad_id} not found", err=True)
         raise click.Abort()
-    
-    # Define tests based on target
-    if target == 'fast':
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-        ]
+
+    config_manager: ConfigManager = ctx.obj.get('config') if ctx and ctx.obj else ConfigManager()
+    config_tests = config_manager.config.tests
+    default_timeout = config_tests.timeout_seconds
+
+    if test_overrides:
+        tests = [_parse_test_override(value, default_timeout) for value in test_overrides]
     else:
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-            TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
-        ]
-    
+        suite_entries = config_tests.fast_tests if target == 'fast' else config_tests.full_tests
+        tests = _tests_from_config_entries(suite_entries, default_timeout)
+
+        if not tests:
+            if target == 'fast':
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                ]
+            else:
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                    TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+                ]
+
     # Configure promotion rules (can be loaded from config in future)
     rules = PromotionRules(
         require_tests=True,
         require_all_tests_pass=True,
         require_fast_forward=True
     )
-    
-    # Create workflow
-    workflow = AutoMergeWorkflow(git_engine, test_orchestrator, rules)
+
+    smoke_tests = _tests_from_config_entries(config_tests.smoke_tests, default_timeout)
+    ci_orchestrator = CIOrchestrator(git_engine, test_orchestrator)
+    rollback_handler = RollbackHandler(git_engine)
+
+    workflow = AutoMergeWorkflow(
+        git_engine,
+        test_orchestrator,
+        rules,
+        state_manager=state_manager,
+        ci_orchestrator=ci_orchestrator,
+        rollback_handler=rollback_handler,
+        ci_smoke_tests=smoke_tests,
+        ci_config=config_manager.config.ci,
+        rollback_on_ci_red=config_manager.config.rollback_on_ci_red
+    )
     
     try:
         click.echo(f"🚀 Starting auto-merge workflow for: {workpad.title}")
@@ -485,7 +574,8 @@ def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
             pad_id,
             tests,
             parallel=True,
-            auto_promote=not no_auto_promote
+            auto_promote=not no_auto_promote,
+            target=target
         )
         
         # Display formatted result
