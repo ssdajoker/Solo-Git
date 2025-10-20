@@ -55,5 +55,10 @@ export interface StatusBarProps {
   globalState: GlobalState | null
   testRun?: TestRun
   buildInfo?: BuildInfo
+  gitStatus?: import('./git').GitStatus
+  cursorPosition?: { line: number; column: number }
+  language?: string
+  encoding?: string
+  lineEnding?: string
   className?: string
 }
