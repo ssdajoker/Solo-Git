@@ -115,6 +115,7 @@ export default {
         'modal': 50,
         'popover': 60,
         'tooltip': 70,
+        'toast': 80,
         'notification': 80,
       },
       animation: {
