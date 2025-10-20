@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from enum import Enum
 
-from sologit.api.client import AbacusClient, ChatMessage
+from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
 from sologit.orchestration.model_router import ModelRouter, ModelTier, ComplexityMetrics
 from sologit.orchestration.cost_guard import CostGuard, BudgetConfig
 from sologit.orchestration.planning_engine import PlanningEngine, CodePlan
@@ -72,9 +72,12 @@ class AIOrchestrator:
         """
         self.config_manager = config_manager or ConfigManager()
         self.config = self.config_manager.config
-        
+
         # Initialize components
         self.client = AbacusClient(self.config.abacus)
+        for name, creds in self.config.deployments.items():
+            if creds.deployment_id and creds.deployment_token:
+                self.client.register_deployment(name, creds.deployment_id, creds.deployment_token)
         self.model_router = ModelRouter(self.config.to_dict())
         
         budget_config = BudgetConfig(
@@ -143,34 +146,67 @@ class AIOrchestrator:
             )
         
         # Generate plan
+        deployment = self._get_deployment_credentials('planning')
+
         try:
             plan = self.planning_engine.generate_plan(
                 prompt=prompt,
                 repo_context=repo_context,
                 model=model_config.name,
-                # Note: deployment_id and deployment_token would come from config in production
+                deployment_name='planning' if deployment else None,
+                deployment_id=deployment['deployment_id'] if deployment else None,
+                deployment_token=deployment['deployment_token'] if deployment else None
             )
-            
-            # Record usage (using actual or estimated tokens)
-            actual_tokens = estimated_tokens * 2  # Placeholder - would come from API response
-            self.cost_guard.record_usage(
+
+            response = self.planning_engine.last_response
+            if response:
+                prompt_tokens = response.prompt_tokens or estimated_tokens
+                completion_tokens = response.completion_tokens or max(response.total_tokens - prompt_tokens, 0)
+                total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
+                actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                self.cost_guard.record_usage(
+                    model=response.model or model_config.name,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.PLANNING.value
+                )
+            else:
+                prompt_tokens = estimated_tokens
+                completion_tokens = estimated_tokens
+                total_tokens = prompt_tokens + completion_tokens
+                actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                self.cost_guard.record_usage(
+                    model=model_config.name,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.PLANNING.value
+                )
+
+            return PlanResponse(
+                plan=plan,
+                model_used=(response.model if response and response.model else model_config.name),
+                cost_usd=actual_cost,
+                complexity=complexity
+            )
+
+        except AbacusAPIError as api_err:
+            logger.warning("Planning failed with Abacus error: %s", api_err)
+            plan = self.planning_engine.generate_plan(
+                prompt=prompt,
+                repo_context=repo_context,
                 model=model_config.name,
-                prompt_tokens=estimated_tokens,
-                completion_tokens=estimated_tokens,
-                cost_per_1k=model_config.cost_per_1k_tokens,
-                task_type=TaskType.PLANNING.value
             )
-            
             return PlanResponse(
                 plan=plan,
                 model_used=model_config.name,
-                cost_usd=estimated_cost,
+                cost_usd=0.0,
                 complexity=complexity
             )
-            
         except Exception as e:
             logger.error("Planning failed: %s", e)
-            
+
             # Try to escalate to a smarter model
             escalated_model = self.model_router.get_escalated_model(
                 model_config,
@@ -237,32 +273,65 @@ class AIOrchestrator:
             )
         
         # Generate patch
+        deployment = self._get_deployment_credentials('coding')
+
         try:
+            patch = self.code_generator.generate_patch(
+                plan=plan,
+                file_contents=file_contents,
+                model=model_config.name,
+                deployment_name='coding' if deployment else None,
+                deployment_id=deployment['deployment_id'] if deployment else None,
+                deployment_token=deployment['deployment_token'] if deployment else None
+            )
+
+            response = self.code_generator.last_response
+            if response:
+                prompt_tokens = response.prompt_tokens or estimated_tokens
+                completion_tokens = response.completion_tokens or max(response.total_tokens - prompt_tokens, 0)
+                total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
+                actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                self.cost_guard.record_usage(
+                    model=response.model or model_config.name,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.CODING.value
+                )
+            else:
+                prompt_tokens = estimated_tokens
+                completion_tokens = int(estimated_tokens * 0.5)
+                total_tokens = prompt_tokens + completion_tokens
+                actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                self.cost_guard.record_usage(
+                    model=model_config.name,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.CODING.value
+                )
+
+            return PatchResponse(
+                patch=patch,
+                model_used=(response.model if response and response.model else model_config.name),
+                cost_usd=actual_cost
+            )
+
+        except AbacusAPIError as api_err:
+            logger.warning("Patch generation failed with Abacus error: %s", api_err)
             patch = self.code_generator.generate_patch(
                 plan=plan,
                 file_contents=file_contents,
                 model=model_config.name
             )
-            
-            # Record usage
-            actual_tokens = estimated_tokens * 1.5  # Placeholder
-            self.cost_guard.record_usage(
-                model=model_config.name,
-                prompt_tokens=estimated_tokens,
-                completion_tokens=int(estimated_tokens * 0.5),
-                cost_per_1k=model_config.cost_per_1k_tokens,
-                task_type=TaskType.CODING.value
-            )
-            
             return PatchResponse(
                 patch=patch,
                 model_used=model_config.name,
-                cost_usd=estimated_cost
+                cost_usd=0.0
             )
-            
         except Exception as e:
             logger.error("Patch generation failed: %s", e)
-            
+
             # Try to escalate
             escalated_model = self.model_router.get_escalated_model(
                 model_config,
@@ -395,3 +464,13 @@ This is a basic diagnosis. Full AI-powered diagnosis will be available in produc
                 if model.name == name:
                     return model
         return None
+
+    def _get_deployment_credentials(self, name: str) -> Optional[Dict[str, str]]:
+        """Retrieve deployment credentials if available."""
+        creds = self.config.deployments.get(name)
+        if not creds or not creds.deployment_id or not creds.deployment_token:
+            return None
+        return {
+            'deployment_id': creds.deployment_id,
+            'deployment_token': creds.deployment_token
+        }

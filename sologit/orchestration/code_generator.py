@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
-from sologit.api.client import AbacusClient, ChatMessage
+from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
 from sologit.orchestration.planning_engine import CodePlan, FileChange
 from sologit.utils.logger import get_logger
 
@@ -75,11 +75,12 @@ Only output the patch itself, no explanatory text outside the diff."""
     def __init__(self, client: AbacusClient):
         """
         Initialize code generator.
-        
+
         Args:
             client: Abacus.ai API client
         """
         self.client = client
+        self.last_response: Optional['ChatResponse'] = None
         logger.info("CodeGenerator initialized")
     
     def generate_patch(
@@ -87,6 +88,7 @@ Only output the patch itself, no explanatory text outside the diff."""
         plan: CodePlan,
         file_contents: Optional[Dict[str, str]] = None,
         model: str = "deepseek-coder-33b",
+        deployment_name: Optional[str] = None,
         deployment_id: Optional[str] = None,
         deployment_token: Optional[str] = None
     ) -> GeneratedPatch:
@@ -136,16 +138,20 @@ Only output the patch itself, no explanatory text outside the diff."""
         ]
         
         # For Phase 2 without full deployment setup, use mock generation
+        self.last_response = None
+
         try:
-            if deployment_id and deployment_token:
+            if deployment_name or (deployment_id and deployment_token):
                 response = self.client.chat(
                     messages=messages,
                     model=model,
                     max_tokens=2048,
                     temperature=0.1,
+                    deployment=deployment_name,
                     deployment_id=deployment_id,
                     deployment_token=deployment_token
                 )
+                self.last_response = response
                 diff = self._extract_diff(response.content)
             else:
                 # Mock patch generation for Phase 2 development
@@ -168,6 +174,9 @@ Only output the patch itself, no explanatory text outside the diff."""
             logger.info("Generated patch: %s", patch)
             return patch
             
+        except AbacusAPIError:
+            self.last_response = None
+            raise
         except Exception as e:
             logger.error("Failed to generate patch: %s", e)
             # Return a minimal patch
