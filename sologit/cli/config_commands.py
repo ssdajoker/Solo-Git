@@ -11,6 +11,7 @@ from pathlib import Path
 
 from sologit.config.manager import ConfigManager
 from sologit.config.templates import DEFAULT_CONFIG_TEMPLATE, ENV_TEMPLATE
+from sologit.orchestration.cost_guard import CostGuard, BudgetConfig
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -107,9 +108,27 @@ def show_config(ctx, secrets):
     
     # Model Configuration
     click.echo("\n🤖 Models:")
-    click.echo(f"  Planning:  {config.models.planning_model}")
-    click.echo(f"  Coding:    {config.models.coding_model}")
-    click.echo(f"  Fast:      {config.models.fast_model}")
+
+    def _render_tier(label: str, tier_config):
+        primary = tier_config.primary
+        click.echo(
+            f"  {label}:  {primary.name}"
+            f" [{primary.provider}]"
+            f" • ${primary.cost_per_1k_tokens:.4f}/1k"
+            f" • max {primary.max_tokens} tokens"
+        )
+        if tier_config.fallback:
+            fallback = tier_config.fallback
+            click.echo(
+                f"           ↳ fallback: {fallback.name}"
+                f" [{fallback.provider}]"
+                f" • ${fallback.cost_per_1k_tokens:.4f}/1k"
+                f" • max {fallback.max_tokens} tokens"
+            )
+
+    _render_tier("Planning", config.models.planning)
+    _render_tier("Coding", config.models.coding)
+    _render_tier("Fast", config.models.fast)
     
     # Budget Configuration
     click.echo("\n💰 Budget:")
@@ -179,6 +198,74 @@ def test_config(ctx):
         sys.exit(1)
     
     click.echo("\n🎉 All checks passed! Solo Git is ready to use.")
+
+
+@config_group.group(name='budget')
+@click.pass_context
+def budget_group(ctx):
+    """Budget monitoring commands."""
+
+    if 'config' not in ctx.obj:
+        ctx.obj['config'] = ConfigManager()
+
+
+@budget_group.command(name='status')
+@click.pass_context
+def budget_status(ctx):
+    """Show current AI budget status."""
+
+    config_manager: ConfigManager = ctx.obj.get('config')
+    if not config_manager:
+        click.echo("❌ No configuration found", err=True)
+        sys.exit(1)
+
+    config = config_manager.get_config()
+    guard_config = BudgetConfig(
+        daily_usd_cap=config.budget.daily_usd_cap,
+        alert_threshold=config.budget.alert_threshold,
+        track_by_model=config.budget.track_by_model,
+    )
+    cost_guard = CostGuard(guard_config)
+    status = cost_guard.get_status()
+
+    click.echo("💰 Solo Git Budget Status\n")
+    click.echo(f"Daily Cap:      ${status['daily_cap']:.2f}")
+    click.echo(f"Used Today:     ${status['current_cost']:.2f}")
+    click.echo(f"Remaining:      ${status['remaining']:.2f}")
+    click.echo(f"Usage:          {status['percentage_used']:.1f}%")
+    click.echo(f"Within Budget:  {'✅' if status['within_budget'] else '⚠️'}")
+
+    if status.get('alerts'):
+        click.echo("\n🚨 Alerts:")
+        for alert in status['alerts']:
+            click.echo(
+                f"  [{alert['timestamp']}] {alert['level'].upper()}: {alert['message']}"
+            )
+
+    breakdown = status.get('usage_breakdown') or {}
+    if breakdown:
+        click.echo("\n📊 Usage Breakdown:")
+        click.echo(
+            f"  Total Tokens: {breakdown.get('total_tokens', 0)}"
+            f" in {breakdown.get('calls_count', 0)} calls"
+        )
+        if breakdown.get('by_model'):
+            click.echo("  By Model:")
+            for model, cost in breakdown['by_model'].items():
+                click.echo(f"    • {model}: ${cost:.4f}")
+        if breakdown.get('by_task'):
+            click.echo("  By Task:")
+            for task, cost in breakdown['by_task'].items():
+                click.echo(f"    • {task}: ${cost:.4f}")
+
+    last_usage = status.get('last_usage')
+    if last_usage:
+        click.echo("\n🧾 Last Usage:")
+        click.echo(
+            f"  {last_usage['timestamp']} • {last_usage['model']}"
+            f" • ${last_usage['cost_usd']:.4f}"
+            f" • {last_usage['total_tokens']} tokens"
+        )
 
 
 @config_group.command(name='init')

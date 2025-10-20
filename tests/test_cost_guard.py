@@ -40,9 +40,10 @@ def budget_config():
 
 
 @pytest.fixture
-def cost_guard(budget_config, tracker):
-    """Create cost guard."""
-    return CostGuard(budget_config, tracker)
+def cost_guard(budget_config, tracker, temp_storage):
+    """Create cost guard with isolated status file."""
+    status_path = temp_storage / 'budget_status.json'
+    return CostGuard(budget_config, tracker, status_path=status_path)
 
 
 def test_tracker_initialization(tracker):
@@ -208,7 +209,7 @@ def test_budget_alert_threshold(cost_guard, tracker, caplog):
     """Test alert is triggered at threshold."""
     import logging
     caplog.set_level(logging.WARNING)
-    
+
     # Use 70% of budget
     usage = TokenUsage(
         timestamp=datetime.now(),
@@ -220,11 +221,14 @@ def test_budget_alert_threshold(cost_guard, tracker, caplog):
         task_type='planning'
     )
     tracker.record_usage(usage)
-    
+
     # This should trigger alert (crossing 80% threshold)
     cost_guard.check_budget(2.0)
-    
+
     assert any('alert' in record.message.lower() for record in caplog.records)
+    status = cost_guard.get_status()
+    assert status['alerts']
+    assert status['alerts'][0]['level'] == 'threshold'
 
 
 def test_get_remaining_budget(cost_guard, tracker):
@@ -272,14 +276,34 @@ def test_get_status(cost_guard, tracker):
         task_type='planning'
     )
     tracker.record_usage(usage)
-    
+
     status = cost_guard.get_status()
-    
+
     assert status['daily_cap'] == 10.0
     assert status['current_cost'] == 3.0
     assert status['remaining'] == 7.0
     assert status['percentage_used'] == 30.0
     assert status['within_budget'] is True
+    assert 'alerts' in status
+
+
+def test_budget_exhaustion_records_alert(cost_guard, tracker):
+    """Budget exhaustion should be persisted and prevent further usage."""
+
+    usage = TokenUsage(
+        timestamp=datetime.now(),
+        model='gpt-4o',
+        prompt_tokens=9000,
+        completion_tokens=4000,
+        total_tokens=13000,
+        cost_usd=9.0,
+        task_type='planning'
+    )
+    tracker.record_usage(usage)
+
+    assert cost_guard.check_budget(2.0) is False
+    status = cost_guard.get_status()
+    assert any(alert['level'] == 'exceeded' for alert in status['alerts'])
 
 
 def test_daily_usage_serialization():

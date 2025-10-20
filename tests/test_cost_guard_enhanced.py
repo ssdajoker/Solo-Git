@@ -34,7 +34,8 @@ def cost_guard(tracker):
         alert_threshold=0.8,
         track_by_model=True
     )
-    return CostGuard(config, tracker)
+    status_path = tracker.storage_path.parent / 'budget_status.json'
+    return CostGuard(config, tracker, status_path=status_path)
 
 
 def test_load_history_corrupted_file(temp_storage):
