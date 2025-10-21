@@ -16,22 +16,46 @@ def mock_config():
         'ai': {
             'models': {
                 'fast': {
-                    'primary': 'llama-3.1-8b-instruct',
-                    'fallback': 'gemma-2-9b-it',
-                    'max_tokens': 1024,
-                    'temperature': 0.1
+                    'primary': {
+                        'name': 'llama-3.1-8b-instruct',
+                        'max_tokens': 1024,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0002
+                    },
+                    'fallback': {
+                        'name': 'gemma-2-9b-it',
+                        'max_tokens': 1024,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.00005
+                    }
                 },
                 'coding': {
-                    'primary': 'deepseek-coder-33b',
-                    'fallback': 'codellama-70b-instruct',
-                    'max_tokens': 2048,
-                    'temperature': 0.1
+                    'primary': {
+                        'name': 'deepseek-coder-33b',
+                        'max_tokens': 2048,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0008
+                    },
+                    'fallback': {
+                        'name': 'codellama-70b-instruct',
+                        'max_tokens': 2048,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0006
+                    }
                 },
                 'planning': {
-                    'primary': 'gpt-4o',
-                    'fallback': 'claude-3-5-sonnet',
-                    'max_tokens': 4096,
-                    'temperature': 0.2
+                    'primary': {
+                        'name': 'gpt-4o',
+                        'max_tokens': 4096,
+                        'temperature': 0.2,
+                        'cost_per_1k_tokens': 0.03
+                    },
+                    'fallback': {
+                        'name': 'claude-3-5-sonnet',
+                        'max_tokens': 4096,
+                        'temperature': 0.2,
+                        'cost_per_1k_tokens': 0.025
+                    }
                 }
             }
         },
@@ -141,9 +165,10 @@ def test_select_model_low_budget(router):
         prompt="medium complexity task",
         budget_remaining=0.5  # Low budget
     )
-    
-    # Should still work but prefer cheaper options
+
+    # Should still work but prefer cheaper options (fallback)
     assert model is not None
+    assert model.name == 'gemma-2-9b-it'
 
 
 def test_estimate_patch_size(router):
