@@ -167,17 +167,30 @@ except ImportError as e:
     logger.warning(f"Could not load integrated commands: {e}")
 
 
+def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
+    """Shared launcher for the Heaven TUI."""
+    try:
+        from sologit.ui.heaven_tui import run_heaven_tui
+        run_heaven_tui(repo_path=repo_path)
+    except ImportError as e:
+        click.echo("❌ Error: Heaven TUI dependencies not installed", err=True)
+        click.echo("Install with: pip install textual", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.echo(f"❌ Heaven TUI launch failed: {e}", err=True)
+        logger.error(f"Heaven TUI error: {e}", exc_info=True)
+        raise click.Abort()
+
+
 @cli.command()
 def tui():
     """
     Launch the Heaven Interface TUI (Text User Interface).
-    
-    The TUI provides an interactive, full-screen interface with:
-    - Real-time commit graph visualization
-    - Live workpad status
-    - Test run monitoring
-    - Keyboard-driven navigation
-    
+
+    This command is an alias for ``evogitctl heaven`` and launches the
+    production HeavenTUI experience with the full-screen interface for
+    repository management, test monitoring, and workpad control.
+
     \b
     Keyboard Shortcuts:
       q - Quit
@@ -187,6 +200,7 @@ def tui():
       w - Show workpads
       ? - Help
     """
+    _launch_heaven_tui()
     formatter.print_header("Heaven Interface TUI")
     formatter.print_info("Launching classic Heaven Interface experience...")
     try:
@@ -206,7 +220,7 @@ def tui():
 def heaven(repo_path: Optional[str]):
     """
     Launch the Heaven Interface TUI (Production Version).
-    
+
     The Heaven Interface is a comprehensive, production-ready TUI with:
     - Command palette with fuzzy search (Ctrl+P)
     - File tree with git status
@@ -236,13 +250,16 @@ def heaven(repo_path: Optional[str]):
       ? - Help (full shortcuts)
       R - Refresh
       Ctrl+Q - Quit
-    
+
     \b
     Layout (Heaven Interface Design System):
       • Left:   Commit graph + File tree
       • Center: Workpad status + AI activity
       • Right:  Test runner + Diff viewer
+
+    This command can also be accessed via the ``evogitctl tui`` alias.
     """
+    _launch_heaven_tui(repo_path=repo_path)
     formatter.print_header("Heaven Interface")
     formatter.print_info("Launching production Heaven Interface...")
     try:
