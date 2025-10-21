@@ -13,9 +13,27 @@ from sologit.config.manager import ConfigManager
 from sologit.config.templates import DEFAULT_CONFIG_TEMPLATE, ENV_TEMPLATE
 from sologit.orchestration.cost_guard import CostGuard, BudgetConfig
 from sologit.utils.logger import get_logger
+from sologit.ui.formatter import RichFormatter
+from sologit.ui.theme import theme
 
 logger = get_logger(__name__)
 
+
+formatter = RichFormatter()
+
+
+def set_formatter_console(console) -> None:
+    """Configure the shared console instance."""
+    formatter.set_console(console)
+
+
+def abort_with_error(message: str, details: str | None = None) -> None:
+    """Display a formatted error and exit."""
+    content = f"[bold]{message}[/bold]"
+    if details:
+        content += f"\n\n{details}"
+    formatter.print_error_panel(content)
+    sys.exit(1)
 
 @click.group(name='config')
 def config_group():
@@ -35,48 +53,55 @@ def setup_config(api_key, endpoint, interactive):
     
     Guides you through configuring API credentials and basic settings.
     """
-    click.echo("🔧 Solo Git Configuration Setup\n")
-    
+    formatter.print_header("Solo Git Configuration Setup")
+    formatter.print_info("Guiding you through Abacus.ai credential setup.")
+
     config_manager = ConfigManager()
-    
+
     # Check if already configured
     if config_manager.has_abacus_credentials():
         if interactive:
+            formatter.print_warning("Existing configuration detected.")
             if not click.confirm("Configuration already exists. Overwrite?"):
-                click.echo("Keeping existing configuration.")
+                formatter.print_info("Keeping existing configuration.")
                 return
-    
+
     # Interactive mode
     if interactive and not api_key:
-        click.echo("To use Solo Git, you need Abacus.ai API credentials.")
-        click.echo("Get your API key from: https://abacus.ai\n")
-        
+        formatter.print_info_panel(
+            "To use Solo Git you need Abacus.ai API credentials.\n"
+            "Generate an API key from https://abacus.ai.",
+            title="Abacus.ai Credentials"
+        )
+
         api_key = click.prompt("Enter your Abacus.ai API key", hide_input=True)
-        
+
         if click.confirm("Use default endpoint (https://api.abacus.ai/v1)?", default=True):
             endpoint = 'https://api.abacus.ai/v1'
         else:
             endpoint = click.prompt("Enter custom API endpoint")
-    
+
     # Validate inputs
     if not api_key:
-        click.echo("❌ Error: API key is required", err=True)
-        sys.exit(1)
-    
+        abort_with_error("API key is required")
+
     # Save configuration
     try:
         config_manager.set_abacus_credentials(api_key, endpoint)
-        click.echo(f"\n✅ Configuration saved to {config_manager.config_path}")
-        
-        # Show next steps
-        click.echo("\n📋 Next steps:")
-        click.echo("  1. Test the configuration: evogitctl config test")
-        click.echo("  2. View configuration:     evogitctl config show")
-        click.echo("  3. Initialize a repo:      evogitctl repo init --zip app.zip")
-        
+        formatter.print_success_panel(
+            f"Configuration saved to [bold]{config_manager.config_path}[/bold]",
+            title="Configuration Saved"
+        )
+
+        formatter.print_subheader("Next Steps")
+        formatter.print_bullet_list([
+            "Test the configuration: evogitctl config test",
+            "View configuration: evogitctl config show",
+            "Initialize a repo: evogitctl repo init --zip app.zip",
+        ], icon=theme.icons.arrow_right, style=theme.colors.blue)
+
     except Exception as e:
-        click.echo(f"❌ Error saving configuration: {e}", err=True)
-        sys.exit(1)
+        abort_with_error("Error saving configuration", str(e))
 
 
 @config_group.command(name='show')
@@ -87,65 +112,65 @@ def show_config(ctx, secrets):
     """Display current configuration."""
     config_manager = ctx.obj.get('config')
     if not config_manager:
-        click.echo("❌ No configuration found", err=True)
-        sys.exit(1)
-    
-    config = config_manager.get_config()
-    
-    click.echo("📋 Solo Git Configuration\n")
-    
-    # API Configuration
-    click.echo("🔐 Abacus.ai API:")
-    click.echo(f"  Endpoint:  {config.abacus.endpoint}")
-    if config.abacus.api_key:
-        if secrets:
-            click.echo(f"  API Key:   {config.abacus.api_key}")
-        else:
-            masked = config.abacus.api_key[:8] + "..." + config.abacus.api_key[-4:]
-            click.echo(f"  API Key:   {masked} (use --secrets to show)")
-    else:
-        click.echo("  API Key:   ❌ Not configured")
-    
-    # Model Configuration
-    click.echo("\n🤖 Models:")
+        abort_with_error("No configuration found")
 
-    def _render_tier(label: str, tier_config):
+    config = config_manager.get_config()
+
+    formatter.print_header("Solo Git Configuration")
+
+    api_table = formatter.table(headers=["Field", "Value"])
+    api_table.add_row("Endpoint", config.abacus.endpoint)
+    if config.abacus.api_key:
+        api_value = config.abacus.api_key if secrets else config.abacus.api_key[:8] + "..." + config.abacus.api_key[-4:]
+        if not secrets:
+            api_value += " (use --secrets to show)"
+        api_table.add_row("API Key", api_value)
+    else:
+        api_table.add_row("API Key", f"[{theme.colors.error}]Not configured[/{theme.colors.error}]")
+    formatter.print_info_panel("Abacus.ai API Settings", title="API")
+    formatter.console.print(api_table)
+
+    def render_tier(label: str, tier_config) -> None:
         primary = tier_config.primary
-        click.echo(
-            f"  {label}:  {primary.name}"
-            f" [{primary.provider}]"
-            f" • ${primary.cost_per_1k_tokens:.4f}/1k"
-            f" • max {primary.max_tokens} tokens"
+        row_value = (
+            f"{primary.name} [{primary.provider}]\n"
+            f"${primary.cost_per_1k_tokens:.4f}/1k • max {primary.max_tokens} tokens"
         )
+        model_table.add_row(label, row_value)
         if tier_config.fallback:
             fallback = tier_config.fallback
-            click.echo(
-                f"           ↳ fallback: {fallback.name}"
-                f" [{fallback.provider}]"
-                f" • ${fallback.cost_per_1k_tokens:.4f}/1k"
-                f" • max {fallback.max_tokens} tokens"
+            fallback_value = (
+                f"Fallback: {fallback.name} [{fallback.provider}]\n"
+                f"${fallback.cost_per_1k_tokens:.4f}/1k • max {fallback.max_tokens} tokens"
             )
+            model_table.add_row("", fallback_value)
 
-    _render_tier("Planning", config.models.planning)
-    _render_tier("Coding", config.models.coding)
-    _render_tier("Fast", config.models.fast)
-    
-    # Budget Configuration
-    click.echo("\n💰 Budget:")
-    click.echo(f"  Daily Cap:       ${config.budget.daily_usd_cap:.2f}")
-    click.echo(f"  Alert at:        {config.budget.alert_threshold * 100:.0f}%")
-    click.echo(f"  Track by model:  {config.budget.track_by_model}")
-    
-    # Workflow Settings
-    click.echo("\n⚙️  Workflow:")
-    click.echo(f"  Auto-merge on green:  {config.promote_on_green}")
-    click.echo(f"  Auto-rollback:        {config.rollback_on_ci_red}")
-    click.echo(f"  Workpad TTL:          {config.workpad_ttl_days} days")
-    
-    # Paths
-    click.echo("\n📁 Paths:")
-    click.echo(f"  Config file:    {config_manager.config_path}")
-    click.echo(f"  Repositories:   {config.repos_path}")
+    model_table = formatter.table(headers=["Tier", "Model Details"])
+    render_tier("Planning", config.models.planning)
+    render_tier("Coding", config.models.coding)
+    render_tier("Fast", config.models.fast)
+    formatter.print_info_panel("Model configuration tiers", title="AI Models")
+    formatter.console.print(model_table)
+
+    budget_table = formatter.table(headers=["Setting", "Value"])
+    budget_table.add_row("Daily Cap", f"${config.budget.daily_usd_cap:.2f}")
+    budget_table.add_row("Alert Threshold", f"{config.budget.alert_threshold * 100:.0f}%")
+    budget_table.add_row("Track by Model", str(config.budget.track_by_model))
+    formatter.print_info_panel("Budget guardrails", title="Budget")
+    formatter.console.print(budget_table)
+
+    workflow_table = formatter.table(headers=["Setting", "Value"])
+    workflow_table.add_row("Auto-merge on green", str(config.promote_on_green))
+    workflow_table.add_row("Auto-rollback", str(config.rollback_on_ci_red))
+    workflow_table.add_row("Workpad TTL", f"{config.workpad_ttl_days} days")
+    formatter.print_info_panel("Workflow automation", title="Workflow")
+    formatter.console.print(workflow_table)
+
+    paths_table = formatter.table(headers=["Path", "Value"])
+    paths_table.add_row("Config file", str(config_manager.config_path))
+    paths_table.add_row("Repositories", str(config.repos_path))
+    formatter.print_info_panel("Paths", title="Filesystem")
+    formatter.console.print(paths_table)
 
 
 @config_group.command(name='test')
@@ -154,50 +179,56 @@ def test_config(ctx):
     """Test API connection and validate configuration."""
     config_manager = ctx.obj.get('config')
     if not config_manager:
-        click.echo("❌ No configuration found", err=True)
-        sys.exit(1)
-    
-    click.echo("🧪 Testing Solo Git Configuration\n")
-    
+        abort_with_error("No configuration found")
+
+    formatter.print_header("Testing Solo Git Configuration")
+
     # Validate configuration
     is_valid, errors = config_manager.validate()
-    
+
     if not is_valid:
-        click.echo("❌ Configuration validation failed:")
+        formatter.print_error_panel(
+            "Configuration validation failed. Review the following issues:",
+            title="Validation"
+        )
+        error_table = formatter.table(headers=["Issues"])
         for error in errors:
-            click.echo(f"  • {error}")
+            error_table.add_row(error)
+        formatter.console.print(error_table)
         sys.exit(1)
-    
-    click.echo("✅ Configuration is valid")
-    
+
+    formatter.print_success("Configuration is valid")
+
     # Test API connection
     config = config_manager.get_config()
     if not config.abacus.is_configured():
-        click.echo("\n⚠️  Abacus.ai API not configured")
-        click.echo("   Run: evogitctl config setup")
+        formatter.print_warning("Abacus.ai API not configured.")
+        formatter.print_info("Run: evogitctl config setup")
         sys.exit(1)
-    
-    click.echo("\n🔌 Testing Abacus.ai API connection...")
-    
-    # Import here to avoid circular dependency
+
+    formatter.print_info("Testing Abacus.ai API connection...")
+
     from sologit.api.client import AbacusClient
-    
+
     try:
         client = AbacusClient(config.abacus)
         result = client.test_connection()
-        
+
         if result:
-            click.echo("✅ API connection successful")
-            click.echo(f"   Endpoint: {config.abacus.endpoint}")
+            formatter.print_success_panel(
+                f"Endpoint: {config.abacus.endpoint}",
+                title="API Connection Successful"
+            )
         else:
-            click.echo("❌ API connection failed")
-            sys.exit(1)
-            
+            abort_with_error("API connection failed")
+
     except Exception as e:
-        click.echo(f"❌ API connection failed: {e}")
-        sys.exit(1)
-    
-    click.echo("\n🎉 All checks passed! Solo Git is ready to use.")
+        abort_with_error("API connection failed", str(e))
+
+    formatter.print_success_panel(
+        "All checks passed! Solo Git is ready to use.",
+        title="Ready"
+    )
 
 
 @config_group.group(name='budget')
@@ -216,8 +247,7 @@ def budget_status(ctx):
 
     config_manager: ConfigManager = ctx.obj.get('config')
     if not config_manager:
-        click.echo("❌ No configuration found", err=True)
-        sys.exit(1)
+        abort_with_error("No configuration found")
 
     config = config_manager.get_config()
     guard_config = BudgetConfig(
@@ -228,44 +258,50 @@ def budget_status(ctx):
     cost_guard = CostGuard(guard_config)
     status = cost_guard.get_status()
 
-    click.echo("💰 Solo Git Budget Status\n")
-    click.echo(f"Daily Cap:      ${status['daily_cap']:.2f}")
-    click.echo(f"Used Today:     ${status['current_cost']:.2f}")
-    click.echo(f"Remaining:      ${status['remaining']:.2f}")
-    click.echo(f"Usage:          {status['percentage_used']:.1f}%")
-    click.echo(f"Within Budget:  {'✅' if status['within_budget'] else '⚠️'}")
+    formatter.print_header("Solo Git Budget Status")
+    summary_table = formatter.table(headers=["Metric", "Value"])
+    summary_table.add_row("Daily Cap", f"${status['daily_cap']:.2f}")
+    summary_table.add_row("Used Today", f"${status['current_cost']:.2f}")
+    summary_table.add_row("Remaining", f"${status['remaining']:.2f}")
+    summary_table.add_row("Usage", f"{status['percentage_used']:.1f}%")
+    budget_icon = theme.icons.success if status['within_budget'] else theme.icons.warning
+    budget_color = theme.colors.success if status['within_budget'] else theme.colors.warning
+    summary_table.add_row("Within Budget", f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]")
+    formatter.console.print(summary_table)
 
     if status.get('alerts'):
-        click.echo("\n🚨 Alerts:")
-        for alert in status['alerts']:
-            click.echo(
-                f"  [{alert['timestamp']}] {alert['level'].upper()}: {alert['message']}"
-            )
+        alerts_panel = "\n".join(
+            f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
+            for alert in status['alerts']
+        )
+        formatter.print_warning("Budget alerts detected.")
+        formatter.print_info_panel(alerts_panel, title="Alerts")
 
     breakdown = status.get('usage_breakdown') or {}
     if breakdown:
-        click.echo("\n📊 Usage Breakdown:")
-        click.echo(
-            f"  Total Tokens: {breakdown.get('total_tokens', 0)}"
-            f" in {breakdown.get('calls_count', 0)} calls"
+        breakdown_table = formatter.table(headers=["Metric", "Value"])
+        breakdown_table.add_row(
+            "Total Tokens",
+            f"{breakdown.get('total_tokens', 0)} in {breakdown.get('calls_count', 0)} calls"
         )
         if breakdown.get('by_model'):
-            click.echo("  By Model:")
-            for model, cost in breakdown['by_model'].items():
-                click.echo(f"    • {model}: ${cost:.4f}")
+            model_lines = [f"{model}: ${cost:.4f}" for model, cost in breakdown['by_model'].items()]
+            breakdown_table.add_row("By Model", "\n".join(model_lines))
         if breakdown.get('by_task'):
-            click.echo("  By Task:")
-            for task, cost in breakdown['by_task'].items():
-                click.echo(f"    • {task}: ${cost:.4f}")
+            task_lines = [f"{task}: ${cost:.4f}" for task, cost in breakdown['by_task'].items()]
+            breakdown_table.add_row("By Task", "\n".join(task_lines))
+        formatter.print_info_panel("Usage breakdown", title="Detailed Usage")
+        formatter.console.print(breakdown_table)
 
     last_usage = status.get('last_usage')
     if last_usage:
-        click.echo("\n🧾 Last Usage:")
-        click.echo(
-            f"  {last_usage['timestamp']} • {last_usage['model']}"
-            f" • ${last_usage['cost_usd']:.4f}"
-            f" • {last_usage['total_tokens']} tokens"
+        last_panel = (
+            f"Timestamp: {last_usage['timestamp']}\n"
+            f"Model: {last_usage['model']}\n"
+            f"Cost: ${last_usage['cost_usd']:.4f}\n"
+            f"Tokens: {last_usage['total_tokens']}"
         )
+        formatter.print_info_panel(last_panel, title="Last Usage")
 
 
 @config_group.command(name='init')
@@ -274,22 +310,26 @@ def init_config(force):
     """Initialize a new configuration file with defaults."""
     config_path = ConfigManager.DEFAULT_CONFIG_FILE
     
+    formatter.print_header("Initialize Configuration")
+
     if config_path.exists() and not force:
-        click.echo(f"Configuration file already exists at {config_path}")
-        click.echo("Use --force to overwrite, or edit it manually.")
-        sys.exit(1)
-    
+        abort_with_error(
+            "Configuration file already exists",
+            f"Path: {config_path}\nUse --force to overwrite, or edit it manually."
+        )
+
     # Create config directory
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Write template
     with open(config_path, 'w') as f:
         f.write(DEFAULT_CONFIG_TEMPLATE)
-    
-    click.echo(f"✅ Created configuration file at {config_path}")
-    click.echo("\n📝 Edit the file to add your API credentials:")
-    click.echo(f"   {config_path}")
-    click.echo("\nOr run: evogitctl config setup")
+
+    formatter.print_success_panel(
+        f"Created configuration file at [bold]{config_path}[/bold]",
+        title="Config Initialized"
+    )
+    formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
 
 
 @config_group.command(name='env-template')
@@ -297,16 +337,21 @@ def env_template():
     """Generate .env template file."""
     env_path = Path.cwd() / '.env.example'
     
+    formatter.print_header("Generate .env Template")
+
     with open(env_path, 'w') as f:
         f.write(ENV_TEMPLATE)
-    
-    click.echo(f"✅ Created .env.example at {env_path}")
-    click.echo("\n📝 Copy to .env and fill in your values:")
-    click.echo("   cp .env.example .env")
+
+    formatter.print_success_panel(
+        f"Created .env.example at [bold]{env_path}[/bold]",
+        title="Environment Template"
+    )
+    formatter.print_info("Copy to .env and fill in your values: cp .env.example .env")
 
 
 @config_group.command(name='path')
 def config_path():
     """Show configuration file path."""
-    click.echo(ConfigManager.DEFAULT_CONFIG_FILE)
+    formatter.print_header("Configuration Path")
+    formatter.print_info(str(ConfigManager.DEFAULT_CONFIG_FILE))
 
