@@ -1,17 +1,18 @@
-
 // Prevents additional console window on Windows in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
+
+mod commands;
 
 // ============================================================================
 // Data Structures (matching Python state schema)
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct GlobalState {
+pub(crate) struct GlobalState {
     version: String,
     last_updated: String,
     active_repo: Option<String>,
@@ -22,7 +23,7 @@ struct GlobalState {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct RepositoryState {
+pub(crate) struct RepositoryState {
     repo_id: String,
     name: String,
     path: String,
@@ -35,7 +36,7 @@ struct RepositoryState {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct WorkpadState {
+pub(crate) struct WorkpadState {
     workpad_id: String,
     repo_id: String,
     title: String,
@@ -53,7 +54,7 @@ struct WorkpadState {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct TestRun {
+pub(crate) struct TestRun {
     run_id: String,
     workpad_id: Option<String>,
     target: String,
@@ -68,7 +69,7 @@ struct TestRun {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct AIOperation {
+pub(crate) struct AIOperation {
     operation_id: String,
     workpad_id: Option<String>,
     operation_type: String,
@@ -84,7 +85,7 @@ struct AIOperation {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct CommitNode {
+pub(crate) struct CommitNode {
     sha: String,
     short_sha: String,
     message: String,
@@ -98,7 +99,7 @@ struct CommitNode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct FileNode {
+pub(crate) struct FileNode {
     name: String,
     path: String,
     is_directory: bool,
@@ -106,7 +107,7 @@ struct FileNode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct Settings {
+pub(crate) struct Settings {
     theme: String,
     font_size: i32,
     auto_save: bool,
@@ -114,16 +115,33 @@ struct Settings {
     enable_ai: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct PromotionRecord {
+    record_id: String,
+    repo_id: String,
+    workpad_id: String,
+    decision: String,
+    can_promote: bool,
+    auto_promote_requested: bool,
+    promoted: bool,
+    commit_hash: Option<String>,
+    message: String,
+    test_run_id: Option<String>,
+    ci_status: Option<String>,
+    ci_message: Option<String>,
+    created_at: String,
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-fn get_state_dir() -> PathBuf {
+pub(crate) fn get_state_dir() -> PathBuf {
     let home = dirs::home_dir().expect("Could not find home directory");
     home.join(".sologit").join("state")
 }
 
-fn get_repos_dir() -> PathBuf {
+pub(crate) fn get_repos_dir() -> PathBuf {
     let home = dirs::home_dir().expect("Could not find home directory");
     home.join(".sologit").join("data").join("repos")
 }
@@ -135,7 +153,7 @@ fn get_repos_dir() -> PathBuf {
 #[tauri::command]
 fn read_global_state() -> Result<GlobalState, String> {
     let state_path = get_state_dir().join("global.json");
-    
+
     if !state_path.exists() {
         // Return default state if file doesn't exist
         return Ok(GlobalState {
@@ -148,39 +166,38 @@ fn read_global_state() -> Result<GlobalState, String> {
             total_cost_usd: 0.0,
         });
     }
-    
+
     let contents = fs::read_to_string(state_path)
         .map_err(|e| format!("Failed to read global state: {}", e))?;
-    
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse global state: {}", e))
+
+    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse global state: {}", e))
 }
 
 #[tauri::command]
 fn list_repositories() -> Result<Vec<RepositoryState>, String> {
     let repos_dir = get_state_dir().join("repositories");
-    
+
     if !repos_dir.exists() {
         return Ok(Vec::new());
     }
-    
+
     let mut repos = Vec::new();
-    
+
     for entry in fs::read_dir(repos_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             let contents = fs::read_to_string(&path)
                 .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-            
+
             let repo: RepositoryState = serde_json::from_str(&contents)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
-            
+
             repos.push(repo);
         }
     }
-    
+
     // Sort by created_at descending
     repos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(repos)
@@ -188,47 +205,48 @@ fn list_repositories() -> Result<Vec<RepositoryState>, String> {
 
 #[tauri::command]
 fn read_repository(repo_id: String) -> Result<RepositoryState, String> {
-    let repo_path = get_state_dir().join("repositories").join(format!("{}.json", repo_id));
-    
+    let repo_path = get_state_dir()
+        .join("repositories")
+        .join(format!("{}.json", repo_id));
+
     if !repo_path.exists() {
         return Err(format!("Repository not found: {}", repo_id));
     }
-    
-    let contents = fs::read_to_string(repo_path)
-        .map_err(|e| format!("Failed to read repository: {}", e))?;
-    
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse repository: {}", e))
+
+    let contents =
+        fs::read_to_string(repo_path).map_err(|e| format!("Failed to read repository: {}", e))?;
+
+    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse repository: {}", e))
 }
 
 #[tauri::command]
 fn list_workpads(repo_id: Option<String>) -> Result<Vec<WorkpadState>, String> {
     let workpads_dir = get_state_dir().join("workpads");
-    
+
     if !workpads_dir.exists() {
         return Ok(Vec::new());
     }
-    
+
     let mut workpads = Vec::new();
-    
+
     for entry in fs::read_dir(workpads_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             let contents = fs::read_to_string(&path)
                 .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-            
+
             let workpad: WorkpadState = serde_json::from_str(&contents)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
-            
+
             // Filter by repo_id if provided
             if repo_id.is_none() || repo_id.as_ref() == Some(&workpad.repo_id) {
                 workpads.push(workpad);
             }
         }
     }
-    
+
     // Sort by created_at descending
     workpads.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(workpads)
@@ -236,36 +254,39 @@ fn list_workpads(repo_id: Option<String>) -> Result<Vec<WorkpadState>, String> {
 
 #[tauri::command]
 fn read_workpad(workpad_id: String) -> Result<WorkpadState, String> {
-    let workpad_path = get_state_dir().join("workpads").join(format!("{}.json", workpad_id));
-    
+    let workpad_path = get_state_dir()
+        .join("workpads")
+        .join(format!("{}.json", workpad_id));
+
     if !workpad_path.exists() {
         return Err(format!("Workpad not found: {}", workpad_id));
     }
-    
-    let contents = fs::read_to_string(workpad_path)
-        .map_err(|e| format!("Failed to read workpad: {}", e))?;
-    
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse workpad: {}", e))
+
+    let contents =
+        fs::read_to_string(workpad_path).map_err(|e| format!("Failed to read workpad: {}", e))?;
+
+    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse workpad: {}", e))
 }
 
 #[tauri::command]
 fn list_commits(repo_id: String, limit: Option<i32>) -> Result<Vec<CommitNode>, String> {
-    let commits_path = get_state_dir().join("commits").join(format!("{}.json", repo_id));
-    
+    let commits_path = get_state_dir()
+        .join("commits")
+        .join(format!("{}.json", repo_id));
+
     if !commits_path.exists() {
         return Ok(Vec::new());
     }
-    
-    let contents = fs::read_to_string(commits_path)
-        .map_err(|e| format!("Failed to read commits: {}", e))?;
-    
-    let data: serde_json::Value = serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse commits: {}", e))?;
-    
-    let commits: Vec<CommitNode> = serde_json::from_value(data["commits"].clone())
-        .unwrap_or_default();
-    
+
+    let contents =
+        fs::read_to_string(commits_path).map_err(|e| format!("Failed to read commits: {}", e))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(&contents).map_err(|e| format!("Failed to parse commits: {}", e))?;
+
+    let commits: Vec<CommitNode> =
+        serde_json::from_value(data["commits"].clone()).unwrap_or_default();
+
     let limit = limit.unwrap_or(100) as usize;
     Ok(commits.into_iter().take(limit).collect())
 }
@@ -273,31 +294,31 @@ fn list_commits(repo_id: String, limit: Option<i32>) -> Result<Vec<CommitNode>, 
 #[tauri::command]
 fn list_test_runs(workpad_id: Option<String>) -> Result<Vec<TestRun>, String> {
     let tests_dir = get_state_dir().join("test_runs");
-    
+
     if !tests_dir.exists() {
         return Ok(Vec::new());
     }
-    
+
     let mut test_runs = Vec::new();
-    
+
     for entry in fs::read_dir(tests_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             let contents = fs::read_to_string(&path)
                 .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-            
+
             let test_run: TestRun = serde_json::from_str(&contents)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
-            
+
             // Filter by workpad_id if provided
             if workpad_id.is_none() || test_run.workpad_id.as_ref() == workpad_id.as_ref() {
                 test_runs.push(test_run);
             }
         }
     }
-    
+
     // Sort by started_at descending
     test_runs.sort_by(|a, b| b.started_at.cmp(&a.started_at));
     Ok(test_runs)
@@ -305,47 +326,48 @@ fn list_test_runs(workpad_id: Option<String>) -> Result<Vec<TestRun>, String> {
 
 #[tauri::command]
 fn read_test_run(run_id: String) -> Result<TestRun, String> {
-    let test_path = get_state_dir().join("test_runs").join(format!("{}.json", run_id));
-    
+    let test_path = get_state_dir()
+        .join("test_runs")
+        .join(format!("{}.json", run_id));
+
     if !test_path.exists() {
         return Err(format!("Test run not found: {}", run_id));
     }
-    
-    let contents = fs::read_to_string(test_path)
-        .map_err(|e| format!("Failed to read test run: {}", e))?;
-    
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse test run: {}", e))
+
+    let contents =
+        fs::read_to_string(test_path).map_err(|e| format!("Failed to read test run: {}", e))?;
+
+    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse test run: {}", e))
 }
 
 #[tauri::command]
 fn list_ai_operations(workpad_id: Option<String>) -> Result<Vec<AIOperation>, String> {
     let ai_ops_dir = get_state_dir().join("ai_operations");
-    
+
     if !ai_ops_dir.exists() {
         return Ok(Vec::new());
     }
-    
+
     let mut operations = Vec::new();
-    
+
     for entry in fs::read_dir(ai_ops_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             let contents = fs::read_to_string(&path)
                 .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-            
+
             let operation: AIOperation = serde_json::from_str(&contents)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
-            
+
             // Filter by workpad_id if provided
             if workpad_id.is_none() || operation.workpad_id.as_ref() == workpad_id.as_ref() {
                 operations.push(operation);
             }
         }
     }
-    
+
     // Sort by started_at descending
     operations.sort_by(|a, b| b.started_at.cmp(&a.started_at));
     Ok(operations)
@@ -353,17 +375,18 @@ fn list_ai_operations(workpad_id: Option<String>) -> Result<Vec<AIOperation>, St
 
 #[tauri::command]
 fn read_ai_operation(operation_id: String) -> Result<AIOperation, String> {
-    let operation_path = get_state_dir().join("ai_operations").join(format!("{}.json", operation_id));
-    
+    let operation_path = get_state_dir()
+        .join("ai_operations")
+        .join(format!("{}.json", operation_id));
+
     if !operation_path.exists() {
         return Err(format!("AI operation not found: {}", operation_id));
     }
-    
+
     let contents = fs::read_to_string(operation_path)
         .map_err(|e| format!("Failed to read AI operation: {}", e))?;
-    
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse AI operation: {}", e))
+
+    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse AI operation: {}", e))
 }
 
 // ============================================================================
@@ -373,37 +396,37 @@ fn read_ai_operation(operation_id: String) -> Result<AIOperation, String> {
 #[tauri::command]
 fn read_file(repo_id: String, file_path: String) -> Result<String, String> {
     let full_path = get_repos_dir().join(&repo_id).join(&file_path);
-    
+
     if !full_path.exists() {
         return Err(format!("File not found: {}", file_path));
     }
-    
-    fs::read_to_string(full_path)
-        .map_err(|e| format!("Failed to read file: {}", e))
+
+    fs::read_to_string(full_path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
 fn list_repository_files(repo_id: String) -> Result<Vec<String>, String> {
     let repo_dir = get_repos_dir().join(&repo_id);
-    
+
     if !repo_dir.exists() {
         return Err(format!("Repository directory not found: {}", repo_id));
     }
-    
+
     fn collect_files(dir: &std::path::Path, base: &std::path::Path) -> Result<Vec<String>, String> {
         let mut files = Vec::new();
-        
+
         for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
             let path = entry.path();
-            
+
             // Skip .git directory
             if path.file_name().and_then(|n| n.to_str()) == Some(".git") {
                 continue;
             }
-            
+
             if path.is_file() {
-                let rel_path = path.strip_prefix(base)
+                let rel_path = path
+                    .strip_prefix(base)
                     .map_err(|e| e.to_string())?
                     .to_string_lossy()
                     .to_string();
@@ -412,10 +435,10 @@ fn list_repository_files(repo_id: String) -> Result<Vec<String>, String> {
                 files.extend(collect_files(&path, base)?);
             }
         }
-        
+
         Ok(files)
     }
-    
+
     let mut files = collect_files(&repo_dir, &repo_dir)?;
     files.sort();
     Ok(files)
@@ -424,36 +447,37 @@ fn list_repository_files(repo_id: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 fn get_file_tree(repo_id: String) -> Result<Vec<FileNode>, String> {
     let repo_dir = get_repos_dir().join(&repo_id);
-    
+
     if !repo_dir.exists() {
         return Err(format!("Repository directory not found: {}", repo_id));
     }
-    
+
     fn build_tree(dir: &std::path::Path, base: &std::path::Path) -> Result<Vec<FileNode>, String> {
         let mut nodes = Vec::new();
-        
+
         for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
             let path = entry.path();
-            
+
             // Skip .git directory and hidden files
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if file_name == ".git" || file_name.starts_with('.') {
                 continue;
             }
-            
-            let rel_path = path.strip_prefix(base)
+
+            let rel_path = path
+                .strip_prefix(base)
                 .map_err(|e| e.to_string())?
                 .to_string_lossy()
                 .to_string();
-            
+
             let is_dir = path.is_dir();
             let children = if is_dir {
                 Some(build_tree(&path, base)?)
             } else {
                 None
             };
-            
+
             nodes.push(FileNode {
                 name: file_name.to_string(),
                 path: rel_path,
@@ -461,43 +485,41 @@ fn get_file_tree(repo_id: String) -> Result<Vec<FileNode>, String> {
                 children,
             });
         }
-        
+
         // Sort: directories first, then alphabetically
-        nodes.sort_by(|a, b| {
-            match (a.is_directory, b.is_directory) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.name.cmp(&b.name),
-            }
+        nodes.sort_by(|a, b| match (a.is_directory, b.is_directory) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
         });
-        
+
         Ok(nodes)
     }
-    
+
     build_tree(&repo_dir, &repo_dir)
 }
 
 #[tauri::command]
 fn get_directory_contents(repo_id: String, dir_path: String) -> Result<Vec<FileNode>, String> {
     let full_path = get_repos_dir().join(&repo_id).join(&dir_path);
-    
+
     if !full_path.exists() || !full_path.is_dir() {
         return Err(format!("Directory not found: {}", dir_path));
     }
-    
+
     let mut nodes = Vec::new();
-    
+
     for entry in fs::read_dir(&full_path).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if file_name.starts_with('.') {
             continue;
         }
-        
+
         let is_dir = path.is_dir();
-        
+
         nodes.push(FileNode {
             name: file_name.to_string(),
             path: format!("{}/{}", dir_path, file_name),
@@ -505,20 +527,18 @@ fn get_directory_contents(repo_id: String, dir_path: String) -> Result<Vec<FileN
             children: None,
         });
     }
-    
+
     // Sort: directories first, then alphabetically
-    nodes.sort_by(|a, b| {
-        match (a.is_directory, b.is_directory) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    nodes.sort_by(|a, b| match (a.is_directory, b.is_directory) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
-    
+
     Ok(nodes)
 }
 
-fn get_settings_path() -> PathBuf {
+pub(crate) fn get_settings_path() -> PathBuf {
     let home = dirs::home_dir().expect("Could not find home directory");
     home.join(".sologit").join("gui_settings.json")
 }
@@ -526,7 +546,7 @@ fn get_settings_path() -> PathBuf {
 #[tauri::command]
 fn get_settings() -> Result<Settings, String> {
     let settings_path = get_settings_path();
-    
+
     if !settings_path.exists() {
         // Return default settings
         return Ok(Settings {
@@ -537,37 +557,40 @@ fn get_settings() -> Result<Settings, String> {
             enable_ai: true,
         });
     }
-    
-    let contents = fs::read_to_string(settings_path)
-        .map_err(|e| format!("Failed to read settings: {}", e))?;
-    
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse settings: {}", e))
+
+    let contents =
+        fs::read_to_string(settings_path).map_err(|e| format!("Failed to read settings: {}", e))?;
+
+    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse settings: {}", e))
 }
 
 #[tauri::command]
 fn save_settings(settings: Settings) -> Result<(), String> {
     let settings_path = get_settings_path();
-    
+
     // Create directory if it doesn't exist
     if let Some(parent) = settings_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create settings directory: {}", e))?;
     }
-    
+
     let contents = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-    
-    fs::write(settings_path, contents)
-        .map_err(|e| format!("Failed to write settings: {}", e))
+
+    fs::write(settings_path, contents).map_err(|e| format!("Failed to write settings: {}", e))
 }
 
 #[tauri::command]
-fn ai_chat(repo_id: String, workpad_id: Option<String>, prompt: String, model: String) -> Result<serde_json::Value, String> {
+fn ai_chat(
+    repo_id: String,
+    workpad_id: Option<String>,
+    prompt: String,
+    model: String,
+) -> Result<serde_json::Value, String> {
     // This is a stub that returns a simulated response
     // In production, this would call the actual Solo Git AI orchestrator
     // For now, we'll return a placeholder response
-    
+
     Ok(serde_json::json!({
         "content": "AI integration is being implemented. This feature will connect to the Solo Git AI orchestrator to provide planning, code generation, and debugging assistance.",
         "model": model,
@@ -605,6 +628,17 @@ fn main() {
             save_settings,
             // AI operations
             ai_chat,
+            // Write operations
+            commands::create_repository,
+            commands::delete_repository,
+            commands::create_workpad,
+            commands::apply_patch,
+            commands::run_tests,
+            commands::promote_workpad,
+            commands::delete_workpad,
+            commands::rollback_workpad,
+            commands::trigger_ai_operation,
+            commands::update_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

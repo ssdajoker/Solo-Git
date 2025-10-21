@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -42,15 +42,7 @@ function App() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
 
-  useEffect(() => {
-    loadState()
-    
-    // Refresh state every 3 seconds
-    const interval = setInterval(loadState, 3000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const loadState = async () => {
+  const loadState = useCallback(async () => {
     try {
       const state = await invoke<GlobalState>('read_global_state')
       setGlobalState(state)
@@ -60,7 +52,17 @@ function App() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadState()
+
+    // Refresh state every 3 seconds
+    const interval = setInterval(() => {
+      void loadState()
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [loadState])
 
   const addNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
     const notification: Notification = {
@@ -74,6 +76,169 @@ function App() {
 
   const dismissNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id))
+  }
+
+  const ensureActiveRepo = () => {
+    if (!globalState?.active_repo) {
+      addNotification('No active repository selected', 'warning')
+      return null
+    }
+    return globalState.active_repo
+  }
+
+  const ensureActiveWorkpad = () => {
+    if (!globalState?.active_workpad) {
+      addNotification('No active workpad selected', 'warning')
+      return null
+    }
+    return globalState.active_workpad
+  }
+
+  const createRepository = async () => {
+    const name = window.prompt('Repository name', 'new-repository')
+    if (!name || !name.trim()) {
+      return
+    }
+
+    const path = window.prompt('Optional repository path (leave blank for default)', '')
+
+    try {
+      addNotification('Creating repository...', 'info')
+      await invoke('create_repository', {
+        name: name.trim(),
+        path: path && path.trim() ? path.trim() : null
+      })
+      addNotification('Repository created', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to create repository: ${e}`, 'error')
+    }
+  }
+
+  const deleteRepository = async () => {
+    const repoId = ensureActiveRepo()
+    if (!repoId) return
+
+    if (!window.confirm('Delete the active repository and its data?')) {
+      return
+    }
+
+    try {
+      addNotification('Deleting repository...', 'info')
+      await invoke('delete_repository', { repoId })
+      addNotification('Repository deleted', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to delete repository: ${e}`, 'error')
+    }
+  }
+
+  const createWorkpad = async () => {
+    const repoId = ensureActiveRepo()
+    if (!repoId) return
+
+    const title = window.prompt('Workpad title', 'New workpad')
+    if (!title || !title.trim()) return
+
+    try {
+      addNotification('Creating workpad...', 'info')
+      await invoke('create_workpad', { repoId, title: title.trim() })
+      addNotification('Workpad created', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to create workpad: ${e}`, 'error')
+    }
+  }
+
+  const runTestsOnWorkpad = useCallback(async (workpadId: string, target: string) => {
+    await invoke('run_tests', { workpadId, target })
+    await loadState()
+  }, [loadState])
+
+  const runTestsForActive = async (target?: string) => {
+    const workpadId = ensureActiveWorkpad()
+    if (!workpadId) return
+
+    const actualTarget = target ?? window.prompt('Test target (leave blank for default)', 'default') || 'default'
+
+    try {
+      addNotification('Running tests...', 'info')
+      await runTestsOnWorkpad(workpadId, actualTarget)
+      addNotification('Tests completed', 'success')
+    } catch (e) {
+      addNotification(`Failed to run tests: ${e}`, 'error')
+    }
+  }
+
+  const promoteActiveWorkpad = async () => {
+    const workpadId = ensureActiveWorkpad()
+    if (!workpadId) return
+
+    if (!window.confirm('Promote the active workpad?')) return
+
+    try {
+      addNotification('Promoting workpad...', 'info')
+      await invoke('promote_workpad', { workpadId })
+      addNotification('Workpad promoted', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to promote workpad: ${e}`, 'error')
+    }
+  }
+
+  const applyPatchToActive = async () => {
+    const workpadId = ensureActiveWorkpad()
+    if (!workpadId) return
+
+    const message = window.prompt('Patch summary message', 'Apply patch from GUI')
+    if (message === null) return
+
+    const diff = window.prompt('Paste unified diff to apply', 'diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -0,0 +1,2 @@\n+example line\n')
+    if (diff === null || !diff.trim()) {
+      addNotification('Patch diff is required', 'warning')
+      return
+    }
+
+    try {
+      addNotification('Applying patch...', 'info')
+      await invoke('apply_patch', { workpadId, message: message.trim(), diff })
+      addNotification('Patch applied', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to apply patch: ${e}`, 'error')
+    }
+  }
+
+  const rollbackActiveWorkpad = async () => {
+    const workpadId = ensureActiveWorkpad()
+    if (!workpadId) return
+
+    const reason = window.prompt('Rollback reason (optional)', 'Reset from GUI')
+
+    try {
+      addNotification('Rolling back workpad...', 'info')
+      await invoke('rollback_workpad', { workpadId, reason: reason ?? undefined })
+      addNotification('Workpad rolled back', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to rollback workpad: ${e}`, 'error')
+    }
+  }
+
+  const deleteActiveWorkpad = async () => {
+    const workpadId = ensureActiveWorkpad()
+    if (!workpadId) return
+
+    if (!window.confirm('Delete the active workpad and its state?')) return
+
+    try {
+      addNotification('Deleting workpad...', 'info')
+      await invoke('delete_workpad', { workpadId })
+      addNotification('Workpad deleted', 'success')
+      await loadState()
+    } catch (e) {
+      addNotification(`Failed to delete workpad: ${e}`, 'error')
+    }
   }
 
   // Define commands for Command Palette
@@ -136,15 +301,71 @@ function App() {
       description: 'Run tests for active workpad',
       category: 'Testing',
       shortcut: 'Cmd+T',
-      action: async () => {
-        if (globalState?.active_workpad) {
-          addNotification('Running tests...', 'info')
-          // Note: Test execution is handled by the CLI. Use `evogitctl test run` command.
-          // GUI test execution requires integration with the backend test orchestrator.
-          addNotification('Use CLI: evogitctl test run --pad ' + globalState.active_workpad, 'info')
-        } else {
-          addNotification('No active workpad', 'warning')
-        }
+      action: () => {
+        void runTestsForActive('default')
+      },
+    },
+    {
+      id: 'create-workpad',
+      label: 'Create Workpad',
+      description: 'Create a new workpad in the active repository',
+      category: 'Workpads',
+      action: () => {
+        void createWorkpad()
+      },
+    },
+    {
+      id: 'promote-workpad',
+      label: 'Promote Workpad',
+      description: 'Promote the active workpad to trunk',
+      category: 'Workpads',
+      action: () => {
+        void promoteActiveWorkpad()
+      },
+    },
+    {
+      id: 'apply-patch-workpad',
+      label: 'Apply Patch to Workpad',
+      description: 'Apply a diff patch to the active workpad',
+      category: 'Workpads',
+      action: () => {
+        void applyPatchToActive()
+      },
+    },
+    {
+      id: 'rollback-workpad',
+      label: 'Rollback Workpad',
+      description: 'Rollback the active workpad to its base commit',
+      category: 'Workpads',
+      action: () => {
+        void rollbackActiveWorkpad()
+      },
+    },
+    {
+      id: 'delete-workpad',
+      label: 'Delete Active Workpad',
+      description: 'Delete the active workpad from state',
+      category: 'Workpads',
+      action: () => {
+        void deleteActiveWorkpad()
+      },
+    },
+    {
+      id: 'create-repository',
+      label: 'Create Repository',
+      description: 'Initialize a new repository in state',
+      category: 'Repositories',
+      action: () => {
+        void createRepository()
+      },
+    },
+    {
+      id: 'delete-repository',
+      label: 'Delete Active Repository',
+      description: 'Remove the active repository from state',
+      category: 'Repositories',
+      action: () => {
+        void deleteRepository()
       },
     },
   ]
@@ -195,9 +416,7 @@ function App() {
       key: 't',
       cmd: true,
       action: () => {
-        if (globalState?.active_workpad) {
-          addNotification('Running tests...', 'info')
-        }
+        void runTestsForActive('default')
       },
       description: 'Run Tests',
     },
@@ -249,19 +468,33 @@ function App() {
           <h1>Heaven</h1>
           <div className="header-subtitle" aria-label="Application subtitle">Solo Git Interface</div>
           <div className="header-actions">
-            <button 
-              className="icon-btn" 
+            <button
+              className="icon-btn"
               onClick={() => setShowShortcutsHelp(true)}
               title="Keyboard Shortcuts (?)"
               aria-label="Show keyboard shortcuts">
               ⌨️
             </button>
-            <button 
-              className="icon-btn" 
+            <button
+              className="icon-btn"
               onClick={() => setShowSettings(true)}
               title="Settings (Cmd+,)"
               aria-label="Open settings">
               ⚙️
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => { void createRepository() }}
+              title="Create Repository"
+              aria-label="Create repository">
+              🆕
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => { void deleteRepository() }}
+              title="Delete Repository"
+              aria-label="Delete repository">
+              🗑️
             </button>
           </div>
         </header>
@@ -271,13 +504,18 @@ function App() {
           {/* Left Sidebar */}
           {showLeftSidebar && (
             <aside className="sidebar-left">
-              <FileBrowser 
-                repoId={globalState?.active_repo ?? null} 
+              <FileBrowser
+                repoId={globalState?.active_repo ?? null}
                 onFileSelect={setSelectedFile}
                 selectedFile={selectedFile}
               />
               <CommitGraph repoId={globalState?.active_repo ?? null} />
-              <WorkpadList repoId={globalState?.active_repo ?? null} />
+              <WorkpadList
+                repoId={globalState?.active_repo ?? null}
+                activeWorkpadId={globalState?.active_workpad ?? null}
+                notify={addNotification}
+                onStateUpdated={() => { void loadState() }}
+              />
             </aside>
           )}
 
@@ -290,7 +528,12 @@ function App() {
               />
             </div>
             <div className="center-bottom">
-              <TestDashboard workpadId={globalState?.active_workpad ?? null} />
+              <TestDashboard
+                workpadId={globalState?.active_workpad ?? null}
+                notify={addNotification}
+                onStateUpdated={() => { void loadState() }}
+                onRunTests={runTestsOnWorkpad}
+              />
             </div>
           </main>
 
