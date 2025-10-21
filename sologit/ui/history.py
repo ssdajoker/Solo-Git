@@ -16,6 +16,10 @@ from sologit.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+CLI_HISTORY_PATH = Path.home() / ".sologit" / "history.txt"
+CLI_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+
 class CommandType(Enum):
     """Types of commands that can be undone."""
     WORKPAD_CREATE = "workpad_create"
@@ -26,6 +30,7 @@ class CommandType(Enum):
     REVERT = "revert"
     PATCH_APPLY = "patch_apply"
     CONFIG_CHANGE = "config_change"
+    CLI_COMMAND = "cli_command"
 
 
 @dataclass
@@ -86,9 +91,13 @@ class CommandHistory:
         """
         if history_file is None:
             history_file = Path.home() / ".sologit" / "history.json"
-        
+
         self.history_file = Path(history_file)
         self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        self.cli_history_file = CLI_HISTORY_PATH
+        self.cli_history_file.parent.mkdir(parents=True, exist_ok=True)
+        if not self.cli_history_file.exists():
+            self.cli_history_file.touch()
         
         self.max_size = max_size
         self.entries: List[CommandEntry] = []
@@ -157,7 +166,27 @@ class CommandHistory:
         self.save()
         
         logger.debug(f"Added command to history: {description}")
-        
+
+        return command_id
+
+    def record_cli_command(
+        self,
+        command: str,
+        arguments: Optional[Dict[str, Any]] = None,
+        record_text: bool = True
+    ) -> str:
+        """Record a CLI command execution in history."""
+        command_id = self.add_command(
+            command_type=CommandType.CLI_COMMAND,
+            description=command,
+            arguments=arguments or {},
+            result=None,
+            undoable=False,
+        )
+
+        if record_text:
+            self._append_cli_history(command)
+
         return command_id
     
     def can_undo(self) -> bool:
@@ -236,6 +265,15 @@ class CommandHistory:
             # Revert index
             self.current_index -= 1
             raise
+
+    def update_command_result(self, command_id: str, result: Dict[str, Any]) -> None:
+        """Update stored result for a command."""
+        entry = self.get_entry(command_id)
+        if not entry:
+            return
+
+        entry.result = result
+        self.save()
     
     def register_undo_handler(
         self,
@@ -290,12 +328,12 @@ class CommandHistory:
                 'entries': [entry.to_dict() for entry in self.entries],
                 'current_index': self.current_index
             }
-            
-            with open(self.history_file, 'w') as f:
+
+            with open(self.history_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
-            
+
             logger.debug(f"Saved command history to {self.history_file}")
-            
+
         except Exception as e:
             logger.error(f"Failed to save history: {e}", exc_info=True)
     
@@ -306,7 +344,7 @@ class CommandHistory:
             return
         
         try:
-            with open(self.history_file, 'r') as f:
+            with open(self.history_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             self.entries = [
@@ -378,6 +416,36 @@ class CommandHistory:
             'can_redo': self.can_redo()
         }
 
+    def get_recent_cli_history(self, limit: Optional[int] = None) -> List[str]:
+        """Return plain CLI history strings from the CLI history file."""
+        lines = self._load_cli_history()
+        if limit is None or limit >= len(lines):
+            return lines
+        return lines[-limit:]
+
+    def _append_cli_history(self, command: str) -> None:
+        """Append a CLI command string to the persistent CLI history file."""
+        if not command:
+            return
+
+        try:
+            with self.cli_history_file.open('a', encoding='utf-8') as f:
+                f.write(command + "\n")
+        except Exception as e:
+            logger.error(f"Failed to append CLI history: {e}", exc_info=True)
+
+    def _load_cli_history(self) -> List[str]:
+        """Load CLI history strings from disk."""
+        if not self.cli_history_file.exists():
+            return []
+
+        try:
+            with self.cli_history_file.open('r', encoding='utf-8') as f:
+                return [line.rstrip('\n') for line in f if line.strip()]
+        except Exception as e:
+            logger.error(f"Failed to load CLI history: {e}", exc_info=True)
+            return []
+
 
 # Global command history instance
 _command_history: Optional[CommandHistory] = None
@@ -398,6 +466,17 @@ def reset_command_history() -> None:
 
 
 # Convenience functions
+
+
+def append_cli_history(command: str) -> None:
+    """Append a command string directly to the CLI history file."""
+    history = get_command_history()
+    history._append_cli_history(command)
+
+
+def get_cli_history_path() -> Path:
+    """Return the path used for storing CLI history strings."""
+    return CLI_HISTORY_PATH
 
 def add_command(
     command_type: CommandType,
