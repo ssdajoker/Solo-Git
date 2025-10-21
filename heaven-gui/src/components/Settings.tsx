@@ -60,6 +60,15 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
     try {
       setLoading(true)
       await invoke('save_settings', { settings })
+      await invoke('update_config', {
+        updates: {
+          default_model: settings.default_model,
+          notifications_enabled: settings.notifications_enabled,
+          sound_enabled: settings.sound_enabled,
+          auto_save: settings.auto_save,
+          theme: settings.theme,
+        },
+      })
       onClose()
     } catch (e) {
       console.error('Failed to save settings:', e)

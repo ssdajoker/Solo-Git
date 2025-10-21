@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/tauri'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './TestDashboard.css'
 
+type NotificationType = 'success' | 'error' | 'warning' | 'info'
+
 interface TestRun {
   test_run_id: string
   workpad_id: string
@@ -17,12 +19,16 @@ interface TestRun {
 
 interface TestDashboardProps {
   workpadId: string | null | undefined
+  notify?: (message: string, type?: NotificationType) => void
+  onStateUpdated?: () => void
+  onRunTests?: (workpadId: string, target: string) => Promise<void>
 }
 
-export default function TestDashboard({ workpadId }: TestDashboardProps) {
+export default function TestDashboard({ workpadId, notify, onStateUpdated, onRunTests }: TestDashboardProps) {
   const [testRuns, setTestRuns] = useState<TestRun[]>([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'trends' | 'duration' | 'coverage'>('trends')
+  const [runningTests, setRunningTests] = useState(false)
 
   useEffect(() => {
     if (workpadId) {
@@ -43,6 +49,35 @@ export default function TestDashboard({ workpadId }: TestDashboardProps) {
       console.error('Failed to load test runs:', e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRunTests = async () => {
+    if (!workpadId || runningTests) {
+      if (!workpadId) {
+        notify?.('No active workpad', 'warning')
+      }
+      return
+    }
+
+    const target = window.prompt('Test target (leave blank for default)', 'default') || 'default'
+
+    try {
+      setRunningTests(true)
+      notify?.('Running tests...', 'info')
+      if (onRunTests) {
+        await onRunTests(workpadId, target)
+      } else {
+        await invoke('run_tests', { workpadId, target })
+      }
+      notify?.('Tests completed', 'success')
+      await loadTestRuns()
+      onStateUpdated?.()
+    } catch (e) {
+      console.error('Failed to run tests:', e)
+      notify?.(`Failed to run tests: ${e}`, 'error')
+    } finally {
+      setRunningTests(false)
     }
   }
 
@@ -76,7 +111,16 @@ export default function TestDashboard({ workpadId }: TestDashboardProps) {
       <div className="dashboard-header">
         <h2>Test Dashboard</h2>
         {workpadId && <span className="workpad-badge">{workpadId.slice(0, 8)}</span>}
-        {loading && <span className="loading-indicator">⟳</span>}
+        <div className="dashboard-header-actions">
+          <button
+            className="run-tests-btn"
+            onClick={handleRunTests}
+            disabled={!workpadId || runningTests}
+          >
+            {runningTests ? 'Running…' : 'Run Tests'}
+          </button>
+          {(loading || runningTests) && <span className="loading-indicator">⟳</span>}
+        </div>
       </div>
       
       <div className="dashboard-content">

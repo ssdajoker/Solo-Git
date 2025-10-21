@@ -30,8 +30,36 @@
   font-family: 'SF Mono', Consolas, monospace;
 }
 
-.loading-indicator {
+.dashboard-header-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.run-tests-btn {
+  background: #61AFEF;
+  color: #1E1E1E;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.run-tests-btn:hover {
+  background: #4fa8ec;
+}
+
+.run-tests-btn:disabled {
+  background: #3d7fb1;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.loading-indicator {
   color: #61AFEF;
   font-size: 14px;
   animation: spin 1s linear infinite;

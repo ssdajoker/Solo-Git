@@ -13,6 +13,9 @@
   --color-red: #E06C75;
   --color-orange: #D19A66;
   --color-purple: #C678DD;
+
+  /* Motion */
+  --transition-fast: 0.2s ease-in-out;
   
   /* Spacing (8px grid) */
   --spacing-xs: 4px;

@@ -83,6 +83,11 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
     setLoading(true)
     
     try {
+      await invoke('trigger_ai_operation', {
+        workpadId: workpadId ?? '',
+        prompt: input,
+      })
+
       const response = await invoke<any>('ai_chat', {
         repoId,
         workpadId,
