@@ -8,9 +8,10 @@ repository management, workpad operations, testing, and AI pairing.
 
 import click
 import subprocess
+import shlex
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from rich.console import Console
 
@@ -20,6 +21,19 @@ from sologit.config.manager import ConfigManager
 from sologit.cli import commands, config_commands
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
+from sologit.ui.history import (
+    get_command_history,
+    CommandType,
+    get_cli_history_path,
+    append_cli_history,
+)
+
+try:
+    from sologit.ui.autocomplete import create_enhanced_prompt
+    _AUTOCOMPLETE_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    create_enhanced_prompt = None
+    _AUTOCOMPLETE_AVAILABLE = False
 
 logger = get_logger(__name__)
 
@@ -251,7 +265,9 @@ try:
     # Register with different names to avoid conflicts
     cli.add_command(integrated_workpad, name="workpad-integrated")
     cli.add_command(integrated_ai, name="ai")
-    cli.add_command(integrated_history, name="history")
+
+    history_command_name = "history" if "history" not in cli.commands else "heaven-history"
+    cli.add_command(integrated_history, name=history_command_name)
     cli.add_command(integrated_edit, name="edit")
     
     logger.info("Integrated Heaven Interface commands loaded")
@@ -394,27 +410,78 @@ def heaven_legacy():
 def interactive():
     """
     Launch interactive shell with autocomplete.
-    
+
     Provides an enhanced command-line experience with:
     - Command history (persisted across sessions)
     - Fuzzy autocomplete (Tab to complete)
     - Auto-suggest from history
     - Syntax highlighting
-    
+
     Press Ctrl+C to exit.
     """
-    formatter.print_header("Interactive Shell")
-    formatter.print_info("Launching interactive prompt with autocomplete...")
-    try:
-        from sologit.ui.autocomplete import interactive_prompt
-        interactive_prompt()
-    except ImportError as e:
-        abort_with_error(
-            "Interactive shell dependencies not installed",
-            "Install with: pip install prompt-toolkit"
+    exit_code = _run_interactive_shell()
+    if exit_code != 0:
+        raise click.Abort()
+
+
+@cli.command()
+def undo():
+    """Undo the last undoable command."""
+    history = get_command_history()
+    entry = history.undo()
+    if not entry:
+        formatter.print_warning("No undoable commands available.")
+        return
+
+    formatter.print_success(f"Undid: {entry.description}")
+
+
+@cli.command()
+def redo():
+    """Redo the next command if available."""
+    history = get_command_history()
+    entry = history.redo()
+    if not entry:
+        formatter.print_warning("No commands available to redo.")
+        return
+
+    formatter.print_success(f"Redid: {entry.description}")
+
+
+@cli.command(name="history")
+@click.option("--limit", default=10, show_default=True, type=click.IntRange(1, 1000))
+@click.option("--all", "show_all", is_flag=True, help="Include non-CLI commands.")
+def show_history(limit: int, show_all: bool):
+    """Display recent command history."""
+    history = get_command_history()
+
+    entries = history.get_history()
+    if not show_all:
+        entries = [entry for entry in entries if entry.type == CommandType.CLI_COMMAND]
+
+    if not entries:
+        formatter.print_info("No commands recorded yet.")
+        return
+
+    rows = entries[:limit]
+
+    table = formatter.table(headers=["Time", "Type", "Command", "Result"])
+    for entry in rows:
+        timestamp = entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        result = entry.result or {}
+        exit_code = result.get("exit_code")
+        status = "success" if exit_code in (0, None) else f"exit {exit_code}"
+        if result.get("error"):
+            status = f"error: {result['error']}"
+
+        table.add_row(
+            timestamp,
+            entry.type.value,
+            entry.description,
+            status,
         )
-    except Exception as e:
-        abort_with_error("Interactive shell failed", str(e))
+
+    formatter.console.print(table)
 
 
 @cli.command()
@@ -475,16 +542,165 @@ def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
 def main():
     """Entry point for the CLI."""
     try:
-        cli(obj={})
+        if len(sys.argv) == 1 and sys.stdin.isatty():
+            exit_code = _run_interactive_shell()
+        else:
+            exit_code = _execute_cli_command(sys.argv[1:])
     except KeyboardInterrupt:
         formatter.print_warning("Interrupted by user.")
-        sys.exit(130)
+        exit_code = 130
     except Exception as e:
         logger.exception("Unhandled exception")
         formatter.print_error_panel(str(e), title="Unhandled Error")
-        sys.exit(1)
+        exit_code = 1
+
+    sys.exit(exit_code)
+
+def _run_interactive_shell() -> int:
+    """Launch interactive shell with history and autocomplete."""
+    if not _AUTOCOMPLETE_AVAILABLE:
+        abort_with_error(
+            "Interactive shell dependencies not installed",
+            "Install with: pip install prompt-toolkit"
+        )
+
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+    from prompt_toolkit.completion import FuzzyWordCompleter
+    from prompt_toolkit.shortcuts import prompt as toolkit_prompt
+    from prompt_toolkit.document import Document
+
+    formatter.print_header("Interactive Shell")
+    formatter.print_info("Press Ctrl+R for history search, Tab for autocomplete.")
+
+    session = create_enhanced_prompt()
+    cli_history_path = get_cli_history_path()
+    session.history = FileHistory(str(cli_history_path))
+    session.app.default_buffer.history = session.history
+
+    def _load_history_strings() -> List[str]:
+        if not cli_history_path.exists():
+            return []
+        try:
+            with cli_history_path.open('r', encoding='utf-8') as f:
+                return [line.strip() for line in f if line.strip()]
+        except Exception:
+            return []
+
+    bindings = KeyBindings()
+
+    @bindings.add('c-r')
+    def _(event) -> None:
+        items = _load_history_strings()
+        if not items:
+            formatter.print_warning("No history entries yet.")
+            return
+
+        completer = FuzzyWordCompleter(items, ignore_case=True)
+        try:
+            selection = toolkit_prompt(
+                "History search: ",
+                completer=completer,
+                complete_in_thread=True,
+            )
+        except (KeyboardInterrupt, EOFError):
+            return
+        if selection:
+            event.current_buffer.document = Document(
+                selection,
+                cursor_position=len(selection)
+            )
+
+    session.app.key_bindings = merge_key_bindings([session.app.key_bindings, bindings])
+
+    history = get_command_history()
+
+    while True:
+        try:
+            text = session.prompt('evogitctl> ', enable_history_search=True)
+        except KeyboardInterrupt:
+            formatter.print_warning("Interrupted")
+            return 130
+        except EOFError:
+            formatter.print_info("Goodbye!")
+            return 0
+
+        command = text.strip()
+        if not command:
+            continue
+        if command.lower() in {"exit", "quit"}:
+            formatter.print_info("Exiting interactive shell.")
+            return 0
+
+        try:
+            args = shlex.split(command)
+        except ValueError as exc:
+            formatter.print_error_panel(str(exc), title="Invalid command")
+            continue
+
+        entry_id = history.record_cli_command(
+            command,
+            arguments={"argv": args},
+            record_text=False,
+        )
+
+        exit_code = _execute_cli_command(
+            args,
+            record_cli_history=False,
+            command_entry_id=entry_id,
+            command_text=command
+        )
+        if exit_code != 0:
+            formatter.print_warning(f"Command exited with code {exit_code}")
+
+
+def _execute_cli_command(
+    argv: List[str],
+    *,
+    record_cli_history: bool = True,
+    command_entry_id: Optional[str] = None,
+    command_text: Optional[str] = None
+) -> int:
+    """Execute CLI command with history integration."""
+    history = get_command_history()
+
+    command_str = command_text or " ".join(shlex.quote(arg) for arg in argv)
+    entry_id = command_entry_id
+
+    if command_str and entry_id is None:
+        entry_id = history.record_cli_command(
+            command_str,
+            arguments={"argv": argv},
+            record_text=record_cli_history,
+        )
+    elif command_str and record_cli_history and entry_id is not None:
+        append_cli_history(command_str)
+
+    exit_code = 0
+
+    try:
+        cli.main(args=argv, prog_name="evogitctl", standalone_mode=False, obj={})
+    except SystemExit as exc:
+        exit_code = exc.code or 0
+    except Exception as exc:
+        exit_code = 1
+        if entry_id:
+            history.update_command_result(
+                entry_id,
+                {
+                    "exit_code": exit_code,
+                    "error": str(exc),
+                },
+            )
+        raise
+    else:
+        exit_code = 0
+
+    if entry_id:
+        history.update_command_result(entry_id, {"exit_code": exit_code})
+
+    return exit_code
 
 
 if __name__ == "__main__":
     main()
-
