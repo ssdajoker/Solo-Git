@@ -52,6 +52,7 @@ class TestResult:
     duration: float = 0.0
     output: str = ""
     timestamp: datetime = None
+    log_path: Optional[Path] = None
     
     def __post_init__(self):
         if self.timestamp is None:
@@ -231,7 +232,11 @@ class TestSummaryWidget(Static):
         text.append(f"Duration: {self.result.duration:.2f}s", style="cyan")
         text.append(" | ")
         text.append(f"Success: {self.result.success_rate:.1f}%", style="green")
-        
+
+        if self.result.log_path:
+            text.append(" | ")
+            text.append(f"Log: {self.result.log_path.name}", style="magenta")
+
         return text
     
     def update_result(self, result: TestResult) -> None:
@@ -251,6 +256,8 @@ class TestRunner:
         self.repo_path = Path(repo_path)
         self.process: Optional[subprocess.Popen] = None
         self.is_running = False
+        self.log_dir = Path.home() / ".sologit" / "data" / "test_runs"
+        self.log_dir.mkdir(parents=True, exist_ok=True)
     
     async def run_tests(
         self,
@@ -291,35 +298,45 @@ class TestRunner:
                 *cmd,
                 cwd=str(self.repo_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+                stderr=asyncio.subprocess.PIPE,
                 env={**subprocess.os.environ, "PYTEST_CURRENT_TEST": ""}
             )
-            
-            output_lines = []
-            
-            # Stream output
-            async for line in self.process.stdout:
-                if not self.is_running:
-                    break
-                
-                line_str = line.decode('utf-8', errors='replace').rstrip()
-                output_lines.append(line_str)
-                
-                if output_callback:
-                    output_callback(line_str)
-                
-                # Parse test results from output
-                self._parse_test_line(line_str, result)
-                
-                if result_callback:
-                    result_callback(result)
-            
-            # Wait for completion
+
+            stdout_lines: List[str] = []
+            stderr_lines: List[str] = []
+
+            async def stream(stream, buffer: List[str], label: str) -> None:
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    if not self.is_running:
+                        break
+                    line_str = line.decode('utf-8', errors='replace').rstrip()
+                    buffer.append(line_str)
+
+                    display_line = line_str if label == "stdout" else f"[stderr] {line_str}"
+
+                    if output_callback:
+                        output_callback(display_line)
+
+                    self._parse_test_line(line_str, result)
+
+                    if result_callback:
+                        result_callback(result)
+
+            stdout_task = asyncio.create_task(stream(self.process.stdout, stdout_lines, "stdout"))
+            stderr_task = asyncio.create_task(stream(self.process.stderr, stderr_lines, "stderr"))
+
+            await asyncio.wait({stdout_task, stderr_task}, return_when=asyncio.ALL_COMPLETED)
+
             await self.process.wait()
-            
+
             end_time = datetime.now()
             result.duration = (end_time - start_time).total_seconds()
-            result.output = '\n'.join(output_lines)
+            combined_output = stdout_lines + [f"[stderr] {line}" for line in stderr_lines]
+            result.output = '\n'.join(combined_output)
+            result.log_path = self._persist_logs(target, stdout_lines, stderr_lines)
             
             # Determine final status
             if not self.is_running:
@@ -392,6 +409,28 @@ class TestRunner:
                 self.process.terminate()
             except Exception as e:
                 logger.warning(f"Failed to terminate test process: {e}")
+
+    def _persist_logs(
+        self,
+        target: str,
+        stdout_lines: List[str],
+        stderr_lines: List[str],
+    ) -> Path:
+        """Persist test logs to the test run directory."""
+
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        log_path = self.log_dir / f"tui_{target}_{timestamp}.log"
+        try:
+            with open(log_path, "w", encoding="utf-8") as handle:
+                handle.write(f"target: {target}\n")
+                handle.write(f"timestamp: {timestamp}\n")
+                handle.write("\n[stdout]\n")
+                handle.write("\n".join(stdout_lines))
+                handle.write("\n\n[stderr]\n")
+                handle.write("\n".join(stderr_lines))
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("Failed to persist UI test logs: %s", exc)
+        return log_path
 
 
 class TestRunnerWidget(Container):
