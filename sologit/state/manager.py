@@ -13,7 +13,7 @@ import threading
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import uuid
 
 from sologit.state.schema import (
@@ -28,6 +28,9 @@ from sologit.state.schema import (
     EventType,
 )
 from sologit.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from sologit.workflows.promotion_gate import PromotionDecision
 
 logger = get_logger(__name__)
 
@@ -546,7 +549,7 @@ class StateManager:
         self,
         repo_id: str,
         workpad_id: str,
-        decision,
+        decision: "PromotionDecision",
         auto_promote_requested: bool,
         promoted: bool,
         commit_hash: Optional[str],
