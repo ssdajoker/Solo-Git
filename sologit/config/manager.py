@@ -153,6 +153,7 @@ def _default_planning_model() -> "TierModelConfig":
         cost_per_1k_tokens=0.025,
     )
     return TierModelConfig(primary=primary, fallback=fallback)
+@dataclass
 class DeploymentCredentials:
     """Deployment credentials for Abacus.ai deployments."""
 

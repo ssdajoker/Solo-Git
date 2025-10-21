@@ -9,6 +9,7 @@ import click
 import sys
 from pathlib import Path
 
+from sologit.api.client import AbacusClient
 from sologit.config.manager import ConfigManager
 from sologit.config.templates import DEFAULT_CONFIG_TEMPLATE, ENV_TEMPLATE
 from sologit.orchestration.cost_guard import CostGuard, BudgetConfig
@@ -29,7 +30,10 @@ def set_formatter_console(console) -> None:
 
 def abort_with_error(message: str, details: str | None = None) -> None:
     """Display a formatted error and exit."""
-    content = f"[bold]{message}[/bold]"
+    plain_message = f"Error: {message}"
+    formatter.print_error(plain_message)
+
+    content = f"[bold]{plain_message}[/bold]"
     if details:
         content += f"\n\n{details}"
     formatter.print_error_panel(content)
@@ -59,7 +63,7 @@ def setup_config(api_key, endpoint, interactive):
     config_manager = ConfigManager()
 
     # Check if already configured
-    if config_manager.has_abacus_credentials():
+    if config_manager.has_abacus_credentials() is True:
         if interactive:
             formatter.print_warning("Existing configuration detected.")
             if not click.confirm("Configuration already exists. Overwrite?"):
@@ -88,8 +92,9 @@ def setup_config(api_key, endpoint, interactive):
     # Save configuration
     try:
         config_manager.set_abacus_credentials(api_key, endpoint)
+        config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
         formatter.print_success_panel(
-            f"Configuration saved to [bold]{config_manager.config_path}[/bold]",
+            f"Configuration saved to [bold]{config_path}[/bold]",
             title="Configuration Saved"
         )
 
@@ -167,7 +172,8 @@ def show_config(ctx, secrets):
     formatter.console.print(workflow_table)
 
     paths_table = formatter.table(headers=["Path", "Value"])
-    paths_table.add_row("Config file", str(config_manager.config_path))
+    config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
+    paths_table.add_row("Config file", str(config_path))
     paths_table.add_row("Repositories", str(config.repos_path))
     formatter.print_info_panel("Paths", title="Filesystem")
     formatter.console.print(paths_table)
@@ -194,6 +200,7 @@ def test_config(ctx):
         error_table = formatter.table(headers=["Issues"])
         for error in errors:
             error_table.add_row(error)
+            formatter.print_error(error)
         formatter.console.print(error_table)
         sys.exit(1)
 
@@ -208,8 +215,6 @@ def test_config(ctx):
 
     formatter.print_info("Testing Abacus.ai API connection...")
 
-    from sologit.api.client import AbacusClient
-
     try:
         client = AbacusClient(config.abacus)
         result = client.test_connection()
@@ -219,6 +224,7 @@ def test_config(ctx):
                 f"Endpoint: {config.abacus.endpoint}",
                 title="API Connection Successful"
             )
+            formatter.print_success("API connection successful")
         else:
             abort_with_error("API connection failed")
 
@@ -268,6 +274,12 @@ def budget_status(ctx):
     budget_color = theme.colors.success if status['within_budget'] else theme.colors.warning
     summary_table.add_row("Within Budget", f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]")
     formatter.console.print(summary_table)
+
+    # Provide simple textual summary for log parsing/tests
+    formatter.print_info(f"Daily Cap:       ${status['daily_cap']:.2f}")
+    formatter.print_info(f"Used Today:     ${status['current_cost']:.2f}")
+    formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
+    formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
 
     if status.get('alerts'):
         alerts_panel = "\n".join(

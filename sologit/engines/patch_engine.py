@@ -197,17 +197,17 @@ class PatchEngine:
         """
         logger.debug(f"Creating patch for {len(file_changes)} file(s)")
         
-        workpad = self.git_engine.get_workpad(pad_id)
-        if not workpad:
-            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
-        
-        repository = self.git_engine.get_repo(workpad.repo_id)
-        
         try:
+            workpad = self.git_engine.get_workpad(pad_id)
+            if not workpad:
+                raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+
+            repository = self.git_engine.get_repo(workpad.repo_id)
+
             repo = Repo(repository.path)
             branch = getattr(repo.heads, workpad.branch_name)
             branch.checkout()
-            
+
             # Apply file changes
             for file_path, content in file_changes.items():
                 full_path = repository.path / file_path
@@ -218,9 +218,14 @@ class PatchEngine:
             diff = repo.git.diff('HEAD', '--', *file_changes.keys())
             return diff
             
+        except WorkpadNotFoundError:
+            raise
+        except GitEngineError as e:
+            logger.error(f"Git engine error during patch creation: {e}")
+            raise PatchEngineError(f"Failed to create patch: {e}") from e
         except Exception as e:
             logger.error(f"Failed to create patch: {e}")
-            raise PatchEngineError(f"Failed to create patch: {e}")
+            raise PatchEngineError(f"Failed to create patch: {e}") from e
     
     def get_patch_stats(self, patch: str) -> dict:
         """

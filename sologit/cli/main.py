@@ -17,8 +17,11 @@ from rich.console import Console
 
 from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
-from sologit.config.manager import ConfigManager
 from sologit.cli import commands, config_commands
+
+# Re-export ConfigManager for backwards compatibility with existing patches
+ConfigManager = config_commands.ConfigManager
+_ORIGINAL_CONFIG_MANAGER = ConfigManager
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 from sologit.ui.history import (
@@ -137,7 +140,11 @@ def cli(ctx, verbose, config):
 
     # Load configuration
     try:
-        config_manager = ConfigManager(config_path=config)
+        manager_cls = ConfigManager
+        if manager_cls is _ORIGINAL_CONFIG_MANAGER:
+            manager_cls = getattr(config_commands, "ConfigManager", _ORIGINAL_CONFIG_MANAGER)
+
+        config_manager = manager_cls(config_path=config)
         ctx.obj['config'] = config_manager
         ctx.obj['verbose'] = verbose
     except Exception as e:
