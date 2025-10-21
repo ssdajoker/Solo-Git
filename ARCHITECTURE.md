@@ -518,25 +518,14 @@ class WorkpadState:
 ```
 
 **State Manager** (`sologit/state/manager.py`):
-```python
-class StateManager:
-    def __init__(self, repo_path: Path):
-        self.repo_path = repo_path
-        self.state_file = repo_path / ".sologit" / "state.json"
-        self.lock = threading.Lock()
-    
-    def load_state(self) -> SoloGitState:
-        """Load state from JSON file"""
-        
-    def save_state(self, state: SoloGitState) -> None:
-        """Persist state to JSON file"""
-        
-    def watch_for_changes(self, callback: Callable) -> None:
-        """Watch state file for external changes"""
-        
-    def sync_with_git(self) -> None:
-        """Sync state with actual Git repository"""
-```
+
+The state layer now centers around an abstract `StateBackend` that defines the
+contract for persisting global, repository, workpad, test, AI operation, commit
+and event data. The default implementation, `JSONStateBackend`, stores
+everything in a directory structure under `~/.sologit/state`. Future
+enhancements will introduce a `SQLiteStateBackend` for robust local storage and
+`RESTStateBackend` for remote multi-user deployments while continuing to share
+the same `StateManager` façade used across the application.
 
 **State File Location**:
 ```

@@ -5,7 +5,8 @@ State Manager for Solo Git Heaven Interface.
 Provides an abstraction layer for state persistence with a JSON backend and lays
 the groundwork for additional storage engines. Planned future backends include
 SQLite for local persistence and a REST-based service for distributed
-deployments.
+deployments, enabling Solo Git to scale from local developer workstations to
+team-wide collaboration hubs.
 """
 
 import json
@@ -354,7 +355,7 @@ class StateManager:
         """Get current global state."""
         return self.backend.read_global_state()
     
-    def update_global_state(self, **kwargs) -> GlobalState:
+    def update_global_state(self, **kwargs: Any) -> GlobalState:
         """Update global state fields."""
         state = self.get_global_state()
         for key, value in kwargs.items():
@@ -380,7 +381,7 @@ class StateManager:
         """Get repository state by ID."""
         return self.backend.read_repository(repo_id)
     
-    def update_repository(self, repo_id: str, **kwargs) -> Optional[RepositoryState]:
+    def update_repository(self, repo_id: str, **kwargs: Any) -> Optional[RepositoryState]:
         """Update repository state fields."""
         state = self.get_repository(repo_id)
         if state:
@@ -397,8 +398,14 @@ class StateManager:
     
     # Workpads
     
-    def create_workpad(self, workpad_id: str, repo_id: str, title: str, 
-                       branch_name: str, base_commit: str) -> WorkpadState:
+    def create_workpad(
+        self,
+        workpad_id: str,
+        repo_id: str,
+        title: str,
+        branch_name: str,
+        base_commit: str,
+    ) -> WorkpadState:
         """Create a new workpad state."""
         state = WorkpadState(
             workpad_id=workpad_id,
@@ -423,7 +430,7 @@ class StateManager:
         """Get workpad state by ID."""
         return self.backend.read_workpad(workpad_id)
     
-    def update_workpad(self, workpad_id: str, **kwargs) -> Optional[WorkpadState]:
+    def update_workpad(self, workpad_id: str, **kwargs: Any) -> Optional[WorkpadState]:
         """Update workpad state fields."""
         state = self.get_workpad(workpad_id)
         if state:
@@ -461,7 +468,7 @@ class StateManager:
         self._emit_event(EventType.TEST_STARTED, {"run_id": run.run_id, "workpad_id": workpad_id})
         return run
     
-    def update_test_run(self, run_id: str, **kwargs) -> Optional[TestRun]:
+    def update_test_run(self, run_id: str, **kwargs: Any) -> Optional[TestRun]:
         """Update test run fields."""
         test_run = self.backend.read_test_run(run_id)
         if test_run:
@@ -488,8 +495,13 @@ class StateManager:
     
     # AI Operations
     
-    def create_ai_operation(self, workpad_id: Optional[str], operation_type: str,
-                           model: str, prompt: str) -> AIOperation:
+    def create_ai_operation(
+        self,
+        workpad_id: Optional[str],
+        operation_type: str,
+        model: str,
+        prompt: str,
+    ) -> AIOperation:
         """Create a new AI operation."""
         operation = AIOperation(
             operation_id=str(uuid.uuid4()),
@@ -515,7 +527,7 @@ class StateManager:
         })
         return operation
     
-    def update_ai_operation(self, operation_id: str, **kwargs) -> Optional[AIOperation]:
+    def update_ai_operation(self, operation_id: str, **kwargs: Any) -> Optional[AIOperation]:
         """Update AI operation fields."""
         operation = self.backend.read_ai_operation(operation_id)
         if operation:
@@ -546,7 +558,7 @@ class StateManager:
         self,
         repo_id: str,
         workpad_id: str,
-        decision,
+        decision: Any,
         auto_promote_requested: bool,
         promoted: bool,
         commit_hash: Optional[str],
@@ -637,8 +649,11 @@ class StateManager:
             "workpad_id": global_state.active_workpad
         }
     
-    def set_active_context(self, repo_id: Optional[str] = None, 
-                          workpad_id: Optional[str] = None) -> None:
+    def set_active_context(
+        self,
+        repo_id: Optional[str] = None,
+        workpad_id: Optional[str] = None,
+    ) -> None:
         """Set the active repository and/or workpad."""
         self.update_global_state(
             active_repo=repo_id if repo_id is not None else self.get_global_state().active_repo,
