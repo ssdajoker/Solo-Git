@@ -579,8 +579,6 @@ def _run_interactive_shell() -> int:
 
     cli_history_path = get_cli_history_path()
     session = create_enhanced_prompt(history_path=cli_history_path)
-    # Ensure the default buffer is aware of the shared history file
-    session.app.default_buffer.history = session.history
 
     def _load_history_strings() -> List[str]:
         if not cli_history_path.exists():
