@@ -35,7 +35,10 @@ def set_formatter_console(console) -> None:
 
 def abort_with_error(message: str, details: Optional[str] = None) -> None:
     """Display a formatted error and abort the command."""
-    content = f"[bold]Error: {message}[/bold]"
+    plain_message = f"Error: {message}"
+    formatter.print_error(plain_message)
+
+    content = f"[bold]{plain_message}[/bold]"
     if details:
         content += f"\n\n{details}"
     formatter.print_error_panel(content)
@@ -224,7 +227,7 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
         formatter.console.print(summary_table)
 
     except GitEngineError as e:
-        abort_with_error("Repository initialization failed", str(e))
+        abort_with_error(str(e), "Repository initialization failed")
 
 
 @repo.command('list')
@@ -305,9 +308,12 @@ def pad_create(title: str, repo_id: Optional[str]):
             repo_id = repos[0].id
             formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
         else:
+            formatter.print_warning("Multiple repositories found. Use --repo to specify an ID.")
             repo_table = formatter.table(headers=["ID", "Name"])
             for repo in repos:
-                repo_table.add_row(f"[cyan]{repo.id}[/cyan]", repo.name)
+                repo_identifier = getattr(repo, "id", "<unknown>")
+                repo_name = getattr(repo, "name", repo_identifier)
+                repo_table.add_row(f"[cyan]{repo_identifier}[/cyan]", str(repo_name))
             formatter.print_info_panel(
                 "Multiple repositories detected. Please rerun with --repo <ID>.",
                 title="Repository Selection Required"
@@ -321,6 +327,10 @@ def pad_create(title: str, repo_id: Optional[str]):
 
         workpad = git_engine.get_workpad(pad_id)
         formatter.print_success("Workpad created!")
+        formatter.print_info(f"Pad ID: {workpad.id}")
+        formatter.print_info(f"Title: {workpad.title}")
+        formatter.print_info(f"Branch: {workpad.branch_name}")
+        formatter.print_info("Base: main")
 
         details = formatter.table(headers=["Field", "Value"])
         details.add_row("Pad ID", f"[cyan]{workpad.id}[/cyan]")
@@ -389,6 +399,15 @@ def pad_info(pad_id: str):
 
     formatter.print_header(f"Workpad Details: {workpad.title}")
 
+    formatter.print_info(f"Workpad: {workpad.id}")
+    formatter.print_info(f"Title: {workpad.title}")
+    formatter.print_info(f"Repo: {workpad.repo_id}")
+    formatter.print_info(f"Branch: {workpad.branch_name}")
+    formatter.print_info(f"Status: {workpad.status}")
+    formatter.print_info(f"Checkpoints: {len(workpad.checkpoints)}")
+    if workpad.test_status:
+        formatter.print_info(f"Last Test: {workpad.test_status}")
+
     status_color = theme.get_status_color(workpad.status)
     status_icon = theme.get_status_icon(workpad.status)
     panel_content = f"""[bold]Workpad ID:[/bold] [cyan]{workpad.id}[/cyan]
@@ -423,7 +442,7 @@ def pad_promote(pad_id: str):
     # Check if can promote
     if not git_engine.can_promote(pad_id):
         abort_with_error(
-            "Cannot promote workpad",
+            "Cannot promote: not fast-forward-able",
             "Trunk has diverged. Manual merge required before promotion."
         )
 
@@ -433,6 +452,10 @@ def pad_promote(pad_id: str):
         commit_hash = git_engine.promote_workpad(pad_id)
 
         formatter.print_success("Workpad promoted to trunk!")
+        formatter.print_info(f"Commit: {commit_hash}")
+        formatter.print_info(f"Branch Removed: {workpad.branch_name}")
+        formatter.print_info(f"Trunk Updated: main @ {commit_hash[:8]}")
+
         details = formatter.table(headers=["Field", "Value"])
         details.add_row("Commit", f"[green]{commit_hash}[/green]")
         details.add_row("Branch Removed", workpad.branch_name)

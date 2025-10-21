@@ -120,8 +120,22 @@ class RichFormatter:
         if headers:
             for header in headers:
                 table.add_column(header)
-        
+
         return table
+
+    def syntax_highlight(self, code: str, language: str = "python") -> Syntax:
+        """Create syntax-highlighted code block."""
+        return Syntax(
+            code,
+            language,
+            theme="monokai",
+            line_numbers=True,
+            background_color=theme.colors.surface,
+        )
+
+    def print_code(self, code: str, language: str = "python") -> None:
+        """Print syntax-highlighted code."""
+        self.console.print(self.syntax_highlight(code, language))
     
     def create_progress(self) -> Progress:
         """Create a progress bar with Heaven Interface styling."""
@@ -157,20 +171,6 @@ class ProgressContext:
         if self._task_id is not None:
             self._progress.remove_task(self._task_id)
         self._progress.__exit__(exc_type, exc_val, exc_tb)
-    
-    def syntax_highlight(self, code: str, language: str = "python") -> Syntax:
-        """Create syntax-highlighted code block."""
-        return Syntax(
-            code,
-            language,
-            theme="monokai",
-            line_numbers=True,
-            background_color=theme.colors.surface
-        )
-    
-    def print_code(self, code: str, language: str = "python") -> None:
-        """Print syntax-highlighted code."""
-        self.console.print(self.syntax_highlight(code, language))
     
     def tree(self, label: str) -> Tree:
         """Create a tree structure."""
