@@ -208,10 +208,8 @@ def gui(ctx, dev: bool):
 
     config_manager = ctx.obj.get('config') if ctx and ctx.obj else None
     env = os.environ.copy()
-    if config_manager is not None:
-        config_path = getattr(config_manager, "config_path", None)
-        if config_path:
-            env.setdefault("SOLOGIT_CONFIG_PATH", str(config_path))
+    if config_manager is not None and (config_path := getattr(config_manager, "config_path", None)):
+        env.setdefault("SOLOGIT_CONFIG_PATH", str(config_path))
 
     if dev:
         formatter.print_info("Launching GUI in development mode...")
