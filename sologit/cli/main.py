@@ -7,6 +7,7 @@ repository management, workpad operations, testing, and AI pairing.
 """
 
 import click
+import subprocess
 import shlex
 import sys
 from pathlib import Path
@@ -38,6 +39,48 @@ logger = get_logger(__name__)
 
 console = Console()
 formatter = RichFormatter(console)
+
+
+def _find_heaven_gui_dir() -> Optional[Path]:
+    """Locate the heaven-gui project directory for development mode."""
+    base_file = Path(__file__).resolve()
+    candidates = []
+    seen = set()
+
+    # Prefer running from the current working directory if available
+    cwd_candidate = (Path.cwd() / "heaven-gui").resolve()
+    if cwd_candidate.exists() and cwd_candidate.is_dir():
+        candidates.append(cwd_candidate)
+        seen.add(cwd_candidate)
+
+    for parent in base_file.parents:
+        candidate = (parent / "heaven-gui").resolve()
+        if candidate in seen:
+            continue
+        if candidate.exists() and candidate.is_dir():
+            candidates.append(candidate)
+            seen.add(candidate)
+
+    return candidates[0] if candidates else None
+
+
+def _resolve_gui_executable() -> Optional[Path]:
+    """Resolve the built GUI executable path."""
+    gui_dir = Path.home() / ".sologit" / "gui"
+
+    candidates = []
+    if sys.platform == "win32":
+        candidates.append(gui_dir / "solo-git-gui.exe")
+    elif sys.platform == "darwin":
+        candidates.append(gui_dir / "solo-git-gui.app" / "Contents" / "MacOS" / "solo-git-gui")
+
+    candidates.append(gui_dir / "solo-git-gui")
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return None
 
 
 def abort_with_error(message: str, details: Optional[str] = None) -> None:
@@ -146,6 +189,55 @@ def hello():
         "Start pairing with AI: evogitctl pair 'add feature'",
     ], icon=theme.icons.arrow_right, style=theme.colors.blue)
     formatter.print_info("Run 'evogitctl --help' for more information.")
+
+
+@cli.command()
+@click.option('--dev', is_flag=True, help='Launch in development mode')
+def gui(dev: bool):
+    """Launch the Heaven Interface GUI."""
+    formatter.print_header("Heaven Interface GUI")
+
+    if dev:
+        formatter.print_info("Launching GUI in development mode...")
+        gui_dir = _find_heaven_gui_dir()
+        if not gui_dir:
+            abort_with_error(
+                "Heaven GUI project not found",
+                "Run from the Solo Git repository or ensure the heaven-gui directory exists."
+            )
+
+        try:
+            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=str(gui_dir), check=True)
+        except FileNotFoundError:
+            abort_with_error(
+                "npm not found",
+                "Install Node.js and npm to run the GUI in development mode."
+            )
+        except subprocess.CalledProcessError as exc:
+            abort_with_error(
+                "GUI development server exited unexpectedly",
+                f"Exit code: {exc.returncode}"
+            )
+        return
+
+    formatter.print_info("Launching built GUI executable...")
+    executable = _resolve_gui_executable()
+    if not executable:
+        abort_with_error(
+            "GUI not built.",
+            "Run: cd heaven-gui && npm run tauri:build"
+        )
+
+    try:
+        subprocess.Popen([str(executable)])
+    except FileNotFoundError:
+        abort_with_error(
+            "GUI executable not found",
+            f"Expected to find executable at {executable}"
+        )
+    except Exception as exc:
+        logger.error(f"Failed to launch GUI: {exc}")
+        abort_with_error("GUI launch failed", str(exc))
 
 
 # Register command groups
