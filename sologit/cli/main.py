@@ -6,6 +6,7 @@ Provides the evogitctl command-line interface with subcommands for
 repository management, workpad operations, testing, and AI pairing.
 """
 
+import os
 import click
 import subprocess
 import shlex
@@ -200,9 +201,17 @@ def hello():
 
 @cli.command()
 @click.option('--dev', is_flag=True, help='Launch in development mode')
-def gui(dev: bool):
+@click.pass_context
+def gui(ctx, dev: bool):
     """Launch the Heaven Interface GUI."""
     formatter.print_header("Heaven Interface GUI")
+
+    config_manager = ctx.obj.get('config') if ctx and getattr(ctx, "obj", None) else None
+    env = os.environ.copy()
+    if config_manager is not None:
+        config_path = getattr(config_manager, "config_path", None)
+        if config_path:
+            env.setdefault("SOLOGIT_CONFIG_PATH", str(config_path))
 
     if dev:
         formatter.print_info("Launching GUI in development mode...")
@@ -214,7 +223,7 @@ def gui(dev: bool):
             )
 
         try:
-            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=str(gui_dir), check=True)
+            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=str(gui_dir), check=True, env=env)
         except FileNotFoundError:
             abort_with_error(
                 "npm not found",
@@ -236,7 +245,7 @@ def gui(dev: bool):
         )
 
     try:
-        subprocess.Popen([str(executable)])
+        subprocess.Popen([str(executable)], env=env)
     except FileNotFoundError:
         abort_with_error(
             "GUI executable not found",
