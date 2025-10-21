@@ -271,10 +271,8 @@ class TestCreatePatchFromFiles:
         
         assert fake_pad_id in str(exc_info.value)
 
-    @pytest.mark.xfail(reason="Complex mocking interaction with gitpython")
-    def test_create_patch_repo_error(self, temp_dir, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_create_patch_repo_error(self, temp_dir, monkeypatch):
+    def test_create_patch_repo_error(self, temp_dir, mocker, monkeypatch):
         """Test create_patch_from_files with repository access error."""
         import zipfile
         

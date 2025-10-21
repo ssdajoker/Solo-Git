@@ -153,6 +153,7 @@ def _default_planning_model() -> "TierModelConfig":
         cost_per_1k_tokens=0.025,
     )
     return TierModelConfig(primary=primary, fallback=fallback)
+@dataclass
 class DeploymentCredentials:
     """Deployment credentials for Abacus.ai deployments."""
 
@@ -173,6 +174,23 @@ class ModelConfig:
     fast: TierModelConfig = field(default_factory=_default_fast_model)
     coding: TierModelConfig = field(default_factory=_default_coding_model)
     planning: TierModelConfig = field(default_factory=_default_planning_model)
+    # Planning models (GPT-4, Claude, Llama 70B)
+    planning_model: str = "gpt-4o"
+    planning_fallback: str = "claude-3-5-sonnet"
+    planning_max_tokens: int = 4096
+    planning_temperature: float = 0.2
+
+    # Coding models (DeepSeek, CodeLlama)
+    coding_model: str = "deepseek-coder-33b"
+    coding_fallback: str = "codellama-70b-instruct"
+    coding_max_tokens: int = 2048
+    coding_temperature: float = 0.1
+
+    # Fast operation models (Llama 8B, Gemma)
+    fast_model: str = "llama-3.1-8b-instruct"
+    fast_fallback: str = "gemma-2-9b-it"
+    fast_max_tokens: int = 1024
+    fast_temperature: float = 0.1
 
     def to_ai_models_dict(self) -> Dict[str, Any]:
         """Return AI model configuration dictionary."""
@@ -295,26 +313,6 @@ class ModelConfig:
                 self.planning.fallback = self.planning.fallback.merge(
                     {"temperature": legacy["planning_temperature"]}
                 )
-    """Model configuration for different task types."""
-
-    # Planning models (GPT-4, Claude, Llama 70B)
-    planning_model: str = "gpt-4o"
-    planning_fallback: str = "claude-3-5-sonnet"
-    planning_max_tokens: int = 4096
-    planning_temperature: float = 0.2
-
-    # Coding models (DeepSeek, CodeLlama)
-    coding_model: str = "deepseek-coder-33b"
-    coding_fallback: str = "codellama-70b-instruct"
-    coding_max_tokens: int = 2048
-    coding_temperature: float = 0.1
-
-    # Fast operation models (Llama 8B, Gemma)
-    fast_model: str = "llama-3.1-8b-instruct"
-    fast_fallback: str = "gemma-2-9b-it"
-    fast_max_tokens: int = 1024
-    fast_temperature: float = 0.1
-
 
 @dataclass
 class BudgetConfig:
@@ -324,8 +322,6 @@ class BudgetConfig:
     alert_threshold: float = 0.8
     track_by_model: bool = True
     escalation_triggers: Optional[Dict[str, Any]] = None
-    
-    escalation_triggers: Dict[str, Any] = None
 
     def __post_init__(self):
         if self.escalation_triggers is None:
@@ -357,6 +353,8 @@ class TestConfig:
             self.full_tests = []
         if self.smoke_tests is None:
             self.smoke_tests = []
+        if self.log_dir is None:
+            self.log_dir = str(Path.home() / ".sologit" / "data" / "test_runs")
 
 
 @dataclass
@@ -367,8 +365,6 @@ class CISmokeConfig:
     command: Optional[str] = None
     webhook: Optional[str] = None
     webhook_timeout: int = 10
-        if self.log_dir is None:
-            self.log_dir = str(Path.home() / ".sologit" / "data" / "test_runs")
 
 
 @dataclass
@@ -419,23 +415,6 @@ class SoloGitConfig:
             },
             'ai': {
                 'models': self.models.to_ai_models_dict()
-                'models': {
-                    'fast': {
-                        'primary': self.models.fast_model,
-                        'max_tokens': 1024,
-                        'temperature': 0.1,
-                    },
-                    'coding': {
-                        'primary': self.models.coding_model,
-                        'max_tokens': 2048,
-                        'temperature': 0.1,
-                    },
-                    'planning': {
-                        'primary': self.models.planning_model,
-                        'max_tokens': 4096,
-                        'temperature': 0.2,
-                    },
-                }
             },
             'escalation': {
                 'triggers': []
@@ -452,6 +431,8 @@ class SoloGitConfig:
                 'fast_tests': self.tests.fast_tests,
                 'full_tests': self.tests.full_tests,
                 'smoke_tests': self.tests.smoke_tests,
+                'execution_mode': self.tests.execution_mode,
+                'log_dir': self.tests.log_dir,
             },
             'ci': {
                 'auto_run': self.ci.auto_run,
@@ -466,9 +447,6 @@ class SoloGitConfig:
                 }
                 for name, creds in self.deployments.items()
             },
-                'execution_mode': self.tests.execution_mode,
-                'log_dir': self.tests.log_dir,
-            }
         }
 
 

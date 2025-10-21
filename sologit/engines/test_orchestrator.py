@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 
 class TestStatus(Enum):
     """Test execution status."""
-
+    __test__ = False
     PASSED = "passed"
     FAILED = "failed"
     TIMEOUT = "timeout"
@@ -37,7 +37,7 @@ class TestStatus(Enum):
 
 class TestExecutionMode(Enum):
     """Supported execution modes."""
-
+    __test__ = False
     AUTO = "auto"
     DOCKER = "docker"
     SUBPROCESS = "subprocess"
@@ -46,7 +46,7 @@ class TestExecutionMode(Enum):
 @dataclass
 class TestConfig:
     """Test configuration."""
-
+    __test__ = False
     name: str
     cmd: str
     timeout: int = 300
@@ -60,7 +60,7 @@ class TestConfig:
 @dataclass
 class TestResult:
     """Test execution result."""
-
+    __test__ = False
     name: str
     status: TestStatus
     duration_ms: int
@@ -75,6 +75,7 @@ class TestResult:
 
 class TestOrchestratorError(Exception):
     """Base exception for Test Orchestrator errors."""
+    __test__ = False
 
 
 class TestOrchestrator:
