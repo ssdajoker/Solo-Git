@@ -206,7 +206,7 @@ def gui(ctx, dev: bool):
     """Launch the Heaven Interface GUI."""
     formatter.print_header("Heaven Interface GUI")
 
-    config_manager = ctx.obj.get('config') if ctx and getattr(ctx, "obj", None) else None
+    config_manager = ctx.obj.get('config') if ctx and ctx.obj else None
     env = os.environ.copy()
     if config_manager is not None:
         config_path = getattr(config_manager, "config_path", None)
