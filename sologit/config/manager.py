@@ -346,6 +346,7 @@ class TestConfig:
     parallel_max: int = 4
     fast_tests: list = None
     full_tests: list = None
+    smoke_tests: list = None
     execution_mode: str = "auto"
     log_dir: Optional[str] = None
 
@@ -354,6 +355,18 @@ class TestConfig:
             self.fast_tests = []
         if self.full_tests is None:
             self.full_tests = []
+        if self.smoke_tests is None:
+            self.smoke_tests = []
+
+
+@dataclass
+class CISmokeConfig:
+    """Configuration for CI smoke job triggers."""
+
+    auto_run: bool = False
+    command: Optional[str] = None
+    webhook: Optional[str] = None
+    webhook_timeout: int = 10
         if self.log_dir is None:
             self.log_dir = str(Path.home() / ".sologit" / "data" / "test_runs")
 
@@ -375,6 +388,7 @@ class SoloGitConfig:
     models: ModelConfig = None
     budget: BudgetConfig = None
     tests: TestConfig = None
+    ci: CISmokeConfig = None
     deployments: Dict[str, DeploymentCredentials] = None
 
     def __post_init__(self):
@@ -386,6 +400,9 @@ class SoloGitConfig:
             self.budget = BudgetConfig()
         if self.tests is None:
             self.tests = TestConfig()
+        if self.ci is None:
+            self.ci = CISmokeConfig()
+    
         if self.deployments is None:
             self.deployments = {}
 
@@ -432,6 +449,15 @@ class SoloGitConfig:
                 'sandbox_image': self.tests.sandbox_image,
                 'timeout_seconds': self.tests.timeout_seconds,
                 'parallel_max': self.tests.parallel_max,
+                'fast_tests': self.tests.fast_tests,
+                'full_tests': self.tests.full_tests,
+                'smoke_tests': self.tests.smoke_tests,
+            },
+            'ci': {
+                'auto_run': self.ci.auto_run,
+                'command': self.ci.command,
+                'webhook': self.ci.webhook,
+                'webhook_timeout': self.ci.webhook_timeout,
             },
             'deployments': {
                 name: {
@@ -534,6 +560,11 @@ class ConfigManager:
                 if hasattr(base.tests, key):
                     setattr(base.tests, key, value)
 
+        if 'ci' in override:
+            for key, value in override['ci'].items():
+                if hasattr(base.ci, key):
+                    setattr(base.ci, key, value)
+        
         # Deployment credentials
         deployments = override.get('deployments')
         if isinstance(deployments, dict):
@@ -612,7 +643,9 @@ class ConfigManager:
                 'parallel_max': self.config.tests.parallel_max,
                 'fast_tests': self.config.tests.fast_tests,
                 'full_tests': self.config.tests.full_tests,
+                'smoke_tests': self.config.tests.smoke_tests
             },
+            'ci': asdict(self.config.ci),
             'repos_path': self.config.repos_path,
             'workpad_ttl_days': self.config.workpad_ttl_days,
             'promote_on_green': self.config.promote_on_green,

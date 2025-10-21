@@ -18,6 +18,7 @@ from sologit.state.schema import (
     CommitNode,
     TestRun,
     AIOperation,
+    PromotionRecord,
     WorkpadState,
     RepositoryState,
     GlobalState,
@@ -70,8 +71,19 @@ class StateBackend:
     
     def write_ai_operation(self, operation: AIOperation) -> None:
         raise NotImplementedError
-    
+
     def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[AIOperation]:
+        raise NotImplementedError
+
+    def write_promotion_record(self, record: PromotionRecord) -> None:
+        raise NotImplementedError
+
+    def list_promotion_records(
+        self,
+        repo_id: Optional[str] = None,
+        workpad_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[PromotionRecord]:
         raise NotImplementedError
     
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
@@ -101,9 +113,11 @@ class JSONStateBackend(StateBackend):
         self.ai_ops_dir = self.state_dir / "ai_operations"
         self.commits_dir = self.state_dir / "commits"
         self.events_dir = self.state_dir / "events"
-        
-        for d in [self.repos_dir, self.workpads_dir, self.tests_dir, 
-                  self.ai_ops_dir, self.commits_dir, self.events_dir]:
+        self.promotions_dir = self.state_dir / "promotions"
+
+        for d in [self.repos_dir, self.workpads_dir, self.tests_dir,
+                  self.ai_ops_dir, self.commits_dir, self.events_dir,
+                  self.promotions_dir]:
             d.mkdir(exist_ok=True)
         
         self._lock = threading.Lock()
@@ -219,7 +233,31 @@ class JSONStateBackend(StateBackend):
                 if workpad_id is None or operation.workpad_id == workpad_id:
                     operations.append(operation)
         return sorted(operations, key=lambda o: o.started_at, reverse=True)
-    
+
+    def write_promotion_record(self, record: PromotionRecord) -> None:
+        path = self.promotions_dir / f"{record.record_id}.json"
+        self._write_json(path, record.to_dict())
+
+    def list_promotion_records(
+        self,
+        repo_id: Optional[str] = None,
+        workpad_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[PromotionRecord]:
+        records: List[PromotionRecord] = []
+        for path in sorted(self.promotions_dir.glob("*.json"), reverse=True):
+            data = self._read_json(path)
+            if data:
+                record = PromotionRecord.from_dict(data)
+                if (
+                    (repo_id is None or record.repo_id == repo_id)
+                    and (workpad_id is None or record.workpad_id == workpad_id)
+                ):
+                    records.append(record)
+                if len(records) >= limit:
+                    break
+        return records
+
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
         path = self.commits_dir / f"{repo_id}.json"
         data = self._read_json(path, {"commits": []})
@@ -479,9 +517,65 @@ class StateManager:
     def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[AIOperation]:
         """List AI operations, optionally filtered by workpad."""
         return self.backend.list_ai_operations(workpad_id)
-    
+
+    # Promotion records
+
+    def record_promotion_decision(
+        self,
+        repo_id: str,
+        workpad_id: str,
+        decision,
+        auto_promote_requested: bool,
+        promoted: bool,
+        commit_hash: Optional[str],
+        message: str,
+        test_run_id: Optional[str] = None,
+        ci_status: Optional[str] = None,
+        ci_message: Optional[str] = None,
+    ) -> PromotionRecord:
+        """Record a promotion decision for history tracking."""
+        record = PromotionRecord(
+            record_id=str(uuid.uuid4()),
+            repo_id=repo_id,
+            workpad_id=workpad_id,
+            decision=getattr(decision, 'decision', decision).value
+            if hasattr(decision, 'decision')
+            else str(decision),
+            can_promote=getattr(decision, 'can_promote', True),
+            auto_promote_requested=auto_promote_requested,
+            promoted=promoted,
+            commit_hash=commit_hash,
+            message=message,
+            test_run_id=test_run_id,
+            ci_status=ci_status,
+            ci_message=ci_message,
+        )
+
+        self.backend.write_promotion_record(record)
+        self._emit_event(
+            EventType.PROMOTION_RECORDED,
+            {
+                "repo_id": repo_id,
+                "workpad_id": workpad_id,
+                "decision": record.decision,
+                "promoted": promoted,
+                "commit_hash": commit_hash,
+            },
+        )
+
+        return record
+
+    def list_promotion_records(
+        self,
+        repo_id: Optional[str] = None,
+        workpad_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[PromotionRecord]:
+        """List recorded promotion decisions."""
+        return self.backend.list_promotion_records(repo_id=repo_id, workpad_id=workpad_id, limit=limit)
+
     # Commits
-    
+
     def add_commit(self, repo_id: str, commit: CommitNode) -> None:
         """Add a commit to the graph."""
         self.backend.write_commit(repo_id, commit)
