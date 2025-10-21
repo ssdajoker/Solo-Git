@@ -367,9 +367,6 @@ class CISmokeConfig:
     command: Optional[str] = None
     webhook: Optional[str] = None
     webhook_timeout: int = 10
-    def __post_init__(self):
-        if self.log_dir is None:
-            self.log_dir = str(Path.home() / ".sologit" / "data" / "test_runs")
 
 
 @dataclass
@@ -419,7 +416,6 @@ class SoloGitConfig:
                 'api_key': self.abacus.api_key,
             },
             'ai': {
-                'models': self.models.to_ai_models_dict()
                 'models': {
                     'fast': {
                         'primary': self.models.fast_model,
@@ -453,6 +449,8 @@ class SoloGitConfig:
                 'fast_tests': self.tests.fast_tests,
                 'full_tests': self.tests.full_tests,
                 'smoke_tests': self.tests.smoke_tests,
+                'execution_mode': self.tests.execution_mode,
+                'log_dir': self.tests.log_dir,
             },
             'ci': {
                 'auto_run': self.ci.auto_run,
@@ -466,9 +464,6 @@ class SoloGitConfig:
                     'has_token': creds.has_token,
                 }
                 for name, creds in self.deployments.items()
-            },
-                'execution_mode': self.tests.execution_mode,
-                'log_dir': self.tests.log_dir,
             }
         }
 

@@ -365,8 +365,8 @@ def test_test_run_success(mock_git_engine, mock_test_orchestrator):
     mock_git_engine.get_workpad.return_value = mock_pad
 
     results = [
-        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1234, mode='docker', log_path=Path('/log/unit.txt')),
-        TestResult(name='integration', status=TestStatus.PASSED, duration_ms=5678, mode='docker', log_path=Path('/log/int.txt')),
+        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1234, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('/log/unit.txt')),
+        TestResult(name='integration', status=TestStatus.PASSED, duration_ms=5678, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('/log/int.txt')),
     ]
     mock_test_orchestrator.run_tests.return_value = results
     mock_test_orchestrator.get_summary.return_value = {
@@ -379,7 +379,7 @@ def test_test_run_success(mock_git_engine, mock_test_orchestrator):
     assert result.exit_code == 0, result.output
     assert "Test Execution" in result.output
     assert "Workpad: test-pad" in result.output
-    assert "✅ PASSED" in result.output
+    assert "✅ passed" in result.output
     assert "Test Summary" in result.output
     assert "All tests passed!" in result.output
     mock_test_orchestrator.run_tests.assert_called_once()
@@ -392,8 +392,8 @@ def test_test_run_failure(mock_git_engine, mock_test_orchestrator):
     mock_git_engine.get_workpad.return_value = mock_pad
 
     results = [
-        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1000, mode='docker', log_path=Path('log1.txt')),
-        TestResult(name='integration', status=TestStatus.FAILED, duration_ms=2000, error="Assertion failed", mode='docker', log_path=Path('log2.txt')),
+        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1000, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('log1.txt')),
+        TestResult(name='integration', status=TestStatus.FAILED, duration_ms=2000, exit_code=1, stdout='', stderr='', error="Assertion failed", mode='docker', log_path=Path('log2.txt')),
     ]
     mock_test_orchestrator.run_tests.return_value = results
     mock_test_orchestrator.get_summary.return_value = {
@@ -404,7 +404,7 @@ def test_test_run_failure(mock_git_engine, mock_test_orchestrator):
     result = runner.invoke(cli, ['test', 'run', 'pad1'])
 
     assert result.exit_code == 0  # Command itself succeeds
-    assert "❌ FAILED" in result.output
+    assert "❌ failed" in result.output
     assert "Some tests require attention" in result.output
     assert "Passed: 1" in result.output
     assert "Failed: 1" in result.output
