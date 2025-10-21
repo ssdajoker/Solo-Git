@@ -7,7 +7,7 @@ Monitors AI API costs and enforces daily budget caps.
 
 from dataclasses import dataclass, field
 from datetime import datetime, date
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import json
 from pathlib import Path
 
@@ -215,52 +215,151 @@ class CostGuard:
     """
     Enforces budget constraints and monitors AI costs.
     """
-    
-    def __init__(self, config: BudgetConfig, tracker: Optional[CostTracker] = None):
+
+    def __init__(
+        self,
+        config: BudgetConfig,
+        tracker: Optional[CostTracker] = None,
+        status_path: Optional[Path] = None,
+    ):
         """
         Initialize cost guard.
-        
+
         Args:
             config: Budget configuration
             tracker: Cost tracker (creates new one if None)
         """
         self.config = config
         self.tracker = tracker or CostTracker()
-        
+        self.status_path = status_path or (self.tracker.storage_path.parent / 'budget_status.json')
+        self.status_path.parent.mkdir(parents=True, exist_ok=True)
+        self._status: Dict[str, Any] = self._load_status()
+
         logger.info(
             "CostGuard initialized: $%.2f daily cap, %.0f%% alert threshold",
             config.daily_usd_cap,
             config.alert_threshold * 100
         )
+
+    def _load_status(self) -> Dict[str, Any]:
+        """Load persisted budget status from disk."""
+
+        if self.status_path.exists():
+            try:
+                with open(self.status_path, 'r') as handle:
+                    data = json.load(handle)
+                    return self._ensure_status_structure(data)
+            except Exception as exc:
+                logger.warning("Failed to load budget status: %s", exc)
+
+        return self._ensure_status_structure({})
+
+    def _ensure_status_structure(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure status dictionary has required fields."""
+
+        today = date.today().isoformat()
+        status = {
+            'date': data.get('date', today),
+            'current_cost': data.get('current_cost', 0.0),
+            'projected_cost': data.get('projected_cost', 0.0),
+            'alerts': data.get('alerts', []),
+            'threshold_crossed': data.get('threshold_crossed', False),
+            'last_updated': data.get('last_updated', datetime.now().isoformat()),
+        }
+
+        if status['date'] != today:
+            status.update(
+                {
+                    'date': today,
+                    'current_cost': 0.0,
+                    'projected_cost': 0.0,
+                    'alerts': [],
+                    'threshold_crossed': False,
+                }
+            )
+
+        return status
+
+    def _save_status(self):
+        """Persist current status to disk."""
+
+        try:
+            with open(self.status_path, 'w') as handle:
+                json.dump(self._status, handle, indent=2)
+        except Exception as exc:
+            logger.error("Failed to persist budget status: %s", exc)
+
+    def _record_alert(self, level: str, message: str, projected_cost: float):
+        """Record an alert entry if not already captured today."""
+
+        alerts: List[Dict[str, Any]] = self._status.setdefault('alerts', [])
+        if any(alert.get('level') == level for alert in alerts):
+            return
+
+        alerts.append(
+            {
+                'timestamp': datetime.now().isoformat(),
+                'level': level,
+                'message': message,
+                'projected_cost': projected_cost,
+            }
+        )
+        self._save_status()
+
+    def _update_status_cost(self, current_cost: float, projected_cost: float):
+        """Update status values and persist."""
+
+        self._status['current_cost'] = round(current_cost, 4)
+        self._status['projected_cost'] = round(projected_cost, 4)
+        self._status['last_updated'] = datetime.now().isoformat()
+        self._save_status()
+
+    def _reset_if_new_day(self):
+        """Reset status when day changes."""
+
+        today = date.today().isoformat()
+        if self._status.get('date') != today:
+            self._status = self._ensure_status_structure({})
     
     def check_budget(self, estimated_cost: float = 0.0) -> bool:
         """
         Check if a request would exceed the budget.
-        
+
         Args:
             estimated_cost: Estimated cost of the request
-        
+
         Returns:
             True if request is within budget, False otherwise
         """
+        self._reset_if_new_day()
         current_cost = self.tracker.get_today_cost()
         projected_cost = current_cost + estimated_cost
-        
+
+        self._update_status_cost(current_cost, projected_cost)
+
         if projected_cost > self.config.daily_usd_cap:
-            logger.warning(
-                "Budget exceeded: $%.2f current + $%.2f estimated > $%.2f cap",
-                current_cost, estimated_cost, self.config.daily_usd_cap
+            message = (
+                "Budget exceeded: $%.2f current + $%.2f estimated > $%.2f cap"
+                % (current_cost, estimated_cost, self.config.daily_usd_cap)
             )
+            logger.warning(message)
+            self._record_alert('exceeded', message, projected_cost)
+            self._status['threshold_crossed'] = True
             return False
-        
+
         # Check if we should alert
         threshold_cost = self.config.daily_usd_cap * self.config.alert_threshold
-        if current_cost < threshold_cost <= projected_cost:
-            logger.warning(
-                "Budget alert: approaching daily cap (%.0f%%)",
-                (projected_cost / self.config.daily_usd_cap) * 100
-            )
-        
+        if (
+            current_cost < threshold_cost <= projected_cost
+            and not self._status.get('threshold_crossed')
+        ):
+            percentage = (projected_cost / self.config.daily_usd_cap) * 100
+            message = f"Budget alert: approaching daily cap ({percentage:.0f}%)"
+            logger.warning(message)
+            self._record_alert('threshold', message, projected_cost)
+            self._status['threshold_crossed'] = True
+            self._save_status()
+
         return True
     
     def get_remaining_budget(self) -> float:
@@ -298,21 +397,45 @@ class CostGuard:
             cost_usd=cost_usd,
             task_type=task_type
         )
-        
+
         self.tracker.record_usage(usage)
-    
+        self._reset_if_new_day()
+        self._update_status_cost(
+            self.tracker.get_today_cost(),
+            self.tracker.get_today_cost(),
+        )
+
+        last_usage = {
+            'timestamp': usage.timestamp.isoformat(),
+            'model': usage.model,
+            'cost_usd': round(usage.cost_usd, 4),
+            'task_type': usage.task_type,
+            'total_tokens': usage.total_tokens,
+        }
+        self._status['last_usage'] = last_usage
+        self._save_status()
+
     def get_status(self) -> Dict:
         """Get current budget status."""
+        self._reset_if_new_day()
         current_cost = self.tracker.get_today_cost()
         remaining = self.get_remaining_budget()
         percentage_used = (current_cost / self.config.daily_usd_cap) * 100
-        
+
+        self._status['current_cost'] = round(current_cost, 4)
+        self._status['projected_cost'] = round(current_cost, 4)
+        self._status['last_updated'] = datetime.now().isoformat()
+        self._save_status()
+
         return {
             'daily_cap': self.config.daily_usd_cap,
             'current_cost': current_cost,
             'remaining': remaining,
             'percentage_used': percentage_used,
             'within_budget': current_cost <= self.config.daily_usd_cap,
-            'usage_breakdown': self.tracker.get_usage_breakdown()
+            'usage_breakdown': self.tracker.get_usage_breakdown(),
+            'alerts': list(self._status.get('alerts', [])),
+            'threshold_crossed': self._status.get('threshold_crossed', False),
+            'last_usage': self._status.get('last_usage'),
         }
 

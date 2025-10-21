@@ -16,24 +16,52 @@ abacus:
 
 # Model Selection Strategy
 # Solo Git automatically selects the best model for each task
-models:
-  # Planning models - for complex reasoning and architecture decisions
-  planning_model: gpt-4o
-  planning_fallback: claude-3-5-sonnet
-  planning_max_tokens: 4096
-  planning_temperature: 0.2
-  
-  # Coding models - for specialized code generation
-  coding_model: deepseek-coder-33b
-  coding_fallback: codellama-70b-instruct
-  coding_max_tokens: 2048
-  coding_temperature: 0.1
-  
-  # Fast models - for quick operations
-  fast_model: llama-3.1-8b-instruct
-  fast_fallback: gemma-2-9b-it
-  fast_max_tokens: 1024
-  fast_temperature: 0.1
+ai:
+  models:
+    # Planning models - complex reasoning and architecture decisions
+    planning:
+      primary:
+        name: gpt-4o
+        provider: openai
+        max_tokens: 4096
+        temperature: 0.2
+        cost_per_1k_tokens: 0.0300
+      fallback:
+        name: claude-3-5-sonnet
+        provider: anthropic
+        max_tokens: 4096
+        temperature: 0.2
+        cost_per_1k_tokens: 0.0250
+
+    # Coding models - specialized code generation
+    coding:
+      primary:
+        name: deepseek-coder-33b
+        provider: abacus
+        max_tokens: 2048
+        temperature: 0.1
+        cost_per_1k_tokens: 0.0005
+      fallback:
+        name: codellama-70b-instruct
+        provider: abacus
+        max_tokens: 2048
+        temperature: 0.1
+        cost_per_1k_tokens: 0.0005
+
+    # Fast models - quick iterations and linting
+    fast:
+      primary:
+        name: llama-3.1-8b-instruct
+        provider: abacus
+        max_tokens: 1024
+        temperature: 0.1
+        cost_per_1k_tokens: 0.0001
+      fallback:
+        name: gemma-2-9b-it
+        provider: abacus
+        max_tokens: 1024
+        temperature: 0.1
+        cost_per_1k_tokens: 0.0001
 
 # Budget Controls
 budget:

@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional, Dict, Any
+from dataclasses import dataclass, field, asdict
 
 import yaml
 
@@ -38,6 +39,120 @@ class AbacusAPIConfig:
 
 
 @dataclass
+class ModelVariantConfig:
+    """Configuration for a specific deployed model."""
+
+    name: str
+    provider: str = "abacus"
+    max_tokens: int = 2048
+    temperature: float = 0.1
+    cost_per_1k_tokens: float = 0.001
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        defaults: Optional["ModelVariantConfig"] = None,
+    ) -> "ModelVariantConfig":
+        """Create a variant from dictionary with defaults."""
+
+        defaults = defaults or cls(name=data.get("name", ""))
+
+        return cls(
+            name=data.get("name", defaults.name),
+            provider=data.get("provider", defaults.provider),
+            max_tokens=data.get("max_tokens", defaults.max_tokens),
+            temperature=data.get("temperature", defaults.temperature),
+            cost_per_1k_tokens=data.get(
+                "cost_per_1k_tokens", defaults.cost_per_1k_tokens
+            ),
+        )
+
+    def merge(self, override: Dict[str, Any]) -> "ModelVariantConfig":
+        """Merge override dictionary into variant."""
+
+        return ModelVariantConfig.from_dict(override, self)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to serializable dictionary."""
+
+        return {
+            "name": self.name,
+            "provider": self.provider,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "cost_per_1k_tokens": self.cost_per_1k_tokens,
+        }
+
+
+@dataclass
+class TierModelConfig:
+    """Primary/fallback model configuration for a tier."""
+
+    primary: ModelVariantConfig
+    fallback: Optional[ModelVariantConfig] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize tier configuration."""
+
+        data = {"primary": self.primary.to_dict()}
+        if self.fallback:
+            data["fallback"] = self.fallback.to_dict()
+        return data
+
+
+def _default_fast_model() -> "TierModelConfig":
+    primary = ModelVariantConfig(
+        name="llama-3.1-8b-instruct",
+        provider="abacus",
+        max_tokens=1024,
+        temperature=0.1,
+        cost_per_1k_tokens=0.0001,
+    )
+    fallback = ModelVariantConfig(
+        name="gemma-2-9b-it",
+        provider="abacus",
+        max_tokens=1024,
+        temperature=0.1,
+        cost_per_1k_tokens=0.0001,
+    )
+    return TierModelConfig(primary=primary, fallback=fallback)
+
+
+def _default_coding_model() -> "TierModelConfig":
+    primary = ModelVariantConfig(
+        name="deepseek-coder-33b",
+        provider="abacus",
+        max_tokens=2048,
+        temperature=0.1,
+        cost_per_1k_tokens=0.0005,
+    )
+    fallback = ModelVariantConfig(
+        name="codellama-70b-instruct",
+        provider="abacus",
+        max_tokens=2048,
+        temperature=0.1,
+        cost_per_1k_tokens=0.0005,
+    )
+    return TierModelConfig(primary=primary, fallback=fallback)
+
+
+def _default_planning_model() -> "TierModelConfig":
+    primary = ModelVariantConfig(
+        name="gpt-4o",
+        provider="abacus",
+        max_tokens=4096,
+        temperature=0.2,
+        cost_per_1k_tokens=0.03,
+    )
+    fallback = ModelVariantConfig(
+        name="claude-3-5-sonnet",
+        provider="abacus",
+        max_tokens=4096,
+        temperature=0.2,
+        cost_per_1k_tokens=0.025,
+    )
+    return TierModelConfig(primary=primary, fallback=fallback)
 class DeploymentCredentials:
     """Deployment credentials for Abacus.ai deployments."""
 
@@ -53,6 +168,133 @@ class DeploymentCredentials:
 
 @dataclass
 class ModelConfig:
+    """Model configuration for different task tiers."""
+
+    fast: TierModelConfig = field(default_factory=_default_fast_model)
+    coding: TierModelConfig = field(default_factory=_default_coding_model)
+    planning: TierModelConfig = field(default_factory=_default_planning_model)
+
+    def to_ai_models_dict(self) -> Dict[str, Any]:
+        """Return AI model configuration dictionary."""
+
+        return {
+            "fast": self.fast.to_dict(),
+            "coding": self.coding.to_dict(),
+            "planning": self.planning.to_dict(),
+        }
+
+    def merge_ai_models(self, override: Dict[str, Any]):
+        """Merge new-style AI model configuration overrides."""
+
+        for tier_name, tier_override in override.items():
+            tier_config: Optional[TierModelConfig] = getattr(self, tier_name, None)
+            if not tier_config or not isinstance(tier_override, dict):
+                continue
+
+            primary_override = tier_override.get("primary")
+            if isinstance(primary_override, dict):
+                tier_config.primary = tier_config.primary.merge(primary_override)
+
+            if "fallback" in tier_override:
+                fallback_override = tier_override.get("fallback")
+                if fallback_override is None:
+                    tier_config.fallback = None
+                elif isinstance(fallback_override, dict):
+                    defaults = tier_config.fallback or tier_config.primary
+                    tier_config.fallback = ModelVariantConfig.from_dict(
+                        fallback_override, defaults
+                    )
+
+    def apply_legacy_fields(self, legacy: Dict[str, Any]):
+        """Apply legacy flat model configuration fields."""
+
+        if not isinstance(legacy, dict):
+            return
+
+        # Fast tier
+        if "fast_model" in legacy:
+            self.fast.primary = self.fast.primary.merge(
+                {"name": legacy["fast_model"]}
+            )
+        if "fast_fallback" in legacy:
+            fallback = self.fast.fallback or ModelVariantConfig.from_dict(
+                {"name": legacy["fast_fallback"]}, self.fast.primary
+            )
+            self.fast.fallback = fallback.merge({"name": legacy["fast_fallback"]})
+        if "fast_max_tokens" in legacy:
+            self.fast.primary = self.fast.primary.merge(
+                {"max_tokens": legacy["fast_max_tokens"]}
+            )
+            if self.fast.fallback:
+                self.fast.fallback = self.fast.fallback.merge(
+                    {"max_tokens": legacy["fast_max_tokens"]}
+                )
+        if "fast_temperature" in legacy:
+            self.fast.primary = self.fast.primary.merge(
+                {"temperature": legacy["fast_temperature"]}
+            )
+            if self.fast.fallback:
+                self.fast.fallback = self.fast.fallback.merge(
+                    {"temperature": legacy["fast_temperature"]}
+                )
+
+        # Coding tier
+        if "coding_model" in legacy:
+            self.coding.primary = self.coding.primary.merge(
+                {"name": legacy["coding_model"]}
+            )
+        if "coding_fallback" in legacy:
+            fallback = self.coding.fallback or ModelVariantConfig.from_dict(
+                {"name": legacy["coding_fallback"]}, self.coding.primary
+            )
+            self.coding.fallback = fallback.merge(
+                {"name": legacy["coding_fallback"]}
+            )
+        if "coding_max_tokens" in legacy:
+            self.coding.primary = self.coding.primary.merge(
+                {"max_tokens": legacy["coding_max_tokens"]}
+            )
+            if self.coding.fallback:
+                self.coding.fallback = self.coding.fallback.merge(
+                    {"max_tokens": legacy["coding_max_tokens"]}
+                )
+        if "coding_temperature" in legacy:
+            self.coding.primary = self.coding.primary.merge(
+                {"temperature": legacy["coding_temperature"]}
+            )
+            if self.coding.fallback:
+                self.coding.fallback = self.coding.fallback.merge(
+                    {"temperature": legacy["coding_temperature"]}
+                )
+
+        # Planning tier
+        if "planning_model" in legacy:
+            self.planning.primary = self.planning.primary.merge(
+                {"name": legacy["planning_model"]}
+            )
+        if "planning_fallback" in legacy:
+            fallback = self.planning.fallback or ModelVariantConfig.from_dict(
+                {"name": legacy["planning_fallback"]}, self.planning.primary
+            )
+            self.planning.fallback = fallback.merge(
+                {"name": legacy["planning_fallback"]}
+            )
+        if "planning_max_tokens" in legacy:
+            self.planning.primary = self.planning.primary.merge(
+                {"max_tokens": legacy["planning_max_tokens"]}
+            )
+            if self.planning.fallback:
+                self.planning.fallback = self.planning.fallback.merge(
+                    {"max_tokens": legacy["planning_max_tokens"]}
+                )
+        if "planning_temperature" in legacy:
+            self.planning.primary = self.planning.primary.merge(
+                {"temperature": legacy["planning_temperature"]}
+            )
+            if self.planning.fallback:
+                self.planning.fallback = self.planning.fallback.merge(
+                    {"temperature": legacy["planning_temperature"]}
+                )
     """Model configuration for different task types."""
 
     # Planning models (GPT-4, Claude, Llama 70B)
@@ -81,6 +323,8 @@ class BudgetConfig:
     daily_usd_cap: float = 10.0
     alert_threshold: float = 0.8
     track_by_model: bool = True
+    escalation_triggers: Optional[Dict[str, Any]] = None
+    
     escalation_triggers: Dict[str, Any] = None
 
     def __post_init__(self):
@@ -157,6 +401,7 @@ class SoloGitConfig:
                 'api_key': self.abacus.api_key,
             },
             'ai': {
+                'models': self.models.to_ai_models_dict()
                 'models': {
                     'fast': {
                         'primary': self.models.fast_model,
@@ -256,6 +501,20 @@ class ConfigManager:
                 base.abacus.endpoint = override['abacus']['endpoint']
             if 'api_key' in override['abacus']:
                 base.abacus.api_key = override['abacus']['api_key']
+        
+        # Models (legacy schema)
+        if 'models' in override and not isinstance(override['models'], dict):
+            # Nothing to merge if models key is not a dict
+            pass
+        elif 'models' in override and 'ai' not in override:
+            base.models.apply_legacy_fields(override['models'])
+
+        # Models (new schema)
+        if 'ai' in override and isinstance(override['ai'], dict):
+            models_override = override['ai'].get('models')
+            if isinstance(models_override, dict):
+                base.models.merge_ai_models(models_override)
+        
 
         # Models
         if 'models' in override:
@@ -343,7 +602,9 @@ class ConfigManager:
                 'endpoint': self.config.abacus.endpoint,
                 'api_key': self.config.abacus.api_key,
             },
-            'models': asdict(self.config.models),
+            'ai': {
+                'models': self.config.models.to_ai_models_dict()
+            },
             'budget': asdict(self.config.budget),
             'tests': {
                 'sandbox_image': self.config.tests.sandbox_image,

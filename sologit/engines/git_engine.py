@@ -753,43 +753,43 @@ class GitEngine:
     def get_workpad_stats(self, pad_id: str) -> dict:
         """
         Get statistics about workpad changes.
-        
+
         Args:
             pad_id: Workpad ID
-            
+
         Returns:
             Statistics dictionary
         """
         workpad = self.workpad_db.get(pad_id)
         if not workpad:
             raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
-        
+
         repository = self.repo_db[workpad.repo_id]
-        
+
         try:
             repo = Repo(repository.path)
-            
+
             # Get diff stats
             diff_index = repo.commit(repository.trunk_branch).diff(
                 repo.commit(workpad.branch_name)
             )
-            
+
             files_changed = []
             total_insertions = 0
             total_deletions = 0
-            
+
             for diff_item in diff_index:
                 stats = {
                     'file': diff_item.a_path or diff_item.b_path,
                     'change_type': diff_item.change_type,
                 }
                 files_changed.append(stats)
-            
+
             # Get commit count
             commits = list(repo.iter_commits(
                 f"{repository.trunk_branch}..{workpad.branch_name}"
             ))
-            
+
             return {
                 'pad_id': pad_id,
                 'title': workpad.title,
@@ -802,10 +802,57 @@ class GitEngine:
                 'created_at': workpad.created_at.isoformat(),
                 'last_activity': workpad.last_activity.isoformat(),
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to get workpad stats: {e}")
             raise GitEngineError(f"Failed to get workpad stats: {e}")
+
+    def get_workpad_diff_summary(self, pad_id: str, base: Optional[str] = None) -> dict:
+        """Get diff summary between a workpad and the base branch."""
+
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+
+        repository = self.repo_db[workpad.repo_id]
+        base_branch = base or repository.trunk_branch
+
+        try:
+            repo = Repo(repository.path)
+
+            numstat_output = repo.git.diff(base_branch, workpad.branch_name, '--numstat')
+            insertions = 0
+            deletions = 0
+            files: List[str] = []
+
+            for line in numstat_output.splitlines():
+                parts = line.split('\t')
+                if len(parts) != 3:
+                    continue
+                added, removed, filename = parts
+                if added.isdigit():
+                    insertions += int(added)
+                if removed.isdigit():
+                    deletions += int(removed)
+                files.append(filename)
+
+            files_changed = len(set(files))
+
+            return {
+                'repo_id': workpad.repo_id,
+                'workpad_id': pad_id,
+                'base_branch': base_branch,
+                'compare_branch': workpad.branch_name,
+                'files_changed': files_changed,
+                'files': files,
+                'lines_added': insertions,
+                'lines_deleted': deletions,
+                'lines_changed': insertions + deletions,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to generate diff summary: {e}")
+            raise GitEngineError(f"Failed to generate diff summary: {e}")
     
     def cleanup_stale_workpads(self, days: int = 7) -> List[str]:
         """
