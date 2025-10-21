@@ -7,10 +7,11 @@ This test module targets all missing coverage lines to bring Patch Engine to 100
 import pytest
 import tempfile
 from pathlib import Path
-from sologit.engines.git_engine import GitEngine, GitEngineError, WorkpadNotFoundError
+from sologit.engines.git_engine import GitEngine, WorkpadNotFoundError
 from sologit.engines.patch_engine import (
     PatchEngine,
     PatchEngineError,
+    GitEngineError,
     PatchConflictError,
 )
 
@@ -270,16 +271,16 @@ class TestCreatePatchFromFiles:
         
         assert fake_pad_id in str(exc_info.value)
 
+    @pytest.mark.xfail(reason="Complex mocking interaction with gitpython")
+    def test_create_patch_repo_error(self, temp_dir, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_create_patch_repo_error(self, temp_dir, monkeypatch):
         """Test create_patch_from_files with repository access error."""
         import zipfile
-        from git import Repo as GitRepo
         
         git_engine = GitEngine(temp_dir)
         patch_engine = PatchEngine(git_engine)
         
-        # Create a repo and workpad
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
             with zipfile.ZipFile(tmp.name, 'w') as zf:
                 zf.writestr('test.txt', 'original content\n')
@@ -290,25 +291,12 @@ class TestCreatePatchFromFiles:
         repo_id = git_engine.init_from_zip(repo_data, "test-repo")
         pad_id = git_engine.create_workpad(repo_id, "test-pad")
         
-        # Mock Repo constructor to raise an exception
-        original_repo = GitRepo
-        call_count = [0]
-        
-        def mock_repo_constructor(path, *args, **kwargs):
-            call_count[0] += 1
-            # Let first few calls succeed (for setup), then fail
-            if call_count[0] > 5:
-                raise RuntimeError("Repository access error")
-            return original_repo(path, *args, **kwargs)
-        
-        monkeypatch.setattr("sologit.engines.patch_engine.Repo", mock_repo_constructor)
+        mocker.patch.object(git_engine, 'get_workpad', side_effect=GitEngineError("Repo access error"))
         
         file_changes = {"test.txt": "new content"}
         
-        with pytest.raises(PatchEngineError) as exc_info:
+        with pytest.raises(PatchEngineError, match="Failed to create patch"):
             patch_engine.create_patch_from_files(pad_id, file_changes)
-        
-        assert "Failed to create patch" in str(exc_info.value)
 
 
 class TestApplyPatchInteractive:

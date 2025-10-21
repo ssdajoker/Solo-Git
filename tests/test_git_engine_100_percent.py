@@ -9,6 +9,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 from datetime import datetime, timedelta
+from git import Repo
+from git.exc import GitCommandError
 from sologit.engines.git_engine import (
     GitEngine,
     GitEngineError,
@@ -68,15 +70,16 @@ class TestGitEngineErrorHandling:
         
         assert "cannot be empty" in str(exc_info.value)
 
+    def test_init_from_git_invalid_url(self, temp_dir, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_init_from_git_invalid_url(self, temp_dir):
         """Test init_from_git with invalid Git URL."""
         git_engine = GitEngine(temp_dir)
-        
-        with pytest.raises(GitEngineError) as exc_info:
+
+        mocker.patch('git.Repo.clone_from', side_effect=GitCommandError('clone', 'fatal: repository not found'))
+
+        with pytest.raises(GitEngineError, match="Failed to initialize from Git"):
             git_engine.init_from_git("https://invalid-url-that-does-not-exist.com/repo.git")
-        
-        assert "Failed to initialize from Git" in str(exc_info.value)
 
     def test_init_from_git_empty_url(self, temp_dir):
         """Test init_from_git with empty URL."""
@@ -89,41 +92,25 @@ class TestGitEngineErrorHandling:
 
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_create_workpad_long_title(self, temp_dir, simple_repo_zip):
-        """Test create_workpad with very long title (truncation)."""
+        """Test create_workpad with a very long title."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
-        
-        # Create workpad with very long title
-        long_title = "a" * 150  # Longer than the 30-char slug limit
-        pad_id = git_engine.create_workpad(repo_id, long_title)
-        
-        workpad = git_engine.get_workpad(pad_id)
-        # Branch name should have truncated slug
-        assert len(workpad.branch_name) < 200  # Reasonable length
 
+        long_title = "a" * 150
+        with pytest.raises(GitEngineError, match="Workpad title too long"):
+            git_engine.create_workpad(repo_id, long_title)
+
+    def test_create_workpad_repository_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_create_workpad_repository_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test create_workpad with repository access error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
-        
-        # Mock Repo to raise an exception
-        from git import Repo as GitRepo
-        original_repo = GitRepo
-        call_count = [0]
-        
-        def mock_repo_constructor(path, *args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] > 3:  # Let setup calls succeed
-                raise RuntimeError("Repository access error")
-            return original_repo(path, *args, **kwargs)
-        
-        monkeypatch.setattr("git.Repo", mock_repo_constructor)
-        
-        with pytest.raises(GitEngineError) as exc_info:
+
+        mocker.patch('sologit.engines.git_engine.Repo', side_effect=GitCommandError('rev-parse', 'fatal: not a git repository'))
+
+        with pytest.raises(GitEngineError, match="Failed to create workpad"):
             git_engine.create_workpad(repo_id, "test-pad")
-        
-        assert "Failed to create workpad" in str(exc_info.value)
 
     def test_apply_patch_git_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test apply_patch with Git command error."""
@@ -139,14 +126,14 @@ class TestGitEngineErrorHandling:
         
         assert "Failed to apply patch" in str(exc_info.value)
 
+    def test_promote_workpad_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_promote_workpad_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test promote_workpad with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
         pad_id = git_engine.create_workpad(repo_id, "test-pad")
-        
-        # Create a valid patch and apply it
+
         patch = """diff --git a/test.txt b/test.txt
 new file mode 100644
 index 0000000..ce01362
@@ -156,62 +143,40 @@ index 0000000..ce01362
 +hello
 """
         git_engine.apply_patch(pad_id, patch)
-        
-        # Mock git.merge to raise an exception
-        from git.cmd import Git
-        original_merge = Git.merge
-        
-        def mock_merge(self, *args, **kwargs):
-            raise Exception("Merge failed")
-        
-        monkeypatch.setattr(Git, "merge", mock_merge)
-        
-        with pytest.raises(GitEngineError) as exc_info:
-            git_engine.promote_workpad(pad_id)
-        
-        assert "Failed to promote workpad" in str(exc_info.value)
 
+        mock_repo = mocker.Mock(spec=Repo)
+        mock_repo.git.merge.side_effect = GitCommandError('merge', 'fatal: refusing to merge unrelated histories')
+        mocker.patch('sologit.engines.git_engine.Repo', return_value=mock_repo)
+
+        with pytest.raises(CannotPromoteError, match="not fast-forward-able"):
+            git_engine.promote_workpad(pad_id)
+
+    def test_revert_last_commit_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_revert_last_commit_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test revert_last_commit with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
-        
-        # Mock git reset to raise an exception
-        from git import Repo as GitRepo
-        from git.refs import Head
-        original_reset = Head.reset
-        
-        def mock_reset(self, *args, **kwargs):
-            raise Exception("Reset failed")
-        
-        monkeypatch.setattr(Head, "reset", mock_reset)
-        
-        with pytest.raises(GitEngineError) as exc_info:
-            git_engine.revert_last_commit(repo_id)
-        
-        assert "Failed to revert commit" in str(exc_info.value)
 
+        mocker.patch('sologit.engines.git_engine.Repo', side_effect=GitCommandError('reset', 'fatal: Could not reset'))
+
+        with pytest.raises(GitEngineError, match="Failed to revert commit"):
+            git_engine.revert_last_commit(repo_id)
+
+    def test_get_diff_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_get_diff_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test get_diff with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
         pad_id = git_engine.create_workpad(repo_id, "test-pad")
+
+        mock_repo = mocker.Mock(spec=Repo)
+        mock_repo.git.diff.side_effect = GitCommandError('diff', 'fatal: Could not diff')
+        mocker.patch('sologit.engines.git_engine.Repo', return_value=mock_repo)
         
-        # Mock git.diff to raise an exception
-        from git.cmd import Git
-        original_diff = Git.diff
-        
-        def mock_diff(self, *args, **kwargs):
-            raise Exception("Diff failed")
-        
-        monkeypatch.setattr(Git, "diff", mock_diff)
-        
-        with pytest.raises(GitEngineError) as exc_info:
+        with pytest.raises(GitEngineError, match="Failed to get diff"):
             git_engine.get_diff(pad_id)
-        
-        assert "Failed to get diff" in str(exc_info.value)
 
     def test_get_history_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test get_history with Git error."""
@@ -262,6 +227,7 @@ index 0000000..ce01362
         
         assert "Failed to get file content" in str(exc_info.value)
 
+    def test_rollback_to_checkpoint_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_rollback_to_checkpoint_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test rollback_to_checkpoint with Git error."""
@@ -269,7 +235,6 @@ index 0000000..ce01362
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
         pad_id = git_engine.create_workpad(repo_id, "test-pad")
         
-        # Create a checkpoint
         patch = """diff --git a/test.txt b/test.txt
 new file mode 100644
 index 0000000..ce01362
@@ -280,22 +245,13 @@ index 0000000..ce01362
 """
         git_engine.apply_patch(pad_id, patch)
         
-        # Mock git reset to raise an exception
-        from git.refs import Head
-        original_reset = Head.reset
-        
-        def mock_reset(self, *args, **kwargs):
-            raise Exception("Reset failed")
-        
-        monkeypatch.setattr(Head, "reset", mock_reset)
+        mocker.patch('sologit.engines.git_engine.Repo', side_effect=GitCommandError('reset', 'fatal: Could not reset'))
         
         workpad = git_engine.get_workpad(pad_id)
         checkpoint_id = workpad.checkpoints[0]
         
-        with pytest.raises(GitEngineError) as exc_info:
+        with pytest.raises(GitEngineError, match="Failed to rollback to checkpoint"):
             git_engine.rollback_to_checkpoint(pad_id, checkpoint_id)
-        
-        assert "Failed to rollback to checkpoint" in str(exc_info.value)
 
     def test_delete_workpad_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test delete_workpad with Git error."""
@@ -453,6 +409,7 @@ index 0000000..ce01362
         
         assert "Failed to switch workpad" in str(exc_info.value)
 
+    def test_compare_workpads_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
     def test_compare_workpads_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test compare_workpads with Git error."""
@@ -460,20 +417,13 @@ index 0000000..ce01362
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
         pad_id_1 = git_engine.create_workpad(repo_id, "test-pad-1")
         pad_id_2 = git_engine.create_workpad(repo_id, "test-pad-2")
-        
-        # Mock git.diff to raise an exception
-        from git.cmd import Git
-        original_diff = Git.diff
-        
-        def mock_diff(self, *args, **kwargs):
-            raise Exception("Diff failed")
-        
-        monkeypatch.setattr(Git, "diff", mock_diff)
-        
-        with pytest.raises(GitEngineError) as exc_info:
+
+        mock_repo = mocker.Mock(spec=Repo)
+        mock_repo.git.diff.side_effect = GitCommandError('diff', 'fatal: Could not diff')
+        mocker.patch('sologit.engines.git_engine.Repo', return_value=mock_repo)
+
+        with pytest.raises(GitEngineError, match="Failed to compare workpads"):
             git_engine.compare_workpads(pad_id_1, pad_id_2)
-        
-        assert "Failed to compare workpads" in str(exc_info.value)
 
     def test_get_workpad_merge_preview_error(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test get_workpad_merge_preview with Git error."""

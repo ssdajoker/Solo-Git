@@ -119,6 +119,7 @@ class CIOrchestrator:
             # For now, we assume trunk is at the commit we want to test
             history = self.git_engine.get_history(repo_id, limit=1)
             if not history:
+                raise ValueError("No commits found in repository")
                 raise Exception("No commits found in repository")
             
             if on_progress:
