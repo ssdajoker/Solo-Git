@@ -35,7 +35,7 @@ def set_formatter_console(console) -> None:
 
 def abort_with_error(message: str, details: Optional[str] = None) -> None:
     """Display a formatted error and abort the command."""
-    content = f"[bold]{message}[/bold]"
+    content = f"[bold]Error: {message}[/bold]"
     if details:
         content += f"\n\n{details}"
     formatter.print_error_panel(content)
@@ -141,6 +141,7 @@ def get_test_orchestrator() -> TestOrchestrator:
             sandbox_image=config.sandbox_image,
             execution_mode=config.execution_mode,
             log_dir=log_dir,
+            formatter=formatter,
         )
     return _test_orchestrator
 
@@ -169,27 +170,50 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
 
     try:
         if zip_file:
-            # Read zip file
             zip_path = Path(zip_file)
-            zip_data = zip_path.read_bytes()
-            
-            # Derive name from filename if not provided
-            if not name:
-                name = zip_path.stem
-
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
-            repo_id = git_engine.init_from_zip(zip_data, name)
-
-        else:  # git_url
-            # Derive name from URL if not provided
+        else:
             if not name:
                 name = Path(git_url).stem.replace('.git', '')
-
             formatter.print_info(f"Cloning repository from: {git_url}")
-            repo_id = git_engine.init_from_git(git_url, name)
 
-        repo = git_engine.get_repo(repo_id)
+        with formatter.create_progress() as progress:
+            overall_task = progress.add_task("Repository setup", total=3)
+
+            if zip_file:
+                read_task = progress.add_task("Reading archive from disk", total=None)
+                zip_data = zip_path.read_bytes()
+                progress.remove_task(read_task)
+                progress.advance(overall_task, 1)
+
+                if not name:
+                    name = zip_path.stem
+
+                import_task = progress.add_task("Importing archive contents", total=None)
+                repo_id = git_engine.init_from_zip(zip_data, name)
+                progress.remove_task(import_task)
+                progress.advance(overall_task, 1)
+
+            else:  # git_url
+                prepare_task = progress.add_task("Preparing clone parameters", total=None)
+                progress.remove_task(prepare_task)
+                progress.advance(overall_task, 1)
+
+                clone_task = progress.add_task("Cloning remote repository", total=None)
+                repo_id = git_engine.init_from_git(git_url, name)
+                progress.remove_task(clone_task)
+                progress.advance(overall_task, 1)
+
+            finalize_task = progress.add_task("Finalizing repository metadata", total=None)
+            repo = git_engine.get_repo(repo_id)
+            progress.remove_task(finalize_task)
+            progress.advance(overall_task, 1)
+
         formatter.print_success("Repository initialized!")
+        formatter.print_info(f"Repo ID: {repo.id}")
+        formatter.print_info(f"Name: {repo.name}")
+        formatter.print_info(f"Path: {repo.path}")
+        formatter.print_info(f"Trunk: {repo.trunk_branch}")
 
         summary_table = formatter.table(headers=["Field", "Value"])
         summary_table.add_row("ID", f"[cyan]{repo.id}[/cyan]")
@@ -972,7 +996,7 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
         formatter.print_info(f"Model: {config_manager.config.models.planning_model}")
         start_time = time.time()
 
-        orchestrator = AIOrchestrator(config_manager)
+        orchestrator = AIOrchestrator(config_manager, formatter=formatter)
 
         repo_map = git_engine.get_repo_map(repo_id)
         context = {

@@ -9,7 +9,14 @@ from typing import Optional, Dict, Any, List, Sequence
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.syntax import Syntax
 from rich.tree import Tree
 from rich.live import Live
@@ -124,8 +131,32 @@ class RichFormatter:
             BarColumn(complete_style=theme.colors.success, finished_style=theme.colors.success),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(),
-            console=self.console
+            TimeRemainingColumn(),
+            console=self.console,
         )
+
+    def progress(self, description: str) -> "ProgressContext":
+        """Create a managed progress context with an initial indeterminate task."""
+        return ProgressContext(self.create_progress(), description)
+
+
+class ProgressContext:
+    """Context manager that manages an indeterminate task for scoped progress."""
+
+    def __init__(self, progress: Progress, description: str):
+        self._progress = progress
+        self._description = description
+        self._task_id: Optional[int] = None
+
+    def __enter__(self) -> Progress:
+        progress = self._progress.__enter__()
+        self._task_id = progress.add_task(self._description, total=None)
+        return progress
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self._task_id is not None:
+            self._progress.remove_task(self._task_id)
+        self._progress.__exit__(exc_type, exc_val, exc_tb)
     
     def syntax_highlight(self, code: str, language: str = "python") -> Syntax:
         """Create syntax-highlighted code block."""

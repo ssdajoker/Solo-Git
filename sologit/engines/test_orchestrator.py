@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -21,6 +22,7 @@ from docker.errors import DockerException
 
 from sologit.engines.git_engine import GitEngine, WorkpadNotFoundError
 from sologit.utils.logger import get_logger
+from sologit.ui.formatter import RichFormatter
 
 logger = get_logger(__name__)
 
@@ -64,9 +66,9 @@ class TestResult:
     name: str
     status: TestStatus
     duration_ms: int
-    exit_code: int
-    stdout: str
-    stderr: str
+    exit_code: int = 0
+    stdout: str = ""
+    stderr: str = ""
     error: Optional[str] = None
     log_path: Optional[Path] = None
     metrics: Dict[str, Any] = None
@@ -87,6 +89,7 @@ class TestOrchestrator:
         sandbox_image: str = "python:3.11-slim",
         execution_mode: str = TestExecutionMode.AUTO.value,
         log_dir: Optional[Path] = None,
+        formatter: Optional[RichFormatter] = None,
     ) -> None:
         """Initialize Test Orchestrator."""
 
@@ -95,6 +98,7 @@ class TestOrchestrator:
         self.requested_mode = TestExecutionMode(execution_mode)
         self.log_dir = Path(log_dir or (Path.home() / ".sologit" / "data" / "test_runs"))
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.formatter = formatter or RichFormatter()
 
         self.docker_client = None
         self.mode = TestExecutionMode.SUBPROCESS
@@ -119,6 +123,55 @@ class TestOrchestrator:
         else:
             logger.info("TestOrchestrator initialized in subprocess mode")
 
+    @contextmanager
+    def _progress(self, description: str, total: Optional[int] = None):
+        """Create a scoped progress context if a formatter is available."""
+        if not self.formatter:
+            yield None
+            return
+
+        with self.formatter.create_progress() as progress:
+            task_id = progress.add_task(description, total=total)
+            try:
+                yield (progress, task_id)
+            finally:
+                progress.stop_task(task_id)
+
+    def _start_test_progress(
+        self,
+        progress,
+        active_tasks: Dict[str, int],
+        test_name: str,
+    ) -> None:
+        """Start an indeterminate progress spinner for an active test."""
+        if not progress:
+            return
+        if test_name in active_tasks:
+            return
+        active_tasks[test_name] = progress.add_task(f"{test_name}", total=None)
+
+    def _complete_test_progress(
+        self,
+        progress,
+        active_tasks: Dict[str, int],
+        test_name: str,
+        execution_task: Optional[int],
+        overall_task: Optional[int],
+    ) -> None:
+        """Close test spinner and advance aggregate progress bars."""
+        if not progress:
+            return
+
+        task_id = active_tasks.pop(test_name, None)
+        if task_id is not None:
+            progress.remove_task(task_id)
+
+        if execution_task is not None:
+            progress.advance(execution_task, 1)
+
+        if overall_task is not None:
+            progress.advance(overall_task, 1)
+
     async def run_tests(
         self,
         pad_id: str,
@@ -142,24 +195,56 @@ class TestOrchestrator:
             raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
 
         repository = self.git_engine.get_repo(workpad.repo_id)
+        total_tests = len(tests)
+        overall_total = max(total_tests + 1, 1)
 
-        if parallel:
-            results = await self._run_parallel(
-                repository.path,
-                tests,
-                on_output=on_output,
-                on_test_complete=on_test_complete,
-            )
-        else:
-            results = await self._run_sequential(
-                repository.path,
-                tests,
-                on_output=on_output,
-                on_test_complete=on_test_complete,
-            )
+        with self._progress(
+            f"Running test suite ({'parallel' if parallel else 'sequential'})",
+            total=overall_total,
+        ) as progress_ctx:
+            progress, overall_task = progress_ctx or (None, None)
+            execution_task = None
+            active_tasks: Dict[str, int] = {}
 
-        passed = sum(1 for r in results if r.status == TestStatus.PASSED)
-        failed = len(results) - passed
+            if progress and total_tests:
+                execution_task = progress.add_task("Executing tests", total=total_tests)
+
+            if parallel:
+                results = await self._run_parallel(
+                    repository.path,
+                    tests,
+                    on_output=on_output,
+                    on_test_complete=on_test_complete,
+                    progress=progress,
+                    execution_task=execution_task,
+                    overall_task=overall_task,
+                    active_tasks=active_tasks,
+                )
+            else:
+                results = await self._run_sequential(
+                    repository.path,
+                    tests,
+                    on_output=on_output,
+                    on_test_complete=on_test_complete,
+                    progress=progress,
+                    execution_task=execution_task,
+                    overall_task=overall_task,
+                    active_tasks=active_tasks,
+                )
+
+            aggregation_task = None
+            if progress:
+                aggregation_task = progress.add_task("Aggregating results", total=None)
+
+            passed = sum(1 for r in results if r.status == TestStatus.PASSED)
+            failed = len(results) - passed
+
+            if progress:
+                if aggregation_task is not None:
+                    progress.remove_task(aggregation_task)
+                if overall_task is not None:
+                    progress.advance(overall_task, 1)
+
         logger.info("Tests complete: %s passed, %s failed", passed, failed)
 
         return results
@@ -191,23 +276,43 @@ class TestOrchestrator:
         *,
         on_output: Optional[Callable[[str, str, str], None]] = None,
         on_test_complete: Optional[Callable[[TestResult], None]] = None,
+        progress=None,
+        execution_task: Optional[int] = None,
+        overall_task: Optional[int] = None,
+        active_tasks: Optional[Dict[str, int]] = None,
     ) -> List[TestResult]:
         """Run tests sequentially while respecting dependencies."""
 
         ordered_tests = self._resolve_execution_order(tests)
         results: List[TestResult] = []
         result_map: Dict[str, TestResult] = {}
+        active = active_tasks if active_tasks is not None else {}
 
         for test in ordered_tests:
             blocked = self._blocked_dependencies(test, result_map)
             if blocked:
                 result = self._create_skipped_result(test, blocked)
+                self._complete_test_progress(
+                    progress,
+                    active,
+                    test.name,
+                    execution_task,
+                    overall_task,
+                )
             else:
                 logger.debug("Running test sequentially: %s", test.name)
+                self._start_test_progress(progress, active, test.name)
                 result = await self._run_single_test(
                     repo_path,
                     test,
                     on_output=on_output,
+                )
+                self._complete_test_progress(
+                    progress,
+                    active,
+                    test.name,
+                    execution_task,
+                    overall_task,
                 )
 
             results.append(result)
@@ -225,6 +330,10 @@ class TestOrchestrator:
         *,
         on_output: Optional[Callable[[str, str, str], None]] = None,
         on_test_complete: Optional[Callable[[TestResult], None]] = None,
+        progress=None,
+        execution_task: Optional[int] = None,
+        overall_task: Optional[int] = None,
+        active_tasks: Optional[Dict[str, int]] = None,
     ) -> List[TestResult]:
         """Run tests in parallel with dependency awareness."""
 
@@ -233,6 +342,7 @@ class TestOrchestrator:
         result_map: Dict[str, TestResult] = {}
         completed = set()
         running: Dict[str, asyncio.Task[TestResult]] = {}
+        active = active_tasks if active_tasks is not None else {}
 
         while len(completed) < len(tests):
             for test in tests:
@@ -245,6 +355,13 @@ class TestOrchestrator:
                     results.append(result)
                     result_map[test.name] = result
                     completed.add(test.name)
+                    self._complete_test_progress(
+                        progress,
+                        active,
+                        test.name,
+                        execution_task,
+                        overall_task,
+                    )
                     if on_test_complete:
                         on_test_complete(result)
 
@@ -262,6 +379,7 @@ class TestOrchestrator:
 
             for test in ready:
                 logger.debug("Starting test: %s", test.name)
+                self._start_test_progress(progress, active, test.name)
                 running[test.name] = asyncio.create_task(
                     self._run_single_test(
                         repo_path,
@@ -282,6 +400,13 @@ class TestOrchestrator:
                     result_map[result.name] = result
                     completed.add(result.name)
                     running.pop(result.name, None)
+                    self._complete_test_progress(
+                        progress,
+                        active,
+                        result.name,
+                        execution_task,
+                        overall_task,
+                    )
 
                     if on_test_complete:
                         on_test_complete(result)
