@@ -260,28 +260,6 @@ cli.add_command(test)
 from sologit.cli.commands import ci
 cli.add_command(ci)
 
-# Phase 4: Integrated Heaven Interface commands
-try:
-    from sologit.cli.integrated_commands import (
-        workpad as integrated_workpad,
-        ai as integrated_ai,
-        history as integrated_history,
-        edit as integrated_edit
-    )
-    
-    # Register with different names to avoid conflicts
-    cli.add_command(integrated_workpad, name="workpad-integrated")
-    cli.add_command(integrated_ai, name="ai")
-
-    history_command_name = "history" if "history" not in cli.commands else "heaven-history"
-    cli.add_command(integrated_history, name=history_command_name)
-    cli.add_command(integrated_edit, name="edit")
-    
-    logger.info("Integrated Heaven Interface commands loaded")
-except ImportError as e:
-    logger.warning(f"Could not load integrated commands: {e}")
-
-
 def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
     """Shared launcher for the Heaven TUI."""
     try:
@@ -546,6 +524,26 @@ def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
         abort_with_error("Pair session failed", str(e))
 
 
+# Phase 4: Integrated Heaven Interface commands
+try:
+    from sologit.cli.integrated_commands import (
+        workpad as integrated_workpad,
+        ai as integrated_ai,
+        history as integrated_history,
+        edit as integrated_edit
+    )
+
+    # Register with distinct names to avoid clashing with core commands
+    cli.add_command(integrated_workpad, name="workpad-integrated")
+    cli.add_command(integrated_ai, name="ai")
+    cli.add_command(integrated_history, name="heaven-history")
+    cli.add_command(integrated_edit, name="edit")
+
+    logger.info("Integrated Heaven Interface commands loaded")
+except ImportError as e:
+    logger.warning(f"Could not load integrated commands: {e}")
+
+
 def main():
     """Entry point for the CLI."""
     try:
@@ -571,7 +569,6 @@ def _run_interactive_shell() -> int:
             "Install with: pip install prompt-toolkit"
         )
 
-    from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
     from prompt_toolkit.completion import FuzzyWordCompleter
     from prompt_toolkit.shortcuts import prompt as toolkit_prompt
@@ -580,9 +577,9 @@ def _run_interactive_shell() -> int:
     formatter.print_header("Interactive Shell")
     formatter.print_info("Press Ctrl+R for history search, Tab for autocomplete.")
 
-    session = create_enhanced_prompt()
     cli_history_path = get_cli_history_path()
-    session.history = FileHistory(str(cli_history_path))
+    session = create_enhanced_prompt(history_path=cli_history_path)
+    # Ensure the default buffer is aware of the shared history file
     session.app.default_buffer.history = session.history
 
     def _load_history_strings() -> List[str]:

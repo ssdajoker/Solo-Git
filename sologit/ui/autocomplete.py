@@ -17,6 +17,7 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.styles import Style
 
 from sologit.ui.theme import theme
+from sologit.ui.history import get_cli_history_path
 
 
 class SoloGitCompleter(Completer):
@@ -135,9 +136,12 @@ class CommandHistory:
         return sorted_commands[:limit]
 
 
-def create_enhanced_prompt() -> PromptSession:
+def create_enhanced_prompt(history_path: Optional[Path] = None) -> PromptSession:
     """Create an enhanced prompt with autocomplete and history."""
-    history_file = Path.home() / ".sologit" / "command_history"
+    if history_path is None:
+        history_path = get_cli_history_path()
+
+    history_file = Path(history_path)
     history_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Create style based on Heaven Interface theme
