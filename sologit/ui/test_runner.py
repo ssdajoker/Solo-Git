@@ -28,6 +28,8 @@ logger = get_logger(__name__)
 
 class TestStatus(Enum):
     """Test execution status."""
+    __test__ = False
+
     IDLE = "idle"
     RUNNING = "running"
     PASSED = "passed"
@@ -39,6 +41,8 @@ class TestStatus(Enum):
 @dataclass
 class TestResult:
     """Test execution result."""
+    __test__ = False
+
     status: TestStatus
     total: int = 0
     passed: int = 0
@@ -246,6 +250,8 @@ class TestRunner:
     Test runner that executes pytest and streams output.
     """
 
+    __test__ = False
+    
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
         self.process: Optional[subprocess.Popen] = None

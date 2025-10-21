@@ -158,7 +158,8 @@ class FileTreeWidget(Static):
                     icon = "📁"
                     label = f"{icon} {item.name}"
                     node = parent_node.add(label, data={"path": str(item), "is_dir": True})
-                    node.add_class("directory")
+                    if hasattr(node, "add_class"):
+                        node.add_class("directory")
                     
                     # Recursively add children
                     try:
@@ -197,7 +198,8 @@ class FileTreeWidget(Static):
                     
                     label = f"{status_icon} {file_icon} {item.name}"
                     node = parent_node.add(label, data={"path": str(item), "is_dir": False, "status": file_status.status})
-                    node.add_class(f"file-{file_status.status}")
+                    if hasattr(node, "add_class"):
+                        node.add_class(f"file-{file_status.status}")
         
         except PermissionError:
             logger.warning(f"Permission denied: {path}")
