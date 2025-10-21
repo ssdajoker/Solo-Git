@@ -8,12 +8,67 @@ security sensitivity, and budget constraints.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 import re
 
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from sologit.state.git_sync import GitStateSync
+
+
+DEFAULT_MODEL_SETTINGS = {
+    "fast": {
+        "primary": {
+            "name": "llama-3.1-8b-instruct",
+            "max_tokens": 1024,
+            "temperature": 0.1,
+            "cost_per_1k_tokens": 0.0001,
+            "provider": "abacus",
+        },
+        "fallback": {
+            "name": "gemma-2-9b-it",
+            "max_tokens": 1024,
+            "temperature": 0.1,
+            "cost_per_1k_tokens": 0.0001,
+            "provider": "abacus",
+        },
+    },
+    "coding": {
+        "primary": {
+            "name": "deepseek-coder-33b",
+            "max_tokens": 2048,
+            "temperature": 0.1,
+            "cost_per_1k_tokens": 0.0005,
+            "provider": "abacus",
+        },
+        "fallback": {
+            "name": "codellama-70b-instruct",
+            "max_tokens": 2048,
+            "temperature": 0.1,
+            "cost_per_1k_tokens": 0.0005,
+            "provider": "abacus",
+        },
+    },
+    "planning": {
+        "primary": {
+            "name": "gpt-4o",
+            "max_tokens": 4096,
+            "temperature": 0.2,
+            "cost_per_1k_tokens": 0.03,
+            "provider": "abacus",
+        },
+        "fallback": {
+            "name": "claude-3-5-sonnet",
+            "max_tokens": 4096,
+            "temperature": 0.2,
+            "cost_per_1k_tokens": 0.025,
+            "provider": "abacus",
+        },
+    },
+}
 
 
 class ModelTier(Enum):
@@ -77,20 +132,21 @@ class ModelRouter:
         'api design', 'schema', 'model', 'interface'
     ]
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], git_sync: Optional["GitStateSync"] = None):
         """
         Initialize model router.
-        
+
         Args:
             config: Configuration dictionary with model settings
         """
         self.config = config
         self.models: Dict[ModelTier, List[ModelConfig]] = self._load_models()
         self.escalation_rules = config.get('escalation', {})
-        
-        logger.info("ModelRouter initialized with %d models", 
+        self.git_sync = git_sync
+
+        logger.info("ModelRouter initialized with %d models",
                    sum(len(models) for models in self.models.values()))
-    
+
     def _load_models(self) -> Dict[ModelTier, List[ModelConfig]]:
         """Load model configurations from config."""
         models = {
@@ -98,67 +154,89 @@ class ModelRouter:
             ModelTier.CODING: [],
             ModelTier.PLANNING: []
         }
-        
+
         model_configs = self.config.get('ai', {}).get('models', {})
-        
-        # Fast models
-        if 'fast' in model_configs:
-            fast_config = model_configs['fast']
-            models[ModelTier.FAST].append(ModelConfig(
-                name=fast_config.get('primary', 'llama-3.1-8b-instruct'),
-                tier=ModelTier.FAST,
-                max_tokens=fast_config.get('max_tokens', 1024),
-                temperature=fast_config.get('temperature', 0.1),
-                cost_per_1k_tokens=0.0001  # Very cheap
-            ))
-            if 'fallback' in fast_config:
-                models[ModelTier.FAST].append(ModelConfig(
-                    name=fast_config['fallback'],
-                    tier=ModelTier.FAST,
-                    max_tokens=fast_config.get('max_tokens', 1024),
-                    temperature=fast_config.get('temperature', 0.1),
-                    cost_per_1k_tokens=0.0001
-                ))
-        
-        # Coding models
-        if 'coding' in model_configs:
-            coding_config = model_configs['coding']
-            models[ModelTier.CODING].append(ModelConfig(
-                name=coding_config.get('primary', 'deepseek-coder-33b'),
-                tier=ModelTier.CODING,
-                max_tokens=coding_config.get('max_tokens', 2048),
-                temperature=coding_config.get('temperature', 0.1),
-                cost_per_1k_tokens=0.0005
-            ))
-            if 'fallback' in coding_config:
-                models[ModelTier.CODING].append(ModelConfig(
-                    name=coding_config['fallback'],
-                    tier=ModelTier.CODING,
-                    max_tokens=coding_config.get('max_tokens', 2048),
-                    temperature=coding_config.get('temperature', 0.1),
-                    cost_per_1k_tokens=0.0005
-                ))
-        
-        # Planning models
-        if 'planning' in model_configs:
-            planning_config = model_configs['planning']
-            models[ModelTier.PLANNING].append(ModelConfig(
-                name=planning_config.get('primary', 'gpt-4o'),
-                tier=ModelTier.PLANNING,
-                max_tokens=planning_config.get('max_tokens', 4096),
-                temperature=planning_config.get('temperature', 0.2),
-                cost_per_1k_tokens=0.03
-            ))
-            if 'fallback' in planning_config:
-                models[ModelTier.PLANNING].append(ModelConfig(
-                    name=planning_config['fallback'],
-                    tier=ModelTier.PLANNING,
-                    max_tokens=planning_config.get('max_tokens', 4096),
-                    temperature=planning_config.get('temperature', 0.2),
-                    cost_per_1k_tokens=0.02
-                ))
-        
+
+        has_explicit_models = bool(model_configs)
+
+        for tier in ModelTier:
+            tier_key = tier.value
+            if has_explicit_models and tier_key not in model_configs:
+                continue
+            tier_defaults = DEFAULT_MODEL_SETTINGS.get(tier_key, {})
+            tier_config = model_configs.get(tier_key, {}) if has_explicit_models else {}
+
+            if tier_config is None:
+                continue
+
+            if not isinstance(tier_config, dict):
+                tier_config = {"primary": tier_config}
+
+            primary_defaults = dict(tier_defaults.get("primary", {}))
+            fallback_defaults = dict(
+                tier_defaults.get("fallback", primary_defaults)
+            )
+
+            # Allow top-level overrides that should apply to both variants
+            for shared_key in ("max_tokens", "temperature", "cost_per_1k_tokens", "provider"):
+                if shared_key in tier_config:
+                    primary_defaults[shared_key] = tier_config[shared_key]
+                    fallback_defaults[shared_key] = tier_config[shared_key]
+
+            primary_entry = self._build_model_entry(
+                tier,
+                tier_config.get("primary"),
+                primary_defaults,
+            )
+            if primary_entry:
+                models[tier].append(primary_entry)
+
+            fallback_entry = self._build_model_entry(
+                tier,
+                tier_config.get("fallback"),
+                fallback_defaults,
+            )
+            if fallback_entry:
+                models[tier].append(fallback_entry)
+
         return models
+
+    def _build_model_entry(
+        self,
+        tier: ModelTier,
+        entry_config: Optional[Any],
+        defaults: Dict[str, Any],
+    ) -> Optional[ModelConfig]:
+        """Construct a model configuration from config entry."""
+
+        if entry_config is None and not defaults:
+            return None
+
+        if isinstance(entry_config, str):
+            merged = dict(defaults)
+            merged["name"] = entry_config
+        elif isinstance(entry_config, dict):
+            merged = dict(defaults)
+            merged.update(entry_config)
+        elif entry_config is None:
+            merged = dict(defaults)
+        else:
+            logger.warning("Unsupported model entry format for %s: %s", tier.value, entry_config)
+            return None
+
+        if not merged.get("name"):
+            return None
+
+        return ModelConfig(
+            name=merged.get("name"),
+            tier=tier,
+            max_tokens=int(merged.get("max_tokens", defaults.get("max_tokens", 2048))),
+            temperature=float(merged.get("temperature", defaults.get("temperature", 0.1))),
+            cost_per_1k_tokens=float(
+                merged.get("cost_per_1k_tokens", defaults.get("cost_per_1k_tokens", 0.001))
+            ),
+            provider=merged.get("provider", defaults.get("provider", "abacus")),
+        )
     
     def select_model(
         self,
@@ -210,27 +288,37 @@ class ModelRouter:
         """
         prompt_lower = prompt.lower()
         context = context or {}
-        
+
+        repo_context = self._fetch_repo_context(context)
+        if "diff_summary" in context and isinstance(context["diff_summary"], dict):
+            repo_context = {**repo_context, **context["diff_summary"]}
+
         # Check for security-sensitive keywords
         security_sensitive = any(
-            keyword in prompt_lower 
+            keyword in prompt_lower
             for keyword in self.SECURITY_KEYWORDS
         )
-        
+
         # Check for architecture-related keywords
         requires_architecture = any(
             keyword in prompt_lower
             for keyword in self.ARCHITECTURE_KEYWORDS
         )
-        
+
         # Estimate patch size from prompt
         estimated_patch_size = self._estimate_patch_size(prompt, context)
-        
+        diff_lines_changed = repo_context.get('lines_changed', 0)
+        if diff_lines_changed:
+            estimated_patch_size = max(estimated_patch_size, diff_lines_changed)
+
         # Estimate file count
         file_count = context.get('file_count', 1)
+        repo_files_changed = repo_context.get('files_changed')
+        if repo_files_changed is not None:
+            file_count = max(file_count, repo_files_changed)
         if 'multiple files' in prompt_lower or 'several files' in prompt_lower:
             file_count = max(file_count, 3)
-        
+
         # Check if tests are mentioned
         has_tests = 'test' in prompt_lower or 'spec' in prompt_lower
         
@@ -257,10 +345,16 @@ class ModelRouter:
         # Architecture contribution (0.0 to 0.2)
         if requires_architecture:
             score += 0.2
-        
+
+        # Repo context contribution (0.0 to 0.2)
+        if diff_lines_changed > 200:
+            score += 0.1
+        if repo_files_changed and repo_files_changed > 5:
+            score += 0.1
+
         # Clamp to [0.0, 1.0]
         score = min(max(score, 0.0), 1.0)
-        
+
         return ComplexityMetrics(
             score=score,
             security_sensitive=security_sensitive,
@@ -269,6 +363,23 @@ class ModelRouter:
             has_tests=has_tests,
             requires_architecture=requires_architecture
         )
+
+    def _fetch_repo_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Retrieve repository statistics via GitStateSync if available."""
+
+        if not self.git_sync:
+            return {}
+
+        workpad_id = context.get('workpad_id')
+        if not workpad_id:
+            return {}
+
+        try:
+            summary = self.git_sync.get_workpad_diff_summary(workpad_id)
+            return summary or {}
+        except Exception as exc:  # pragma: no cover - log and continue
+            logger.debug("Failed to fetch repo context for %s: %s", workpad_id, exc)
+            return {}
     
     def _estimate_patch_size(
         self,

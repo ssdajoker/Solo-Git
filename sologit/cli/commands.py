@@ -1,18 +1,23 @@
 
-"""
-Command implementations for Solo Git CLI.
+"""Command implementations for Solo Git CLI."""
 
-Phase 1: Repository and workpad management.
-Phase 4: Heaven Interface integration with Rich formatting.
-"""
-
+import asyncio
 import click
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
+from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
 from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
+from sologit.workflows.ci_orchestrator import CIOrchestrator
+from sologit.workflows.rollback_handler import RollbackHandler
+from sologit.state.manager import StateManager
+from sologit.engines.test_orchestrator import (
+    TestOrchestrator,
+    TestConfig,
+    TestStatus,
+)
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 
@@ -26,6 +31,72 @@ formatter = RichFormatter()
 _git_engine: Optional[GitEngine] = None
 _patch_engine: Optional[PatchEngine] = None
 _test_orchestrator: Optional[TestOrchestrator] = None
+_config_manager: Optional[ConfigManager] = None
+
+
+def get_config_manager() -> ConfigManager:
+    """Get or create ConfigManager instance."""
+
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
+
+
+def _tests_from_config_entries(entries: List[dict], default_timeout: int) -> List[TestConfig]:
+    """Convert config entries to TestConfig objects."""
+    tests: List[TestConfig] = []
+
+    for entry in entries or []:
+        if isinstance(entry, TestConfig):
+            tests.append(entry)
+            continue
+
+        if not isinstance(entry, dict):
+            logger.warning(f"Ignoring invalid test entry: {entry}")
+            continue
+
+        name = entry.get('name')
+        cmd = entry.get('cmd')
+        if not name or not cmd:
+            logger.warning(f"Test entry missing name/cmd: {entry}")
+            continue
+
+        timeout = int(entry.get('timeout', default_timeout)) if entry.get('timeout') is not None else default_timeout
+        depends_on = entry.get('depends_on', []) or []
+
+        tests.append(TestConfig(name=name, cmd=cmd, timeout=timeout, depends_on=depends_on))
+
+    return tests
+
+
+def _parse_test_override(value: str, default_timeout: int) -> TestConfig:
+    """Parse CLI test override in the form NAME=CMD[:TIMEOUT]."""
+    if '=' not in value:
+        raise click.BadParameter("Must be in NAME=CMD[:TIMEOUT] format")
+
+    name, remainder = value.split('=', 1)
+    name = name.strip()
+    remainder = remainder.strip()
+
+    if not name or not remainder:
+        raise click.BadParameter("Both name and command must be provided")
+
+    timeout = default_timeout
+    if ':' in remainder:
+        cmd, timeout_str = remainder.rsplit(':', 1)
+        cmd = cmd.strip()
+        try:
+            timeout = int(timeout_str.strip())
+        except ValueError as exc:
+            raise click.BadParameter("Timeout must be an integer") from exc
+    else:
+        cmd = remainder
+
+    if not cmd:
+        raise click.BadParameter("Command cannot be empty")
+
+    return TestConfig(name=name, cmd=cmd, timeout=timeout)
 
 
 def get_git_engine() -> GitEngine:
@@ -48,7 +119,14 @@ def get_test_orchestrator() -> TestOrchestrator:
     """Get or create TestOrchestrator instance."""
     global _test_orchestrator
     if _test_orchestrator is None:
-        _test_orchestrator = TestOrchestrator(get_git_engine())
+        config = get_config_manager().config.tests
+        log_dir = Path(config.log_dir).expanduser()
+        _test_orchestrator = TestOrchestrator(
+            get_git_engine(),
+            sandbox_image=config.sandbox_image,
+            execution_mode=config.execution_mode,
+            log_dir=log_dir,
+        )
     return _test_orchestrator
 
 
@@ -339,16 +417,16 @@ def test():
 @click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
 @click.option('--parallel/--sequential', default=True, help='Parallel execution')
 def test_run(pad_id: str, target: str, parallel: bool):
-    """Run tests in Docker sandbox."""
+    """Run tests for a workpad with live output streaming."""
+
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
-    
+
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
         click.echo(f"❌ Workpad {pad_id} not found", err=True)
         raise click.Abort()
-    
-    # Define test configurations (hardcoded for now, will load from evogit.yaml later)
+
     if target == 'fast':
         tests = [
             TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
@@ -358,67 +436,100 @@ def test_run(pad_id: str, target: str, parallel: bool):
             TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
             TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
         ]
-    
+
     try:
-        # Show test info panel
         info = f"""[bold]Workpad:[/bold] {workpad.title}
 [bold]Tests:[/bold] {len(tests)}
-[bold]Mode:[/bold] {'Parallel' if parallel else 'Sequential'}
+[bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
+[bold]Mode:[/bold] {test_orchestrator.mode.value}
 [bold]Target:[/bold] {target}"""
         formatter.print_panel(info, title="🧪 Test Execution")
-        
-        # Run tests with progress indicator
+
         with formatter.create_progress() as progress:
             task = progress.add_task(f"Running {target} tests...", total=len(tests))
-            
-            # Note: We're using sync version here for simplicity
-            # In production, we'd stream results and update progress
-            results = test_orchestrator.run_tests_sync(pad_id, tests, parallel)
-            progress.update(task, completed=len(tests))
-        
+
+            def handle_output(test_name: str, stream: str, line: str) -> None:
+                style = "cyan" if stream == "stdout" else "red"
+                prefix = "stdout" if stream == "stdout" else "stderr"
+                formatter.console.print(
+                    f"[{prefix}] {test_name}: {line}",
+                    style=style,
+                )
+
+            def handle_complete(result) -> None:
+                progress.advance(task)
+
+            results = asyncio.run(
+                test_orchestrator.run_tests(
+                    pad_id,
+                    tests,
+                    parallel=parallel,
+                    on_output=handle_output,
+                    on_test_complete=handle_complete,
+                )
+            )
+
         formatter.console.print()
-        
-        # Display results table
-        table = formatter.table(headers=["Test", "Status", "Duration", "Output"])
-        
+
+        table = formatter.table(headers=["Test", "Status", "Duration", "Mode", "Notes", "Log"])
+
         for result in results:
-            status_icon = "✅" if result.status.value == "passed" else "❌" if result.status.value == "failed" else "⏭️"
+            if result.status == TestStatus.PASSED:
+                status_icon = "✅"
+            elif result.status == TestStatus.SKIPPED:
+                status_icon = "⏭️"
+            elif result.status == TestStatus.TIMEOUT:
+                status_icon = "⏱️"
+            elif result.status == TestStatus.ERROR:
+                status_icon = "⚠️"
+            else:
+                status_icon = "❌"
+
             status_text = f"{status_icon} {result.status.value}"
             duration_s = result.duration_ms / 1000
-            
-            # Truncate output
-            output = result.stdout[:50] + "..." if len(result.stdout) > 50 else result.stdout
-            output = output.replace("\n", " ")
-            
+            notes = result.error or result.stderr or ""
+            notes = notes.replace("\n", " ")
+            if len(notes) > 80:
+                notes = notes[:77] + "..."
+            log_display = result.log_path.name if result.log_path else "-"
+
             table.add_row(
                 result.name,
                 status_text,
                 f"{duration_s:.2f}s",
-                output if result.status.value != "passed" else ""
+                result.mode,
+                notes,
+                log_display,
             )
-        
+
         formatter.console.print(table)
-        
-        # Summary panel
+
         summary = test_orchestrator.get_summary(results)
-        status_color = "green" if summary['status'] == 'passed' else "red"
+        status_color = "green" if summary['status'] == 'green' else "red"
         summary_text = f"""[bold]Total:[/bold] {summary['total']}
 [bold]Passed:[/bold] [green]{summary['passed']}[/green]
 [bold]Failed:[/bold] [red]{summary['failed']}[/red]
+[bold]Timeout:[/bold] {summary['timeout']}
+[bold]Skipped:[/bold] {summary['skipped']}
 [bold]Status:[/bold] [{status_color}]{summary['status'].upper()}[/{status_color}]"""
-        
+
         formatter.print_panel(summary_text, title="📊 Test Summary")
-        
-        # Update workpad test status
+
         workpad.test_status = summary['status']
-        
-        if summary['status'] == 'passed':
+
+        if summary['status'] == 'green':
             formatter.print_success("All tests passed! Ready to promote.")
         else:
-            formatter.print_error("Some tests failed. Fix issues before promoting.")
-        
-    except Exception as e:
-        formatter.print_error(f"Test execution failed: {e}")
+            formatter.print_error("Some tests require attention before promoting.")
+
+        log_paths = [res.log_path for res in results if res.log_path]
+        if log_paths:
+            formatter.print_info(
+                f"Detailed logs saved to {log_paths[0].parent}"
+            )
+
+    except Exception as exc:
+        formatter.print_error(f"Test execution failed: {exc}")
         raise click.Abort()
 
 
@@ -433,7 +544,12 @@ def test_run(pad_id: str, target: str, parallel: bool):
 @click.argument('pad_id')
 @click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
 @click.option('--no-auto-promote', is_flag=True, help='Disable automatic promotion')
-def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
+@click.option(
+    '--test', 'test_overrides', multiple=True,
+    help='Override tests as NAME=CMD[:TIMEOUT] (repeat for multiple tests)'
+)
+@click.pass_context
+def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_overrides: Tuple[str, ...]):
     """
     Run tests and auto-promote if they pass (Phase 3).
     
@@ -445,35 +561,59 @@ def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
     """
     from sologit.workflows.auto_merge import AutoMergeWorkflow
     from sologit.workflows.promotion_gate import PromotionRules
-    
+
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
-    
+    state_manager = StateManager()
+
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
         click.echo(f"❌ Workpad {pad_id} not found", err=True)
         raise click.Abort()
-    
-    # Define tests based on target
-    if target == 'fast':
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-        ]
+
+    config_manager: ConfigManager = ctx.obj.get('config') if ctx and ctx.obj else ConfigManager()
+    config_tests = config_manager.config.tests
+    default_timeout = config_tests.timeout_seconds
+
+    if test_overrides:
+        tests = [_parse_test_override(value, default_timeout) for value in test_overrides]
     else:
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-            TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
-        ]
-    
+        suite_entries = config_tests.fast_tests if target == 'fast' else config_tests.full_tests
+        tests = _tests_from_config_entries(suite_entries, default_timeout)
+
+        if not tests:
+            if target == 'fast':
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                ]
+            else:
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                    TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+                ]
+
     # Configure promotion rules (can be loaded from config in future)
     rules = PromotionRules(
         require_tests=True,
         require_all_tests_pass=True,
         require_fast_forward=True
     )
-    
-    # Create workflow
-    workflow = AutoMergeWorkflow(git_engine, test_orchestrator, rules)
+
+    smoke_tests = _tests_from_config_entries(config_tests.smoke_tests, default_timeout)
+    ci_orchestrator = CIOrchestrator(git_engine, test_orchestrator)
+    rollback_handler = RollbackHandler(git_engine)
+
+    workflow = AutoMergeWorkflow(
+        git_engine,
+        test_orchestrator,
+        rules,
+        state_manager=state_manager,
+        ci_orchestrator=ci_orchestrator,
+        rollback_handler=rollback_handler,
+        ci_smoke_tests=smoke_tests,
+        ci_config=config_manager.config.ci,
+        rollback_on_ci_red=config_manager.config.rollback_on_ci_red
+    )
     
     try:
         click.echo(f"🚀 Starting auto-merge workflow for: {workpad.title}")
@@ -485,7 +625,8 @@ def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool):
             pad_id,
             tests,
             parallel=True,
-            auto_promote=not no_auto_promote
+            auto_promote=not no_auto_promote,
+            target=target
         )
         
         # Display formatted result

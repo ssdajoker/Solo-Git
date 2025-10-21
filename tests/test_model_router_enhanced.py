@@ -8,6 +8,16 @@ from sologit.orchestration.model_router import (
 )
 
 
+class FakeGitSync:
+    """Simple GitStateSync stub for testing."""
+
+    def __init__(self, summary):
+        self.summary = summary
+
+    def get_workpad_diff_summary(self, pad_id, base: str = "trunk"):
+        return self.summary
+
+
 @pytest.fixture
 def mock_config():
     """Mock configuration for testing."""
@@ -15,22 +25,46 @@ def mock_config():
         'ai': {
             'models': {
                 'fast': {
-                    'primary': 'llama-3.1-8b-instruct',
-                    'fallback': 'gemma-2-9b-it',
-                    'max_tokens': 1024,
-                    'temperature': 0.1
+                    'primary': {
+                        'name': 'llama-3.1-8b-instruct',
+                        'max_tokens': 1024,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0002
+                    },
+                    'fallback': {
+                        'name': 'gemma-2-9b-it',
+                        'max_tokens': 1024,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.00005
+                    }
                 },
                 'coding': {
-                    'primary': 'deepseek-coder-33b',
-                    'fallback': 'codellama-70b-instruct',
-                    'max_tokens': 2048,
-                    'temperature': 0.1
+                    'primary': {
+                        'name': 'deepseek-coder-33b',
+                        'max_tokens': 2048,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0008
+                    },
+                    'fallback': {
+                        'name': 'codellama-70b-instruct',
+                        'max_tokens': 2048,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0006
+                    }
                 },
                 'planning': {
-                    'primary': 'gpt-4o',
-                    'fallback': 'claude-3-5-sonnet',
-                    'max_tokens': 4096,
-                    'temperature': 0.2
+                    'primary': {
+                        'name': 'gpt-4o',
+                        'max_tokens': 4096,
+                        'temperature': 0.2,
+                        'cost_per_1k_tokens': 0.03
+                    },
+                    'fallback': {
+                        'name': 'claude-3-5-sonnet',
+                        'max_tokens': 4096,
+                        'temperature': 0.2,
+                        'cost_per_1k_tokens': 0.025
+                    }
                 }
             }
         },
@@ -127,6 +161,21 @@ def test_analyze_complexity_with_tests():
     )
     
     assert complexity.has_tests
+
+
+def test_repo_context_escalates_to_planning(mock_config):
+    """Large diffs from Git context should escalate tier selection."""
+
+    git_sync = FakeGitSync({'lines_changed': 420, 'files_changed': 8})
+    router = ModelRouter(mock_config, git_sync=git_sync)
+
+    model = router.select_model(
+        prompt="update feature",
+        context={'workpad_id': 'pad-123'},
+        budget_remaining=20.0
+    )
+
+    assert model.tier == ModelTier.PLANNING
 
 
 def test_analyze_complexity_spec_keyword():
@@ -278,9 +327,12 @@ def test_get_model_for_tier_no_models():
         'ai': {
             'models': {
                 'fast': {
-                    'primary': 'llama-3.1-8b-instruct',
-                    'max_tokens': 1024,
-                    'temperature': 0.1
+                    'primary': {
+                        'name': 'llama-3.1-8b-instruct',
+                        'max_tokens': 1024,
+                        'temperature': 0.1,
+                        'cost_per_1k_tokens': 0.0002
+                    }
                 }
             }
         },

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
-from sologit.api.client import AbacusClient, ChatMessage
+from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -137,11 +137,12 @@ Be specific, practical, and consider the existing codebase structure."""
     def __init__(self, client: AbacusClient):
         """
         Initialize planning engine.
-        
+
         Args:
             client: Abacus.ai API client
         """
         self.client = client
+        self.last_response: Optional['ChatResponse'] = None
         logger.info("PlanningEngine initialized")
     
     def generate_plan(
@@ -149,6 +150,7 @@ Be specific, practical, and consider the existing codebase structure."""
         prompt: str,
         repo_context: Optional[Dict[str, Any]] = None,
         model: str = "gpt-4o",
+        deployment_name: Optional[str] = None,
         deployment_id: Optional[str] = None,
         deployment_token: Optional[str] = None
     ) -> CodePlan:
@@ -194,22 +196,26 @@ Be specific, practical, and consider the existing codebase structure."""
         
         # For Phase 2 without full deployment setup, we'll use a mock response
         # In production, this would call the actual API
+        self.last_response = None
+
         try:
-            if deployment_id and deployment_token:
+            if deployment_name or (deployment_id and deployment_token):
                 response = self.client.chat(
                     messages=messages,
                     model=model,
                     max_tokens=4096,
                     temperature=0.2,
+                    deployment=deployment_name,
                     deployment_id=deployment_id,
                     deployment_token=deployment_token
                 )
+                self.last_response = response
                 plan_data = self._parse_plan_response(response.content)
             else:
                 # Mock response for Phase 2 development
                 logger.warning("No deployment credentials provided, using mock plan")
                 plan_data = self._generate_mock_plan(prompt, repo_context)
-            
+
             # Create CodePlan object
             plan = CodePlan(
                 title=plan_data.get('title', 'Implementation Plan'),
@@ -226,6 +232,9 @@ Be specific, practical, and consider the existing codebase structure."""
             logger.info("Generated plan with %d file changes", len(plan.file_changes))
             return plan
             
+        except AbacusAPIError:
+            self.last_response = None
+            raise
         except Exception as e:
             logger.error("Failed to generate plan: %s", e)
             # Return a basic fallback plan

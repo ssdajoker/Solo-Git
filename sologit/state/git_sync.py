@@ -190,9 +190,9 @@ class GitStateSync:
         workpad = self.git_engine.get_workpad(pad_id)
         if not workpad:
             return None
-        
+
         workpad_state = self.state_manager.get_workpad(pad_id)
-        
+
         return {
             'id': workpad.id,
             'repo_id': workpad.repo_id,
@@ -205,6 +205,11 @@ class GitStateSync:
             'checkpoints': workpad.checkpoints,
             'state': workpad_state.to_dict() if workpad_state else None
         }
+
+    def get_workpad_diff_summary(self, pad_id: str, base: str = "trunk") -> Dict[str, Any]:
+        """Get diff summary for a workpad relative to a base branch."""
+
+        return self.git_engine.get_workpad_diff_summary(pad_id, base=base)
     
     def list_workpads(self, repo_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List workpads for a repository."""

@@ -120,6 +120,7 @@ class CIOrchestrator:
             history = self.git_engine.get_history(repo_id, limit=1)
             if not history:
                 raise ValueError("No commits found in repository")
+                raise Exception("No commits found in repository")
             
             if on_progress:
                 on_progress(f"Running {len(smoke_tests)} smoke tests...")
