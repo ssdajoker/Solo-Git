@@ -11,13 +11,28 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
+
 from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
 from sologit.config.manager import ConfigManager
-from sologit.cli import commands
-from sologit.cli.config_commands import config_group
+from sologit.cli import commands, config_commands
+from sologit.ui.formatter import RichFormatter
+from sologit.ui.theme import theme
 
 logger = get_logger(__name__)
+
+console = Console()
+formatter = RichFormatter(console)
+
+
+def abort_with_error(message: str, details: Optional[str] = None) -> None:
+    """Display a formatted error and abort the command."""
+    content = f"[bold]{message}[/bold]"
+    if details:
+        content += f"\n\n{details}"
+    formatter.print_error_panel(content)
+    raise click.Abort()
 
 
 @click.group()
@@ -55,10 +70,14 @@ def cli(ctx, verbose, config):
     """
     # Setup logging
     setup_logging(verbose=verbose)
-    
+
     # Initialize context
     ctx.ensure_object(dict)
-    
+    ctx.obj['console'] = console
+    formatter.set_console(console)
+    commands.set_formatter_console(console)
+    config_commands.set_formatter_console(console)
+
     # Load configuration
     try:
         config_manager = ConfigManager(config_path=config)
@@ -75,15 +94,23 @@ def cli(ctx, verbose, config):
 @click.pass_context
 def version(ctx):
     """Show version information."""
-    click.echo(f"Solo Git (evogitctl) version {__version__}")
-    click.echo(f"Python {sys.version}")
-    
-    # Show config status
+    formatter.print_header("Solo Git Version")
+    version_table = formatter.table(headers=["Component", "Value"])
+    version_table.add_row("evogitctl", __version__)
+    version_table.add_row("Python", sys.version.split()[0])
+
     config = ctx.obj.get('config')
     if config:
         api_configured = config.has_abacus_credentials()
-        status = "✓ configured" if api_configured else "✗ not configured"
-        click.echo(f"Abacus.ai API: {status}")
+        status_icon = theme.icons.success if api_configured else theme.icons.warning
+        status_color = theme.colors.success if api_configured else theme.colors.warning
+        status_text = "Configured" if api_configured else "Missing credentials"
+        version_table.add_row(
+            "Abacus.ai API",
+            f"[{status_color}]{status_icon} {status_text}[/{status_color}]"
+        )
+
+    formatter.console.print(version_table)
 
 
 @cli.command()
@@ -94,20 +121,21 @@ def hello():
     This is a simple "hello world" command that confirms the CLI is properly
     installed and can execute commands.
     """
-    click.echo("🏁 Solo Git is ready!")
-    click.echo()
-    click.echo("Solo Git - where tests are the review and trunk is king.")
-    click.echo()
-    click.echo("Next steps:")
-    click.echo("  1. Configure API credentials: evogitctl config setup")
-    click.echo("  2. Initialize a repository:   evogitctl repo init --zip app.zip")
-    click.echo("  3. Start pairing with AI:     evogitctl pair 'add feature'")
-    click.echo()
-    click.echo("Run 'evogitctl --help' for more information.")
+    formatter.print_header("Solo Git")
+    formatter.print_success("Solo Git is ready!")
+    formatter.print_info("Where tests are the review and trunk is king.")
+
+    formatter.print_subheader("Next steps")
+    formatter.print_bullet_list([
+        "Configure API credentials: evogitctl config setup",
+        "Initialize a repository: evogitctl repo init --zip app.zip",
+        "Start pairing with AI: evogitctl pair 'add feature'",
+    ], icon=theme.icons.arrow_right, style=theme.colors.blue)
+    formatter.print_info("Run 'evogitctl --help' for more information.")
 
 
 # Register command groups
-cli.add_command(config_group)
+cli.add_command(config_commands.config_group)
 
 # Phase 1 command groups
 from sologit.cli.commands import repo, pad, test
@@ -173,6 +201,18 @@ def tui():
       ? - Help
     """
     _launch_heaven_tui()
+    formatter.print_header("Heaven Interface TUI")
+    formatter.print_info("Launching classic Heaven Interface experience...")
+    try:
+        from sologit.ui.tui_app import run_tui
+        run_tui()
+    except ImportError as e:
+        abort_with_error(
+            "TUI dependencies not installed",
+            "Install with: pip install textual"
+        )
+    except Exception as e:
+        abort_with_error("TUI launch failed", str(e))
 
 
 @cli.command()
@@ -220,6 +260,19 @@ def heaven(repo_path: Optional[str]):
     This command can also be accessed via the ``evogitctl tui`` alias.
     """
     _launch_heaven_tui(repo_path=repo_path)
+    formatter.print_header("Heaven Interface")
+    formatter.print_info("Launching production Heaven Interface...")
+    try:
+        from sologit.ui.heaven_tui import run_heaven_tui
+        run_heaven_tui(repo_path=repo_path)
+    except ImportError as e:
+        abort_with_error(
+            "Heaven TUI dependencies not installed",
+            "Install with: pip install textual"
+        )
+    except Exception as e:
+        logger.error(f"Heaven TUI error: {e}", exc_info=True)
+        abort_with_error("Heaven TUI launch failed", str(e))
 
 
 @cli.command()
@@ -230,17 +283,19 @@ def heaven_legacy():
     This is the previous version with basic functionality.
     Use 'evogitctl heaven' for the new production version.
     """
+    formatter.print_header("Heaven Interface (Legacy)")
+    formatter.print_info("Launching legacy enhanced interface...")
     try:
         from sologit.ui.enhanced_tui import run_enhanced_tui
         run_enhanced_tui()
     except ImportError as e:
-        click.echo("❌ Error: Enhanced TUI dependencies not installed", err=True)
-        click.echo("Install with: pip install textual", err=True)
-        raise click.Abort()
+        abort_with_error(
+            "Enhanced TUI dependencies not installed",
+            "Install with: pip install textual"
+        )
     except Exception as e:
-        click.echo(f"❌ Enhanced TUI launch failed: {e}", err=True)
         logger.error(f"Enhanced TUI error: {e}", exc_info=True)
-        raise click.Abort()
+        abort_with_error("Enhanced TUI launch failed", str(e))
 
 
 @cli.command()
@@ -256,16 +311,18 @@ def interactive():
     
     Press Ctrl+C to exit.
     """
+    formatter.print_header("Interactive Shell")
+    formatter.print_info("Launching interactive prompt with autocomplete...")
     try:
         from sologit.ui.autocomplete import interactive_prompt
         interactive_prompt()
     except ImportError as e:
-        click.echo("❌ Error: Interactive shell dependencies not installed", err=True)
-        click.echo("Install with: pip install prompt-toolkit", err=True)
-        raise click.Abort()
+        abort_with_error(
+            "Interactive shell dependencies not installed",
+            "Install with: pip install prompt-toolkit"
+        )
     except Exception as e:
-        click.echo(f"❌ Interactive shell failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Interactive shell failed", str(e))
 
 
 @cli.command()
@@ -299,13 +356,15 @@ def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
       6. Auto-promotes if green (unless --no-promote)
     """
     if not prompt:
-        click.echo("❌ Error: Prompt is required", err=True)
-        click.echo("\nUsage: evogitctl pair \"your task description\"")
-        click.echo("\nExample: evogitctl pair \"add user login feature\"")
-        raise click.Abort()
-    
+        abort_with_error(
+            "Prompt is required",
+            "Usage: evogitctl pair \"your task description\"\n"
+            "Example: evogitctl pair \"add user login feature\""
+        )
+
     from sologit.cli.commands import execute_pair_loop
-    
+
+    formatter.print_header("AI Pair Programming")
     try:
         execute_pair_loop(
             ctx=ctx,
@@ -318,8 +377,7 @@ def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
         )
     except Exception as e:
         logger.error(f"Pair command failed: {e}", exc_info=ctx.obj.get('verbose', False))
-        click.echo(f"\n❌ Pair session failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Pair session failed", str(e))
 
 
 def main():
@@ -327,11 +385,11 @@ def main():
     try:
         cli(obj={})
     except KeyboardInterrupt:
-        click.echo("\n\nInterrupted by user.", err=True)
+        formatter.print_warning("Interrupted by user.")
         sys.exit(130)
     except Exception as e:
         logger.exception("Unhandled exception")
-        click.echo(f"Error: {e}", err=True)
+        formatter.print_error_panel(str(e), title="Unhandled Error")
         sys.exit(1)
 
 

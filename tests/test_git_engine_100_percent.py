@@ -70,9 +70,8 @@ class TestGitEngineErrorHandling:
         
         assert "cannot be empty" in str(exc_info.value)
 
-    def test_init_from_git_invalid_url(self, temp_dir, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_init_from_git_invalid_url(self, temp_dir):
+    def test_init_from_git_invalid_url(self, temp_dir, mocker):
         """Test init_from_git with invalid Git URL."""
         git_engine = GitEngine(temp_dir)
 
@@ -100,9 +99,8 @@ class TestGitEngineErrorHandling:
         with pytest.raises(GitEngineError, match="Workpad title too long"):
             git_engine.create_workpad(repo_id, long_title)
 
-    def test_create_workpad_repository_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_create_workpad_repository_error(self, temp_dir, simple_repo_zip, monkeypatch):
+    def test_create_workpad_repository_error(self, temp_dir, simple_repo_zip, mocker, monkeypatch):
         """Test create_workpad with repository access error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
@@ -126,9 +124,8 @@ class TestGitEngineErrorHandling:
         
         assert "Failed to apply patch" in str(exc_info.value)
 
-    def test_promote_workpad_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_promote_workpad_error(self, temp_dir, simple_repo_zip, monkeypatch):
+    def test_promote_workpad_error(self, temp_dir, simple_repo_zip, mocker, monkeypatch):
         """Test promote_workpad with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
@@ -151,9 +148,8 @@ index 0000000..ce01362
         with pytest.raises(CannotPromoteError, match="not fast-forward-able"):
             git_engine.promote_workpad(pad_id)
 
-    def test_revert_last_commit_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_revert_last_commit_error(self, temp_dir, simple_repo_zip, monkeypatch):
+    def test_revert_last_commit_error(self, temp_dir, simple_repo_zip, mocker, monkeypatch):
         """Test revert_last_commit with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
@@ -163,9 +159,8 @@ index 0000000..ce01362
         with pytest.raises(GitEngineError, match="Failed to revert commit"):
             git_engine.revert_last_commit(repo_id)
 
-    def test_get_diff_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_get_diff_error(self, temp_dir, simple_repo_zip, monkeypatch):
+    def test_get_diff_error(self, temp_dir, simple_repo_zip, mocker, monkeypatch):
         """Test get_diff with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
@@ -227,9 +222,8 @@ index 0000000..ce01362
         
         assert "Failed to get file content" in str(exc_info.value)
 
-    def test_rollback_to_checkpoint_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_rollback_to_checkpoint_error(self, temp_dir, simple_repo_zip, monkeypatch):
+    def test_rollback_to_checkpoint_error(self, temp_dir, simple_repo_zip, mocker, monkeypatch):
         """Test rollback_to_checkpoint with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
@@ -409,9 +403,8 @@ index 0000000..ce01362
         
         assert "Failed to switch workpad" in str(exc_info.value)
 
-    def test_compare_workpads_error(self, temp_dir, simple_repo_zip, mocker):
     @pytest.mark.xfail(reason="Mocking issue with GitPython")
-    def test_compare_workpads_error(self, temp_dir, simple_repo_zip, monkeypatch):
+    def test_compare_workpads_error(self, temp_dir, simple_repo_zip, mocker, monkeypatch):
         """Test compare_workpads with Git error."""
         git_engine = GitEngine(temp_dir)
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")

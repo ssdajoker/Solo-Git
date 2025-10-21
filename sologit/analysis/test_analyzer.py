@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 
 class FailureCategory(Enum):
     """Categories of test failures."""
+    __test__ = False
     ASSERTION_ERROR = "assertion_error"
     IMPORT_ERROR = "import_error"
     SYNTAX_ERROR = "syntax_error"
@@ -31,6 +32,7 @@ class FailureCategory(Enum):
 @dataclass
 class FailurePattern:
     """Pattern identified in test failure."""
+    __test__ = False
     category: FailureCategory
     message: str
     file: Optional[str] = None
@@ -41,6 +43,7 @@ class FailurePattern:
 @dataclass
 class TestAnalysis:
     """Analysis of test results."""
+    __test__ = False
     total_tests: int
     passed: int
     failed: int

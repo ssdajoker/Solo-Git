@@ -5,7 +5,7 @@ Rich formatter for Heaven Interface.
 Provides formatted output using the Rich library with Heaven Interface design system.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Sequence
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -30,9 +30,17 @@ class RichFormatter:
         """Print text with optional style."""
         self.console.print(text, style=style)
     
+    def set_console(self, console: Console) -> None:
+        """Update the underlying console instance."""
+        self.console = console
+
     def print_header(self, text: str) -> None:
         """Print a header."""
         self.console.print(f"\n[bold {theme.colors.blue}]{text}[/bold {theme.colors.blue}]")
+
+    def print_subheader(self, text: str) -> None:
+        """Print a smaller subheader."""
+        self.console.print(f"[{theme.colors.text_secondary}]{text}[/{theme.colors.text_secondary}]")
     
     def print_success(self, text: str) -> None:
         """Print success message."""
@@ -69,6 +77,27 @@ class RichFormatter:
                    border_color: Optional[str] = None) -> None:
         """Print a panel."""
         self.console.print(self.panel(content, title, border_color))
+
+    def print_error_panel(self, content: str, title: str = "Error") -> None:
+        """Print an error panel with red border."""
+        icon = theme.icons.error
+        self.print_panel(content, title=f"{icon} {title}", border_color=theme.colors.error)
+
+    def print_success_panel(self, content: str, title: str = "Success") -> None:
+        """Print a success panel with green border."""
+        icon = theme.icons.success
+        self.print_panel(content, title=f"{icon} {title}", border_color=theme.colors.success)
+
+    def print_info_panel(self, content: str, title: str = "Info") -> None:
+        """Print an informational panel with blue border."""
+        icon = theme.icons.info
+        self.print_panel(content, title=f"{icon} {title}", border_color=theme.colors.blue)
+
+    def print_bullet_list(self, items: Sequence[str], icon: str = "•", style: Optional[str] = None) -> None:
+        """Print a bullet list."""
+        for item in items:
+            bullet = f"[{style}]{icon}[/{style}]" if style else icon
+            self.console.print(f"  {bullet} {item}")
     
     def table(self, title: Optional[str] = None, headers: Optional[List[str]] = None) -> Table:
         """Create a table with Heaven Interface styling."""

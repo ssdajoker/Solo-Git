@@ -20,11 +20,26 @@ from sologit.engines.test_orchestrator import (
 )
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
+from sologit.ui.theme import theme
 
 logger = get_logger(__name__)
 
 # Initialize Rich formatter
 formatter = RichFormatter()
+
+
+def set_formatter_console(console) -> None:
+    """Allow external modules to configure the console used by the formatter."""
+    formatter.set_console(console)
+
+
+def abort_with_error(message: str, details: Optional[str] = None) -> None:
+    """Display a formatted error and abort the command."""
+    content = f"[bold]{message}[/bold]"
+    if details:
+        content += f"\n\n{details}"
+    formatter.print_error_panel(content)
+    raise click.Abort()
 
 
 # Initialize engines (singleton pattern)
@@ -142,16 +157,16 @@ def repo():
 @click.option('--name', type=str, help='Repository name (optional)')
 def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]):
     """Initialize a new repository from zip file or Git URL."""
+    formatter.print_header("Repository Initialization")
+
     if not zip_file and not git_url:
-        click.echo("❌ Error: Must provide either --zip or --git", err=True)
-        raise click.Abort()
-    
+        abort_with_error("Must provide either --zip or --git")
+
     if zip_file and git_url:
-        click.echo("❌ Error: Cannot provide both --zip and --git", err=True)
-        raise click.Abort()
-    
+        abort_with_error("Cannot provide both --zip and --git")
+
     git_engine = get_git_engine()
-    
+
     try:
         if zip_file:
             # Read zip file
@@ -161,28 +176,31 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
             # Derive name from filename if not provided
             if not name:
                 name = zip_path.stem
-            
-            click.echo(f"🔄 Initializing repository from zip: {zip_path.name}")
+
+            formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
             repo_id = git_engine.init_from_zip(zip_data, name)
-            
+
         else:  # git_url
             # Derive name from URL if not provided
             if not name:
                 name = Path(git_url).stem.replace('.git', '')
-            
-            click.echo(f"🔄 Cloning repository from: {git_url}")
+
+            formatter.print_info(f"Cloning repository from: {git_url}")
             repo_id = git_engine.init_from_git(git_url, name)
-        
+
         repo = git_engine.get_repo(repo_id)
-        click.echo(f"\n✅ Repository initialized!")
-        click.echo(f"   Repo ID: {repo.id}")
-        click.echo(f"   Name: {repo.name}")
-        click.echo(f"   Path: {repo.path}")
-        click.echo(f"   Trunk: {repo.trunk_branch}")
-        
+        formatter.print_success("Repository initialized!")
+
+        summary_table = formatter.table(headers=["Field", "Value"])
+        summary_table.add_row("ID", f"[cyan]{repo.id}[/cyan]")
+        summary_table.add_row("Name", f"[bold]{repo.name}[/bold]")
+        summary_table.add_row("Path", f"{repo.path}")
+        summary_table.add_row("Trunk", f"[cyan]{repo.trunk_branch}[/cyan]")
+
+        formatter.console.print(summary_table)
+
     except GitEngineError as e:
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Repository initialization failed", str(e))
 
 
 @repo.command('list')
@@ -251,34 +269,44 @@ def pad():
 def pad_create(title: str, repo_id: Optional[str]):
     """Create a new workpad."""
     git_engine = get_git_engine()
-    
+
+    formatter.print_header("Workpad Creation")
+
     # If no repo_id, try to auto-select
     if not repo_id:
         repos = git_engine.list_repos()
         if len(repos) == 0:
-            click.echo("❌ No repositories found. Initialize a repository first.", err=True)
-            raise click.Abort()
+            abort_with_error("No repositories found", "Initialize a repository first: evogitctl repo init --zip app.zip")
         elif len(repos) == 1:
             repo_id = repos[0].id
-            click.echo(f"🔄 Using repository: {repos[0].name} ({repo_id})")
+            formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
         else:
-            click.echo("❌ Multiple repositories found. Please specify --repo", err=True)
+            repo_table = formatter.table(headers=["ID", "Name"])
+            for repo in repos:
+                repo_table.add_row(f"[cyan]{repo.id}[/cyan]", repo.name)
+            formatter.print_info_panel(
+                "Multiple repositories detected. Please rerun with --repo <ID>.",
+                title="Repository Selection Required"
+            )
+            formatter.console.print(repo_table)
             raise click.Abort()
-    
+
     try:
-        click.echo(f"🔄 Creating workpad: {title}")
+        formatter.print_info(f"Creating workpad: {title}")
         pad_id = git_engine.create_workpad(repo_id, title)
-        
+
         workpad = git_engine.get_workpad(pad_id)
-        click.echo(f"\n✅ Workpad created!")
-        click.echo(f"   Pad ID: {workpad.id}")
-        click.echo(f"   Title: {workpad.title}")
-        click.echo(f"   Branch: {workpad.branch_name}")
-        click.echo(f"   Base: main")
-        
+        formatter.print_success("Workpad created!")
+
+        details = formatter.table(headers=["Field", "Value"])
+        details.add_row("Pad ID", f"[cyan]{workpad.id}[/cyan]")
+        details.add_row("Title", f"[bold]{workpad.title}[/bold]")
+        details.add_row("Branch", workpad.branch_name)
+        details.add_row("Base", "main")
+        formatter.console.print(details)
+
     except GitEngineError as e:
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to create workpad", str(e))
 
 
 @pad.command('list')
@@ -331,26 +359,31 @@ def pad_info(pad_id: str):
     """Show workpad information."""
     git_engine = get_git_engine()
     workpad = git_engine.get_workpad(pad_id)
-    
+
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
-    
-    click.echo(f"Workpad: {workpad.id}")
-    click.echo(f"Title: {workpad.title}")
-    click.echo(f"Repo: {workpad.repo_id}")
-    click.echo(f"Branch: {workpad.branch_name}")
-    click.echo(f"Status: {workpad.status}")
-    click.echo(f"Created: {workpad.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-    click.echo(f"Checkpoints: {len(workpad.checkpoints)}")
-    
-    if workpad.checkpoints:
-        click.echo("\nCheckpoints:")
-        for cp in workpad.checkpoints:
-            click.echo(f"  - {cp}")
-    
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    formatter.print_header(f"Workpad Details: {workpad.title}")
+
+    status_color = theme.get_status_color(workpad.status)
+    status_icon = theme.get_status_icon(workpad.status)
+    panel_content = f"""[bold]Workpad ID:[/bold] [cyan]{workpad.id}[/cyan]
+[bold]Repository:[/bold] {workpad.repo_id}
+[bold]Branch:[/bold] {workpad.branch_name}
+[bold]Status:[/bold] [{status_color}]{status_icon} {workpad.status.upper()}[/{status_color}]
+[bold]Created:[/bold] {workpad.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+[bold]Checkpoints:[/bold] {len(workpad.checkpoints)}"""
+
     if workpad.test_status:
-        click.echo(f"\nLast Test: {workpad.test_status}")
+        test_color = theme.get_status_color(workpad.test_status)
+        test_icon = theme.get_status_icon(workpad.test_status)
+        panel_content += f"\n[bold]Last Test:[/bold] [{test_color}]{test_icon} {workpad.test_status.upper()}[/{test_color}]"
+
+    formatter.print_info_panel(panel_content, title="Workpad Summary")
+
+    if workpad.checkpoints:
+        formatter.print_subheader("Checkpoints")
+        formatter.print_bullet_list(workpad.checkpoints, icon=theme.icons.commit, style=theme.colors.blue)
 
 
 @pad.command('promote')
@@ -358,30 +391,32 @@ def pad_info(pad_id: str):
 def pad_promote(pad_id: str):
     """Promote workpad to trunk (fast-forward merge)."""
     git_engine = get_git_engine()
-    
+
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
-    
+        abort_with_error(f"Workpad {pad_id} not found")
+
     # Check if can promote
     if not git_engine.can_promote(pad_id):
-        click.echo("❌ Cannot promote: not fast-forward-able", err=True)
-        click.echo("   Trunk has diverged. Manual merge required.", err=True)
-        raise click.Abort()
-    
+        abort_with_error(
+            "Cannot promote workpad",
+            "Trunk has diverged. Manual merge required before promotion."
+        )
+
     try:
-        click.echo(f"🔄 Promoting workpad: {workpad.title}")
+        formatter.print_header("Workpad Promotion")
+        formatter.print_info(f"Promoting workpad: {workpad.title}")
         commit_hash = git_engine.promote_workpad(pad_id)
-        
-        click.echo(f"\n✅ Workpad promoted to trunk!")
-        click.echo(f"   Commit: {commit_hash}")
-        click.echo(f"   Branch deleted: {workpad.branch_name}")
-        click.echo(f"   Trunk updated: main @ {commit_hash}")
-        
+
+        formatter.print_success("Workpad promoted to trunk!")
+        details = formatter.table(headers=["Field", "Value"])
+        details.add_row("Commit", f"[green]{commit_hash}[/green]")
+        details.add_row("Branch Removed", workpad.branch_name)
+        details.add_row("Trunk Updated", f"main @ {commit_hash[:8]}")
+        formatter.console.print(details)
+
     except GitEngineError as e:
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Promotion failed", str(e))
 
 
 @pad.command('diff')
@@ -389,21 +424,20 @@ def pad_promote(pad_id: str):
 def pad_diff(pad_id: str):
     """Show diff between workpad and trunk."""
     git_engine = get_git_engine()
-    
+
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
-    
+        abort_with_error(f"Workpad {pad_id} not found")
+
     try:
         diff = git_engine.get_diff(pad_id)
         if diff:
-            click.echo(diff)
+            formatter.print_header(f"Diff for {workpad.title}")
+            formatter.print_code(diff, language="diff")
         else:
-            click.echo("No changes.")
+            formatter.print_info("No changes between workpad and trunk.")
     except GitEngineError as e:
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to generate diff", str(e))
 
 
 @click.group()
@@ -424,8 +458,7 @@ def test_run(pad_id: str, target: str, parallel: bool):
 
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
+        abort_with_error(f"Workpad {pad_id} not found")
 
     if target == 'fast':
         tests = [
@@ -568,8 +601,7 @@ def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_ov
 
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
+        abort_with_error(f"Workpad {pad_id} not found")
 
     config_manager: ConfigManager = ctx.obj.get('config') if ctx and ctx.obj else ConfigManager()
     config_tests = config_manager.config.tests
@@ -614,12 +646,16 @@ def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_ov
         ci_config=config_manager.config.ci,
         rollback_on_ci_red=config_manager.config.rollback_on_ci_red
     )
-    
+
     try:
-        click.echo(f"🚀 Starting auto-merge workflow for: {workpad.title}")
-        click.echo(f"   Target: {target}")
-        click.echo(f"   Auto-promote: {not no_auto_promote}\n")
-        
+        formatter.print_header("Auto-Merge Workflow")
+        overview = formatter.table(headers=["Field", "Value"])
+        overview.add_row("Workpad", f"[bold]{workpad.title}[/bold] ({workpad.id[:8]})")
+        overview.add_row("Target", target)
+        overview.add_row("Auto-promote", "Enabled" if not no_auto_promote else "Disabled")
+        overview.add_row("Tests", str(len(tests)))
+        formatter.console.print(overview)
+
         # Execute workflow
         result = workflow.execute(
             pad_id,
@@ -628,17 +664,16 @@ def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_ov
             auto_promote=not no_auto_promote,
             target=target
         )
-        
+
         # Display formatted result
-        click.echo(workflow.format_result(result))
-        
+        formatter.print_info_panel(workflow.format_result(result), title="Auto-Merge Result")
+
         # Exit with appropriate code
         if not result.success and result.promotion_decision and not result.promotion_decision.can_promote:
             raise click.Abort()
-    
+
     except Exception as e:
-        click.echo(f"❌ Auto-merge failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Auto-merge failed", str(e))
 
 
 @pad.command('evaluate')
@@ -652,11 +687,10 @@ def pad_evaluate(pad_id: str):
     from sologit.workflows.promotion_gate import PromotionGate, PromotionRules
     
     git_engine = get_git_engine()
-    
+
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
+        abort_with_error(f"Workpad {pad_id} not found")
     
     # Configure rules
     rules = PromotionRules(
@@ -669,22 +703,22 @@ def pad_evaluate(pad_id: str):
     gate = PromotionGate(git_engine, rules)
     
     try:
-        click.echo(f"🚦 Evaluating promotion gate for: {workpad.title}\n")
-        
+        formatter.print_header("Promotion Gate Evaluation")
+        formatter.print_info(f"Evaluating workpad: {workpad.title}")
+
         # Evaluate (without test results for now)
         # In full implementation, would load cached test results
         decision = gate.evaluate(pad_id, test_analysis=None)
-        
+
         # Display decision
-        click.echo(gate.format_decision(decision))
-        
+        formatter.print_info_panel(gate.format_decision(decision), title="Promotion Decision")
+
         # Exit code based on decision
         if not decision.can_promote:
             raise click.Abort()
-    
+
     except Exception as e:
-        click.echo(f"❌ Evaluation failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Evaluation failed", str(e))
 
 
 @click.group()
@@ -706,11 +740,10 @@ def ci_smoke(repo_id: str, commit: Optional[str]):
     
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
-    
+
     repo = git_engine.get_repo(repo_id)
     if not repo:
-        click.echo(f"❌ Repository {repo_id} not found", err=True)
-        raise click.Abort()
+        abort_with_error(f"Repository {repo_id} not found")
     
     # Get commit hash
     if not commit:
@@ -727,13 +760,16 @@ def ci_smoke(repo_id: str, commit: Optional[str]):
     orchestrator = CIOrchestrator(git_engine, test_orchestrator)
     
     def progress_callback(message: str):
-        click.echo(f"   {message}")
-    
+        formatter.print(f"   {message}")
+
     try:
-        click.echo(f"🔬 Running smoke tests...")
-        click.echo(f"   Repository: {repo_id}")
-        click.echo(f"   Commit: {commit[:8]}\n")
-        
+        formatter.print_header("CI Smoke Tests")
+        info_table = formatter.table(headers=["Field", "Value"])
+        info_table.add_row("Repository", f"{repo.name} ({repo_id})")
+        info_table.add_row("Commit", commit[:8])
+        info_table.add_row("Tests", str(len(smoke_tests)))
+        formatter.console.print(info_table)
+
         # Run smoke tests
         result = orchestrator.run_smoke_tests(
             repo_id,
@@ -741,17 +777,16 @@ def ci_smoke(repo_id: str, commit: Optional[str]):
             smoke_tests,
             on_progress=progress_callback
         )
-        
+
         # Display result
-        click.echo("\n" + orchestrator.format_result(result))
-        
+        formatter.print_info_panel(orchestrator.format_result(result), title="Smoke Test Summary")
+
         # Exit code based on result
         if result.is_red:
             raise click.Abort()
-    
+
     except Exception as e:
-        click.echo(f"❌ Smoke tests failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Smoke tests failed", str(e))
 
 
 @ci.command('rollback')
@@ -768,11 +803,10 @@ def ci_rollback(repo_id: str, commit: str, recreate_pad: bool):
     from sologit.workflows.ci_orchestrator import CIResult, CIStatus
     
     git_engine = get_git_engine()
-    
+
     repo = git_engine.get_repo(repo_id)
     if not repo:
-        click.echo(f"❌ Repository {repo_id} not found", err=True)
-        raise click.Abort()
+        abort_with_error(f"Repository {repo_id} not found")
     
     # Create handler
     handler = RollbackHandler(git_engine)
@@ -788,24 +822,25 @@ def ci_rollback(repo_id: str, commit: str, recreate_pad: bool):
     )
     
     try:
-        click.echo(f"🔄 Rolling back commit...")
-        click.echo(f"   Repository: {repo_id}")
-        click.echo(f"   Commit: {commit[:8]}")
-        click.echo(f"   Recreate workpad: {recreate_pad}\n")
-        
+        formatter.print_header("CI Rollback")
+        info_table = formatter.table(headers=["Field", "Value"])
+        info_table.add_row("Repository", f"{repo.name} ({repo_id})")
+        info_table.add_row("Commit", commit[:8])
+        info_table.add_row("Recreate Workpad", "Yes" if recreate_pad else "No")
+        formatter.console.print(info_table)
+
         # Perform rollback
         result = handler.handle_failed_ci(fake_ci_result, recreate_pad)
-        
+
         # Display result
-        click.echo(handler.format_result(result))
-        
+        formatter.print_info_panel(handler.format_result(result), title="Rollback Result")
+
         # Exit code
         if not result.success:
             raise click.Abort()
-    
+
     except Exception as e:
-        click.echo(f"❌ Rollback failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Rollback failed", str(e))
 
 
 @test.command('analyze')
@@ -823,16 +858,19 @@ def test_analyze(pad_id: str):
     
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
-        click.echo(f"❌ Workpad {pad_id} not found", err=True)
-        raise click.Abort()
+        abort_with_error(f"Workpad {pad_id} not found")
     
     # Check if tests have been run
     # In a full implementation, we'd cache test results
     # For now, prompt user to run tests first
     
-    click.echo(f"⚠️ Test analysis requires recent test results")
-    click.echo(f"   Run 'sologit test run {pad_id}' first")
-    click.echo(f"\nNote: In Phase 3, test results will be cached and analyzed automatically")
+    formatter.print_header("Test Failure Analysis")
+    formatter.print_warning("Test analysis requires recent test results.")
+    formatter.print_info(f"Run: [bold]evogitctl test run {pad_id}[/bold] before analyzing.")
+    formatter.print_info_panel(
+        "In Phase 3, test results will be cached and analyzed automatically.",
+        title="Coming Soon"
+    )
 
 
 # ============================================================================
@@ -871,57 +909,71 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
     
     git_engine = get_git_engine()
     config_manager = ctx.obj.get('config')
-    
+
+    formatter.print_header("AI Pair Programming Session")
+
     # Step 1: Select repository
     if not repo_id:
         repos = git_engine.list_repos()
         if len(repos) == 0:
-            click.echo("❌ No repositories found. Initialize a repository first:", err=True)
-            click.echo("   evogitctl repo init --zip app.zip")
-            raise click.Abort()
+            abort_with_error(
+                "No repositories found",
+                "Initialize a repository first: evogitctl repo init --zip app.zip"
+            )
         elif len(repos) == 1:
             repo_id = repos[0].id
-            click.echo(f"📦 Using repository: {repos[0].name} ({repo_id})")
+            formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
         else:
-            click.echo("❌ Multiple repositories found. Please specify --repo", err=True)
-            click.echo("\nAvailable repositories:")
+            repo_table = formatter.table(headers=["ID", "Name", "Trunk"])
             for repo in repos:
-                click.echo(f"  • {repo.id} - {repo.name}")
+                repo_table.add_row(f"[cyan]{repo.id}[/cyan]", repo.name, repo.trunk_branch)
+            formatter.print_info_panel(
+                "Multiple repositories detected. Re-run with --repo <ID> to specify the target.",
+                title="Repository Selection Required"
+            )
+            formatter.console.print(repo_table)
             raise click.Abort()
-    
+
     # Validate repository exists
     repo = git_engine.get_repo(repo_id)
     if not repo:
-        click.echo(f"❌ Repository {repo_id} not found", err=True)
-        raise click.Abort()
-    
-    # Step 2: Create workpad
+        abort_with_error(f"Repository {repo_id} not found")
+
+    # Step 2: Create workpad title if missing
     if not title:
-        # Derive title from prompt (first few words, sanitized)
         words = prompt.split()[:5]
         title = '-'.join(words).lower()
-        # Remove special characters
         title = ''.join(c if c.isalnum() or c == '-' else '-' for c in title)
-        title = '-'.join(filter(None, title.split('-')))  # Remove empty parts
-    
-    click.echo(f"\n🚀 Starting pair programming session")
-    click.echo(f"   Repository: {repo.name}")
-    click.echo(f"   Prompt: {prompt}")
-    click.echo(f"   Title: {title}\n")
-    
+        title = '-'.join(filter(None, title.split('-')))
+
+    overview = formatter.table(headers=["Field", "Value"])
+    overview.add_row("Repository", f"{repo.name} ({repo_id})")
+    overview.add_row("Prompt", prompt)
+    overview.add_row("Workpad Title", title)
+    overview.add_row("Tests", "Skipped" if no_test else target)
+    overview.add_row("Auto-Promote", "Disabled" if no_promote else "Enabled")
+    formatter.console.print(overview)
+
     try:
-        click.echo("📝 Creating workpad...")
+        formatter.print_subheader("Workpad Setup")
+        formatter.print_info("Creating ephemeral workpad...")
         pad_id = git_engine.create_workpad(repo_id, title)
         workpad = git_engine.get_workpad(pad_id)
-        click.echo(f"✅ Workpad created: {pad_id}")
-        
+        formatter.print_success("Workpad created")
+
+        workpad_table = formatter.table(headers=["Field", "Value"])
+        workpad_table.add_row("Workpad ID", f"[cyan]{pad_id}[/cyan]")
+        workpad_table.add_row("Branch", workpad.branch_name)
+        workpad_table.add_row("Base", repo.trunk_branch)
+        formatter.console.print(workpad_table)
+
         # Step 3: AI Planning
-        click.echo(f"\n🤖 AI Planning (using {config_manager.config.models.planning_model})...")
+        formatter.print_subheader("AI Planning")
+        formatter.print_info(f"Model: {config_manager.config.models.planning_model}")
         start_time = time.time()
-        
+
         orchestrator = AIOrchestrator(config_manager)
-        
-        # Get repo context (file tree)
+
         repo_map = git_engine.get_repo_map(repo_id)
         context = {
             'repo_id': repo_id,
@@ -929,64 +981,77 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
             'file_tree': repo_map,
             'trunk_branch': repo.trunk_branch
         }
-        
+
         plan_response = orchestrator.plan(
             prompt=prompt,
             repo_context=context
         )
-        
+
         planning_time = time.time() - start_time
-        click.echo(f"✅ Plan generated in {planning_time:.1f}s (cost: ${plan_response.cost_usd:.4f})")
-        click.echo(f"   Model: {plan_response.model_used}")
-        click.echo(f"   Complexity: {plan_response.complexity.score:.2f}")
-        
-        # Display plan
+        plan_panel = f"""[bold]Model:[/bold] {plan_response.model_used}
+[bold]Duration:[/bold] {planning_time:.1f}s
+[bold]Cost:[/bold] ${plan_response.cost_usd:.4f}
+[bold]Complexity:[/bold] {plan_response.complexity.score:.2f}"""
+        formatter.print_info_panel(plan_panel, title="Plan Generation")
+
         plan = plan_response.plan
-        click.echo(f"\n📋 Implementation Plan:")
-        click.echo(f"   Description: {plan.description}")
-        click.echo(f"   Files to modify: {', '.join(plan.files_to_modify) if plan.files_to_modify else 'None'}")
-        click.echo(f"   Files to create: {', '.join(plan.files_to_create) if plan.files_to_create else 'None'}")
-        if plan.test_strategy:
-            click.echo(f"   Test strategy: {plan.test_strategy}")
-        
+        plan_table = formatter.table(headers=["Aspect", "Details"])
+        plan_table.add_row("Description", plan.description or "-")
+        plan_table.add_row(
+            "Modify",
+            ', '.join(plan.files_to_modify) if plan.files_to_modify else "None"
+        )
+        plan_table.add_row(
+            "Create",
+            ', '.join(plan.files_to_create) if plan.files_to_create else "None"
+        )
+        plan_table.add_row("Test Strategy", plan.test_strategy or "None")
+        formatter.console.print(plan_table)
+
         # Step 4: Generate Patch
-        click.echo(f"\n💻 Generating code (using {config_manager.config.models.coding_model})...")
+        formatter.print_subheader("Code Generation")
+        formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
         start_time = time.time()
-        
+
         patch_response = orchestrator.generate_patch(
             plan=plan,
             repo_context=context
         )
-        
+
         coding_time = time.time() - start_time
-        click.echo(f"✅ Patch generated in {coding_time:.1f}s (cost: ${patch_response.cost_usd:.4f})")
-        click.echo(f"   Model: {patch_response.model_used}")
-        
+        patch_panel = f"""[bold]Model:[/bold] {patch_response.model_used}
+[bold]Duration:[/bold] {coding_time:.1f}s
+[bold]Cost:[/bold] ${patch_response.cost_usd:.4f}"""
+        formatter.print_info_panel(patch_panel, title="Patch Generation")
+
         patch = patch_response.patch
         if patch.description:
-            click.echo(f"   Description: {patch.description}")
-        
+            formatter.print_info(f"Patch notes: {patch.description}")
+
         # Step 5: Apply Patch
-        click.echo(f"\n📦 Applying patch to workpad...")
+        formatter.print_subheader("Applying Patch")
         patch_engine = get_patch_engine()
-        
+
         try:
             result = patch_engine.apply_patch(pad_id, patch.diff)
-            click.echo(f"✅ Patch applied successfully")
-            click.echo(f"   Files changed: {result.files_changed}")
-            click.echo(f"   Insertions: +{result.insertions}")
-            click.echo(f"   Deletions: -{result.deletions}")
-            
+            formatter.print_success("Patch applied successfully")
+            diff_table = formatter.table(headers=["Metric", "Value"])
+            diff_table.add_row("Files Changed", str(result.files_changed))
+            diff_table.add_row("Insertions", f"+{result.insertions}")
+            diff_table.add_row("Deletions", f"-{result.deletions}")
+            formatter.console.print(diff_table)
+
         except Exception as e:
-            click.echo(f"❌ Failed to apply patch: {e}", err=True)
-            click.echo(f"\n🔍 Workpad preserved for manual inspection: {pad_id}")
-            raise click.Abort()
-        
+            abort_with_error(
+                "Failed to apply patch",
+                f"Workpad preserved for manual inspection: {pad_id}\n{e}"
+            )
+
         # Step 6: Run Tests (optional)
         if not no_test:
-            click.echo(f"\n🧪 Running {target} tests...")
-            
-            # Define test configurations
+            formatter.print_subheader("Test Execution")
+            formatter.print_info(f"Running {target} test suite")
+
             if target == 'fast':
                 tests = [
                     TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60),
@@ -996,72 +1061,88 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
                     TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60),
                     TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q --tb=short", timeout=120),
                 ]
-            
+
             test_orchestrator = get_test_orchestrator()
             results = test_orchestrator.run_tests_sync(pad_id, tests, parallel=True)
-            
-            # Display results
-            click.echo(f"\n📊 Test Results:")
+
+            results_table = formatter.table(headers=["Test", "Status", "Duration", "Notes"])
             all_passed = True
             for result in results:
-                status_icon = "✅" if result.status.value == "passed" else "❌"
+                is_passed = result.status.value == "passed"
+                status_color = theme.get_status_color(result.status.value)
+                status_icon = theme.get_status_icon(result.status.value)
                 duration_s = result.duration_ms / 1000
-                click.echo(f"   {status_icon} {result.name} ({duration_s:.1f}s)")
-                if result.status.value != "passed":
+                notes = (result.stdout or result.stderr or "").split('\n')
+                summary_note = next((line for line in notes if line.strip()), "")
+                results_table.add_row(
+                    result.name,
+                    f"[{status_color}]{status_icon} {result.status.value.upper()}[/{status_color}]",
+                    f"{duration_s:.1f}s",
+                    summary_note[:80]
+                )
+                if not is_passed:
                     all_passed = False
-                    # Show first few lines of error
-                    error_lines = result.stdout.split('\n')[:5]
-                    for line in error_lines:
-                        if line.strip():
-                            click.echo(f"      {line}")
-            
+
+            formatter.console.print(results_table)
+
             summary = test_orchestrator.get_summary(results)
-            click.echo(f"\n   Summary: {summary['passed']}/{summary['total']} passed")
-            
-            # Step 7: Auto-promote (optional)
+            status_color = theme.get_status_color(summary['status'])
+            summary_panel = f"""[bold]Total:[/bold] {summary['total']}
+[bold]Passed:[/bold] [green]{summary['passed']}[/green]
+[bold]Failed:[/bold] [red]{summary['failed']}[/red]
+[bold]Skipped:[/bold] {summary['skipped']}
+[bold]Status:[/bold] [{status_color}]{summary['status'].upper()}[/{status_color}]"""
+            formatter.print_info_panel(summary_panel, title="Test Summary")
+
             if all_passed and not no_promote:
-                click.echo(f"\n🎉 All tests passed! Auto-promoting to trunk...")
-                
+                formatter.print_success("All tests passed! Promoting to trunk...")
+
                 try:
                     commit_hash = git_engine.promote_workpad(pad_id)
-                    click.echo(f"✅ Workpad promoted to trunk!")
-                    click.echo(f"   Commit: {commit_hash}")
-                    click.echo(f"\n🏁 Pair session complete! Changes are now in {repo.trunk_branch}.")
-                    
-                    # Show total cost
+                    formatter.print_success_panel(
+                        f"Commit: {commit_hash}\nBranch: {repo.trunk_branch}",
+                        title="Promotion Complete"
+                    )
+
                     total_cost = plan_response.cost_usd + patch_response.cost_usd
-                    click.echo(f"\n💰 Total cost: ${total_cost:.4f}")
-                    
+                    formatter.print_info(f"Total AI cost: ${total_cost:.4f}")
+
                 except Exception as e:
-                    click.echo(f"❌ Promotion failed: {e}", err=True)
-                    click.echo(f"\n🔍 Workpad preserved: {pad_id}")
-                    click.echo(f"   Manually promote: evogitctl pad promote {pad_id}")
-                    raise click.Abort()
-            
+                    abort_with_error(
+                        "Promotion failed",
+                        f"Workpad preserved: {pad_id}\nManually promote with: evogitctl pad promote {pad_id}\n{e}"
+                    )
+
             elif not all_passed:
-                click.echo(f"\n⚠️  Tests failed. Workpad preserved for fixes: {pad_id}")
-                click.echo(f"   View diff: evogitctl pad diff {pad_id}")
-                click.echo(f"   Run tests: evogitctl test run {pad_id}")
-                click.echo(f"   Promote manually: evogitctl pad promote {pad_id}")
+                formatter.print_warning(
+                    f"Tests failed. Workpad preserved for fixes: {pad_id}"
+                )
+                formatter.print_info(f"View diff: evogitctl pad diff {pad_id}")
+                formatter.print_info(f"Run tests: evogitctl test run {pad_id}")
+                formatter.print_info(f"Promote manually: evogitctl pad promote {pad_id}")
                 raise click.Abort()
-            
-            else:  # no_promote flag
-                click.echo(f"\n✅ Tests passed but auto-promote disabled")
-                click.echo(f"   Workpad: {pad_id}")
-                click.echo(f"   Promote manually: evogitctl pad promote {pad_id}")
-        
-        else:  # no_test flag
-            click.echo(f"\n⚠️  Tests skipped. Workpad ready for manual testing: {pad_id}")
-            click.echo(f"   Run tests: evogitctl test run {pad_id}")
-            click.echo(f"   View diff: evogitctl pad diff {pad_id}")
+
+            else:
+                formatter.print_success(
+                    "Tests passed but auto-promote disabled. Promote manually when ready."
+                )
+                formatter.print_info(f"Workpad: {pad_id}")
+                formatter.print_info(f"Promote manually: evogitctl pad promote {pad_id}")
+
+        else:
+            formatter.print_warning(
+                f"Tests skipped. Workpad ready for manual testing: {pad_id}"
+            )
+            formatter.print_info(f"Run tests: evogitctl test run {pad_id}")
+            formatter.print_info(f"View diff: evogitctl pad diff {pad_id}")
             if not no_promote:
-                click.echo(f"   Promote: evogitctl pad promote {pad_id}")
-        
+                formatter.print_info(f"Promote: evogitctl pad promote {pad_id}")
+
     except click.Abort:
-        # Re-raise abort to exit cleanly
         raise
     except Exception as e:
-        click.echo(f"\n❌ Unexpected error: {e}", err=True)
         logger.exception("Pair loop failed")
-        click.echo(f"\n🔍 Workpad may be in inconsistent state: {pad_id if 'pad_id' in locals() else 'N/A'}")
-        raise click.Abort()
+        abort_with_error(
+            "Unexpected error during pair session",
+            f"Workpad may be in inconsistent state: {pad_id if 'pad_id' in locals() else 'N/A'}\n{e}"
+        )
