@@ -102,12 +102,16 @@ class TestConfig:
     parallel_max: int = 4
     fast_tests: list = None
     full_tests: list = None
+    execution_mode: str = "auto"
+    log_dir: Optional[str] = None
 
     def __post_init__(self):
         if self.fast_tests is None:
             self.fast_tests = []
         if self.full_tests is None:
             self.full_tests = []
+        if self.log_dir is None:
+            self.log_dir = str(Path.home() / ".sologit" / "data" / "test_runs")
 
 
 @dataclass
@@ -191,6 +195,9 @@ class SoloGitConfig:
                 }
                 for name, creds in self.deployments.items()
             },
+                'execution_mode': self.tests.execution_mode,
+                'log_dir': self.tests.log_dir,
+            }
         }
 
 
