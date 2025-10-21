@@ -2,16 +2,18 @@
 """
 State Manager for Solo Git Heaven Interface.
 
-Provides an abstraction layer for state persistence with JSON backend.
-Designed to be easily upgradeable to SQLite or REST API in the future.
+Provides an abstraction layer for state persistence with a JSON backend and lays
+the groundwork for additional storage engines. Planned future backends include
+SQLite for local persistence and a REST-based service for distributed
+deployments.
 """
 
 import json
-import os
 import threading
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 import uuid
 
 from sologit.state.schema import (
@@ -30,79 +32,99 @@ from sologit.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class StateBackend:
+class StateBackend(ABC):
     """Abstract base class for state backends."""
-    
+
+    @abstractmethod
     def read_global_state(self) -> GlobalState:
-        raise NotImplementedError
-    
+        """Read the global state from the backend."""
+
+    @abstractmethod
     def write_global_state(self, state: GlobalState) -> None:
-        raise NotImplementedError
-    
+        """Persist the provided global state."""
+
+    @abstractmethod
     def read_repository(self, repo_id: str) -> Optional[RepositoryState]:
-        raise NotImplementedError
-    
+        """Return the repository state for the given repository identifier."""
+
+    @abstractmethod
     def write_repository(self, state: RepositoryState) -> None:
-        raise NotImplementedError
-    
+        """Persist the provided repository state."""
+
+    @abstractmethod
     def list_repositories(self) -> List[RepositoryState]:
-        raise NotImplementedError
-    
+        """List repository states known to the backend."""
+
+    @abstractmethod
     def read_workpad(self, workpad_id: str) -> Optional[WorkpadState]:
-        raise NotImplementedError
-    
+        """Return the workpad state for the provided identifier."""
+
+    @abstractmethod
     def write_workpad(self, state: WorkpadState) -> None:
-        raise NotImplementedError
-    
+        """Persist the provided workpad state."""
+
+    @abstractmethod
     def list_workpads(self, repo_id: Optional[str] = None) -> List[WorkpadState]:
-        raise NotImplementedError
-    
+        """List workpad states, optionally filtered by repository identifier."""
+
+    @abstractmethod
     def read_test_run(self, run_id: str) -> Optional[TestRun]:
-        raise NotImplementedError
-    
+        """Return the recorded test run for the provided identifier."""
+
+    @abstractmethod
     def write_test_run(self, test_run: TestRun) -> None:
-        raise NotImplementedError
-    
+        """Persist the provided test run."""
+
+    @abstractmethod
     def list_test_runs(self, workpad_id: Optional[str] = None) -> List[TestRun]:
-        raise NotImplementedError
-    
+        """List test runs, optionally filtered by workpad identifier."""
+
+    @abstractmethod
     def read_ai_operation(self, operation_id: str) -> Optional[AIOperation]:
-        raise NotImplementedError
-    
+        """Return the AI operation for the provided identifier."""
+
+    @abstractmethod
     def write_ai_operation(self, operation: AIOperation) -> None:
-        raise NotImplementedError
+        """Persist the provided AI operation."""
 
+    @abstractmethod
     def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[AIOperation]:
-        raise NotImplementedError
+        """List AI operations, optionally filtered by workpad identifier."""
 
+    @abstractmethod
     def write_promotion_record(self, record: PromotionRecord) -> None:
-        raise NotImplementedError
+        """Persist a promotion record."""
 
+    @abstractmethod
     def list_promotion_records(
         self,
         repo_id: Optional[str] = None,
         workpad_id: Optional[str] = None,
         limit: int = 100,
     ) -> List[PromotionRecord]:
-        raise NotImplementedError
-    
+        """List promotion records filtered by repository or workpad."""
+
+    @abstractmethod
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
-        raise NotImplementedError
-    
+        """Return commit nodes for the specified repository."""
+
+    @abstractmethod
     def write_commit(self, repo_id: str, commit: CommitNode) -> None:
-        raise NotImplementedError
-    
+        """Persist a commit for the specified repository."""
+
+    @abstractmethod
     def write_event(self, event: StateEvent) -> None:
-        raise NotImplementedError
-    
+        """Persist a state event."""
+
+    @abstractmethod
     def read_events(self, since: Optional[str] = None, limit: int = 100) -> List[StateEvent]:
-        raise NotImplementedError
+        """List recent state events."""
 
 
 class JSONStateBackend(StateBackend):
     """JSON file-based state backend."""
-    
-    def __init__(self, state_dir: Path):
+
+    def __init__(self, state_dir: Path) -> None:
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)
         
@@ -316,7 +338,7 @@ class StateManager:
     SQLite, or a REST API in the future.
     """
     
-    def __init__(self, backend: Optional[StateBackend] = None, state_dir: Optional[Path] = None):
+    def __init__(self, backend: Optional[StateBackend] = None, state_dir: Optional[Path] = None) -> None:
         if backend is None:
             if state_dir is None:
                 state_dir = Path.home() / ".sologit" / "state"
