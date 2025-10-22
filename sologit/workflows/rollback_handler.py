@@ -103,10 +103,7 @@ class RollbackHandler:
                 # Create new workpad with "fix" prefix
                 pad_title = f"fix-ci-{commit_hash[:7]}"
                 new_pad = self.git_engine.create_workpad(repo_id, pad_title)
-                if isinstance(new_pad, Workpad):
-                    new_pad_id = new_pad.id
-                else:
-                    new_pad_id = new_pad
+                new_pad_id = new_pad.id if isinstance(new_pad, Workpad) else new_pad
                 
                 # Note: The changes are already in trunk history, so we don't
                 # need to reapply them to the workpad. The developer can cherry-pick
