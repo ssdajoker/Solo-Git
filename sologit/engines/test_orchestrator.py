@@ -87,7 +87,7 @@ class TestOrchestrator:
         self,
         git_engine: GitEngine,
         sandbox_image: str = "python:3.11-slim",
-        execution_mode: str = TestExecutionMode.AUTO.value,
+        execution_mode: str = TestExecutionMode.SUBPROCESS.value,
         log_dir: Optional[Path] = None,
         formatter: Optional[RichFormatter] = None,
     ) -> None:
