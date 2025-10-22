@@ -214,7 +214,7 @@ def _simulate_sandboxed_tests(repo_path: Path, tests: List[TestConfig]) -> float
         for test in tests:
             try:
                 cmd_args = shlex.split(test.cmd)
-            except ValueError as exc:  # pragma: no cover - defensive programming
+            except ValueError as exc:  # pragma: nocover - defensive programming
                 raise ValueError(f"Invalid command for test '{test.name}': {exc}") from exc
 
             subprocess.run(
