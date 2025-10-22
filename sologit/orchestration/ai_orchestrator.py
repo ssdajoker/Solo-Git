@@ -618,7 +618,7 @@ class AIOrchestrator:
                 if model_config is None:
                     raise RuntimeError("Diagnostic model configuration missing")
 
-                token_estimate = max(len(trimmed_output.split()), 80)
+                token_estimate = max(len(trimmed_output.split('\n')), 80)
                 estimated_cost = (token_estimate / 1000.0) * model_config.cost_per_1k_tokens
                 self.cost_guard.record_usage(
                     model=model_config.name,
