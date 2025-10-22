@@ -114,13 +114,17 @@ fn store_patch_diff(workpad_id: &str, diff: &str) -> Result<String, String> {
 
     let patch_path = patches_dir.join(format!("{}-{}.diff", workpad_id, Uuid::new_v4().simple()));
 
-    temp_file.persist_noclobber(&patch_path).map_err(|e| {
+    let persisted_file = temp_file.persist_noclobber(&patch_path).map_err(|e| {
         format!(
             "Failed to persist patch file {}: {}",
             patch_path.display(),
             e
         )
     })?;
+
+    // Ensure the file handle returned from `persist_noclobber` is explicitly
+    // dropped so the underlying file descriptor is released immediately.
+    drop(persisted_file);
 
     Ok(patch_path.to_string_lossy().to_string())
 }
