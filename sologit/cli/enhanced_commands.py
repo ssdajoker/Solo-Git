@@ -134,10 +134,9 @@ class EnhancedCLI:
                     if not name:
                         name = Path(git_url).stem.replace('.git', '')
 
-                    run_stage("Preparing clone parameters", 10, lambda: None)
                     repo_id = run_stage(
                         "Cloning remote repository",
-                        50,
+                        60,
                         lambda: self.git_engine.init_from_git(git_url, name),
                     )
 
