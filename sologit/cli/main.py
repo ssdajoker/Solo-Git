@@ -373,8 +373,7 @@ def heaven(repo_path: Optional[str]):
       Ctrl+P          Command palette
       Ctrl+T          Run focused tests
       Ctrl+Shift+T    Run full suite
-      Ctrl+Z / Ctrl+Shift+Z
-                      Undo / Redo last command
+      Ctrl+Z / Ctrl+Shift+Z    Undo / Redo last command
       Ctrl+1/2/3      Focus graph/workpads/tests
       ?               Help overlay (full shortcuts)
       Ctrl+Q          Quit interface
