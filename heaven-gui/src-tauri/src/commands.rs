@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
@@ -31,12 +32,37 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
             .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
 
-    let tmp_path = path.with_extension("tmp");
     let contents = serde_json::to_string_pretty(value)
         .map_err(|e| format!("Failed to serialize value for {}: {}", path.display(), e))?;
-    fs::write(&tmp_path, contents)
-        .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("Failed to persist {}: {}", path.display(), e))
+
+    let parent_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temp_file = tempfile::NamedTempFile::new_in(parent_dir).map_err(|e| {
+        format!(
+            "Failed to create temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    temp_file.write_all(contents.as_bytes()).map_err(|e| {
+        format!(
+            "Failed to write temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+    temp_file.flush().map_err(|e| {
+        format!(
+            "Failed to flush temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    temp_file
+        .persist(path)
+        .map_err(|e| format!("Failed to persist {}: {}", path.display(), e.error))?;
+    Ok(())
 }
 
 fn load_global_state() -> Result<GlobalState, String> {
@@ -324,10 +350,7 @@ pub(crate) fn apply_patch(
         .create(true)
         .append(true)
         .open(&notes_path)
-        .and_then(|mut file| {
-            use std::io::Write;
-            file.write_all(entry.as_bytes())
-        });
+        .and_then(|mut file| file.write_all(entry.as_bytes()));
 
     let mut global = load_global_state()?;
     global.total_operations += 1;
@@ -438,10 +461,7 @@ pub(crate) fn rollback_workpad(
             .create(true)
             .append(true)
             .open(&log_path)
-            .and_then(|mut file| {
-                use std::io::Write;
-                file.write_all(entry.as_bytes())
-            });
+            .and_then(|mut file| file.write_all(entry.as_bytes()));
     }
 
     let workpad = save_workpad(workpad)?;
