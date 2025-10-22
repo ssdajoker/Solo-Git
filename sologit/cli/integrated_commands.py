@@ -6,10 +6,8 @@ to provide a seamless, production-ready CLI experience with >50% integration.
 """
 
 import click
-import sys
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 from dataclasses import asdict
 import json
 
@@ -18,6 +16,8 @@ from sologit.orchestration.ai_orchestrator import AIOrchestrator
 from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
 from sologit.config.manager import ConfigManager
 from sologit.utils.logger import get_logger
+from sologit.ui.formatter import RichFormatter
+from sologit.ui.theme import theme
 
 logger = get_logger(__name__)
 
@@ -26,6 +26,26 @@ logger = get_logger(__name__)
 _git_sync: Optional[GitStateSync] = None
 _ai_orchestrator: Optional[AIOrchestrator] = None
 _test_orchestrator: Optional[TestOrchestrator] = None
+
+
+formatter = RichFormatter()
+
+
+def set_formatter_console(console) -> None:
+    """Configure the shared console instance."""
+    formatter.set_console(console)
+
+
+def abort_with_error(message: str, details: Optional[str] = None) -> None:
+    """Display a formatted error panel and abort the command."""
+    plain_message = f"Error: {message}"
+    formatter.print_error(plain_message)
+
+    content = f"[bold]{plain_message}[/bold]"
+    if details:
+        content += f"\n\n{details}"
+    formatter.print_error_panel(content)
+    raise click.Abort()
 
 
 def get_git_sync() -> GitStateSync:
@@ -76,26 +96,35 @@ def workpad_create(ctx, title: str, repo_id: Optional[str]):
     
     git_sync = get_git_sync()
     
+    formatter.print_header("Workpad Creation")
+
     # Auto-select repository if not specified
     if not repo_id:
         repos = git_sync.list_repos()
         if len(repos) == 0:
-            click.echo("❌ No repositories found. Initialize one first:", err=True)
-            click.echo("   evogitctl repo init --zip app.zip")
-            raise click.Abort()
+            abort_with_error(
+                "No repositories found",
+                "Initialize one first with: [bold]evogitctl repo init --zip app.zip[/bold]",
+            )
         elif len(repos) == 1:
             repo_id = repos[0]['id']
-            click.echo(f"📦 Using repository: {repos[0]['name']}")
+            formatter.print_info(f"Using repository: {repos[0]['name']} ({repo_id})")
         else:
-            click.echo("❌ Multiple repositories found. Please specify --repo:", err=True)
+            formatter.print_warning("Multiple repositories found. Please specify --repo.")
+            repo_table = formatter.table(headers=["ID", "Name"])
             for repo in repos:
-                click.echo(f"   • {repo['id']} - {repo['name']}")
+                repo_table.add_row(f"[cyan]{repo['id']}[/cyan]", repo['name'])
+            formatter.print_info_panel(
+                "Use --repo <ID> to target a repository when creating a workpad.",
+                title="Repository Selection Required",
+            )
+            formatter.console.print(repo_table)
             raise click.Abort()
-    
+
     try:
-        click.echo(f"🔄 Creating workpad: {title}")
+        formatter.print_info(f"Creating workpad: {title}")
         result = git_sync.create_workpad(repo_id, title)
-        
+
         # Add to command history
         add_command(
             CommandType.WORKPAD_CREATE,
@@ -104,16 +133,23 @@ def workpad_create(ctx, title: str, repo_id: Optional[str]):
             result=result,
             undo_data={'workpad_id': result['workpad_id']}
         )
-        
-        click.echo(f"\n✅ Workpad created successfully!")
-        click.echo(f"   ID: {result['workpad_id']}")
-        click.echo(f"   Branch: {result['branch_name']}")
-        click.echo(f"   Status: {result['status']}")
-        
+
+        formatter.print_success("Workpad created successfully!")
+
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("Workpad ID", f"[cyan]{result['workpad_id']}[/cyan]")
+        summary.add_row("Branch", result['branch_name'])
+        status_color = theme.get_status_color(result.get('status', 'unknown'))
+        summary.add_row(
+            "Status",
+            f"[{status_color}]{result['status']}[/{status_color}]" if result.get('status') else "-",
+        )
+        formatter.print_success_panel("Workpad is ready for development.", title="Workpad Created")
+        formatter.console.print(summary)
+
     except Exception as e:
         logger.error(f"Failed to create workpad: {e}", exc_info=ctx.obj.get('verbose', False))
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to create workpad", str(e))
 
 
 @workpad.command('list')
@@ -135,33 +171,48 @@ def workpad_list(ctx, repo_id: Optional[str], status: Optional[str]):
     
     try:
         workpads = git_sync.list_workpads(repo_id)
-        
+
         # Filter by status if specified
         if status:
             workpads = [wp for wp in workpads if wp['status'] == status]
-        
+
         if not workpads:
-            click.echo("No workpads found.")
+            formatter.print_info("No workpads found.")
             return
-        
-        click.echo(f"\n{'ID':<15} {'Title':<25} {'Status':<12} {'Test':<8} {'Created':<20}")
-        click.echo("-" * 85)
-        
+
+        title_text = "Workpads"
+        if repo_id:
+            title_text += f" for repo {repo_id}"
+        if status:
+            title_text += f" ({status})"
+
+        formatter.print_header(title_text)
+        table = formatter.table(headers=["ID", "Title", "Status", "Tests", "Created"])
+
         for wp in workpads:
-            test_status = wp.get('test_status', 'N/A') or 'N/A'
-            test_indicator = '✅' if test_status == 'green' else ('❌' if test_status == 'red' else '⚪')
-            
-            click.echo(
-                f"{wp['id']:<15} {wp['title']:<25} {wp['status']:<12} "
-                f"{test_indicator} {test_status:<6} {wp['created_at'][:19]}"
+            test_status = wp.get('test_status')
+            if test_status:
+                test_color = theme.get_status_color(test_status)
+                test_icon = theme.get_status_icon(test_status)
+                test_display = f"[{test_color}]{test_icon} {test_status}[/{test_color}]"
+            else:
+                test_display = "-"
+            status_value = wp.get('status', 'unknown')
+            status_color = theme.get_status_color(status_value)
+            table.add_row(
+                f"[cyan]{wp['id']}[/cyan]",
+                f"[bold]{wp['title']}[/bold]",
+                f"[{status_color}]{status_value}[/{status_color}]",
+                test_display,
+                wp['created_at'][:19],
             )
-        
-        click.echo(f"\nTotal: {len(workpads)} workpad(s)")
-        
+
+        formatter.console.print(table)
+        formatter.print_subheader(f"Total: {len(workpads)} workpad(s)")
+
     except Exception as e:
         logger.error(f"Failed to list workpads: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to list workpads", str(e))
 
 
 @workpad.command('status')
@@ -185,56 +236,83 @@ def workpad_status(ctx, workpad_id: Optional[str]):
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad. Create one first or specify workpad ID.", err=True)
-            raise click.Abort()
-    
+            abort_with_error(
+                "No active workpad",
+                "Create one first or specify an explicit workpad ID.",
+            )
+
     try:
         workpad = git_sync.get_workpad(workpad_id)
         if not workpad:
-            click.echo(f"❌ Workpad {workpad_id} not found.", err=True)
-            raise click.Abort()
-        
+            abort_with_error(f"Workpad {workpad_id} not found")
+
         # Get git status
         repo_id = workpad['repo_id']
         git_status = git_sync.get_status(repo_id, workpad_id)
-        
-        click.echo(f"\n📋 Workpad Status: {workpad['title']}")
-        click.echo(f"   ID: {workpad['id']}")
-        click.echo(f"   Branch: {workpad['branch_name']}")
-        click.echo(f"   Status: {workpad['status']}")
-        click.echo(f"   Created: {workpad['created_at']}")
-        
+
+        formatter.print_header(f"Workpad Status: {workpad['title']}")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("Workpad", f"[cyan]{workpad['id']}[/cyan]")
+        summary.add_row("Branch", workpad['branch_name'])
+        summary.add_row("Repository", repo_id)
+        status_value = workpad.get('status', 'unknown')
+        status_color = theme.get_status_color(status_value)
+        summary.add_row("Status", f"[{status_color}]{status_value}[/{status_color}]")
+        summary.add_row("Created", workpad['created_at'])
+
         if workpad.get('test_status'):
-            test_icon = '✅' if workpad['test_status'] == 'green' else '❌'
-            click.echo(f"   Tests: {test_icon} {workpad['test_status']}")
-        
+            test_status = workpad['test_status']
+            test_color = theme.get_status_color(test_status)
+            test_icon = theme.get_status_icon(test_status)
+            summary.add_row("Last Test", f"[{test_color}]{test_icon} {test_status}[/{test_color}]")
+
         if workpad.get('last_commit'):
-            click.echo(f"   Last Commit: {workpad['last_commit'][:8]}")
-        
+            summary.add_row("Last Commit", workpad['last_commit'][:8])
+
+        formatter.console.print(summary)
+
         if git_status:
-            click.echo(f"\n📝 Git Status:")
-            click.echo(f"   Branch: {git_status.get('current_branch', 'N/A')}")
-            
+            formatter.print_subheader("Git Status")
+            git_table = formatter.table(headers=["Metric", "Value"])
+            git_table.add_row("Branch", git_status.get('current_branch', 'N/A'))
             if git_status.get('modified_files'):
-                click.echo(f"   Modified: {len(git_status['modified_files'])} file(s)")
-                for f in git_status['modified_files'][:5]:
-                    click.echo(f"      • {f}")
-            
+                files = git_status['modified_files'][:5]
+                git_table.add_row(
+                    "Modified",
+                    "\n".join(files) + ("\n…" if len(git_status['modified_files']) > 5 else ""),
+                )
+            else:
+                git_table.add_row("Modified", "None")
+
             if git_status.get('untracked_files'):
-                click.echo(f"   Untracked: {len(git_status['untracked_files'])} file(s)")
-        
-        # Get test runs
+                files = git_status['untracked_files'][:5]
+                git_table.add_row(
+                    "Untracked",
+                    "\n".join(files) + ("\n…" if len(git_status['untracked_files']) > 5 else ""),
+                )
+            else:
+                git_table.add_row("Untracked", "None")
+
+            formatter.console.print(git_table)
+
         test_runs = git_sync.get_test_runs(workpad_id)
         if test_runs:
-            click.echo(f"\n🧪 Test Runs: {len(test_runs)}")
+            formatter.print_subheader(f"Recent Test Runs ({min(len(test_runs), 3)} shown)")
+            tests_table = formatter.table(headers=["Target", "Status", "Started"])
             for run in test_runs[:3]:
-                status_icon = '✅' if run['status'] == 'passed' else ('❌' if run['status'] == 'failed' else '⏳')
-                click.echo(f"   {status_icon} {run['target']}: {run['status']} ({run['started_at'][:19]})")
-        
+                run_status = run['status']
+                run_color = theme.get_status_color(run_status)
+                run_icon = theme.get_status_icon(run_status)
+                tests_table.add_row(
+                    run['target'],
+                    f"[{run_color}]{run_icon} {run_status}[/{run_color}]",
+                    run['started_at'][:19],
+                )
+            formatter.console.print(tests_table)
+
     except Exception as e:
         logger.error(f"Failed to get workpad status: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to load workpad status", str(e))
 
 
 @workpad.command('diff')
@@ -258,25 +336,21 @@ def workpad_diff(ctx, workpad_id: Optional[str], base: str):
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
         diff = git_sync.get_diff(workpad_id, base)
-        
+
         if not diff:
-            click.echo("No changes.")
+            formatter.print_info("No changes between the workpad and base branch.")
             return
-        
-        click.echo(f"\n{'=' * 80}")
-        click.echo(f"Diff for workpad {workpad_id} (base: {base})")
-        click.echo(f"{'=' * 80}\n")
-        click.echo(diff)
-        
+
+        formatter.print_header(f"Diff for workpad {workpad_id} (base: {base})")
+        formatter.print_code(diff, language="diff")
+
     except Exception as e:
         logger.error(f"Failed to get diff: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to generate diff", str(e))
 
 
 @workpad.command('promote')
@@ -302,35 +376,39 @@ def workpad_promote(ctx, workpad_id: Optional[str], force: bool):
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
         workpad = git_sync.get_workpad(workpad_id)
         if not workpad:
-            click.echo(f"❌ Workpad {workpad_id} not found.", err=True)
-            raise click.Abort()
-        
+            abort_with_error(f"Workpad {workpad_id} not found")
+
         # Check test status
         if not force and workpad.get('test_status') != 'green':
-            click.echo(f"❌ Cannot promote: tests are not green.", err=True)
-            click.echo(f"   Run tests first: evogitctl test run --pad {workpad_id}")
-            click.echo(f"   Or use --force to promote anyway (not recommended)")
+            formatter.print_error("Cannot promote: tests are not green.")
+            formatter.print_info("Run tests first: evogitctl test run --pad <ID>")
+            formatter.print_warning("Use --force to override (not recommended)")
             raise click.Abort()
-        
-        click.echo(f"🔄 Promoting workpad: {workpad['title']}")
-        
+
+        formatter.print_header("Promoting Workpad")
+        formatter.print_info(f"Promoting workpad: {workpad['title']}")
+
         merge_commit = git_sync.promote_workpad(workpad_id)
-        
-        click.echo(f"\n✅ Workpad promoted to trunk!")
-        click.echo(f"   Merge commit: {merge_commit[:8]}")
-        click.echo(f"   Workpad: {workpad_id}")
-        click.echo(f"\n🎉 Changes are now on trunk!")
-        
+
+        formatter.print_success("Workpad promoted to trunk!")
+        details = formatter.table(headers=["Field", "Value"])
+        details.add_row("Merge Commit", f"[green]{merge_commit[:8]}[/green]")
+        details.add_row("Workpad", f"[cyan]{workpad_id}[/cyan]")
+        details.add_row("Branch", workpad['branch_name'])
+        formatter.console.print(details)
+        formatter.print_success_panel(
+            "Changes are now on trunk!",
+            title="Promotion Complete",
+        )
+
     except Exception as e:
         logger.error(f"Failed to promote workpad: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to promote workpad", str(e))
 
 
 @workpad.command('delete')
@@ -351,25 +429,27 @@ def workpad_delete(ctx, workpad_id: str, force: bool):
     try:
         workpad = git_sync.get_workpad(workpad_id)
         if not workpad:
-            click.echo(f"❌ Workpad {workpad_id} not found.", err=True)
-            raise click.Abort()
-        
+            abort_with_error(f"Workpad {workpad_id} not found")
+
         # Confirm deletion
         if not force and workpad['status'] != 'promoted':
+            formatter.print_warning(
+                f"Workpad '{workpad['title']}' is not promoted. Deleting will discard changes.",
+            )
             click.confirm(
                 f"⚠️  Workpad '{workpad['title']}' is not promoted. Delete anyway?",
                 abort=True
             )
-        
-        click.echo(f"🔄 Deleting workpad: {workpad['title']}")
+
+        formatter.print_header("Delete Workpad")
+        formatter.print_info(f"Deleting workpad: {workpad['title']}")
         git_sync.delete_workpad(workpad_id, force)
-        
-        click.echo(f"✅ Workpad deleted: {workpad_id}")
-        
+
+        formatter.print_success(f"Workpad deleted: {workpad_id}")
+
     except Exception as e:
         logger.error(f"Failed to delete workpad: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to delete workpad", str(e))
 
 
 @click.group()
@@ -398,21 +478,20 @@ def ai_commit_message(ctx, workpad_id: Optional[str]):
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
-        click.echo("🤖 Generating commit message...")
-        
+        formatter.print_header("AI Commit Message")
+        formatter.print_info("Generating commit message from latest changes...")
+
         # Get diff
         diff = git_sync.get_diff(workpad_id)
         if not diff:
-            click.echo("❌ No changes to commit.", err=True)
-            raise click.Abort()
-        
+            abort_with_error("No changes to commit")
+
         # Use AI to generate message
         orchestrator = get_ai_orchestrator(config_manager)
-        
+
         prompt = f"Generate a concise commit message for these changes:\n\n{diff[:2000]}"
         
         # Track AI operation
@@ -438,15 +517,14 @@ def ai_commit_message(ctx, workpad_id: Optional[str]):
             status='completed',
             response=message
         )
-        
-        click.echo(f"\n✅ Suggested commit message:")
-        click.echo(f"   {message}")
-        click.echo(f"\n💡 Use: git commit -m \"{message}\"")
-        
+
+        formatter.print_success("Suggested commit message ready")
+        message_panel = f"[bold]{message}[/bold]\n\nUse:\n[cyan]git commit -m \"{message}\"[/cyan]"
+        formatter.print_info_panel(message_panel, title="Commit Message")
+
     except Exception as e:
         logger.error(f"Failed to generate commit message: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to generate commit message", str(e))
 
 
 @ai.command('review')
@@ -469,18 +547,17 @@ def ai_review(ctx, workpad_id: Optional[str]):
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
-        click.echo("🤖 Running AI code review...")
-        
+        formatter.print_header("AI Code Review")
+        formatter.print_info("Analyzing workpad changes...")
+
         # Get diff
         diff = git_sync.get_diff(workpad_id)
         if not diff:
-            click.echo("❌ No changes to review.", err=True)
-            raise click.Abort()
-        
+            abort_with_error("No changes to review")
+
         # Track AI operation
         operation = git_sync.create_ai_operation(
             workpad_id=workpad_id,
@@ -513,26 +590,27 @@ def ai_review(ctx, workpad_id: Optional[str]):
             status='completed',
             response=json.dumps(review)
         )
-        
-        click.echo(f"\n📊 Review Results:")
-        click.echo(f"   Additions: +{additions} lines")
-        click.echo(f"   Deletions: -{deletions} lines")
-        click.echo(f"   Status: {'✅ Approved' if review['approved'] else '⚠️  Needs attention'}")
-        
+
+        summary = formatter.table(headers=["Metric", "Value"])
+        summary.add_row("Additions", f"+{additions} lines")
+        summary.add_row("Deletions", f"-{deletions} lines")
+        status_color = theme.colors.success if review['approved'] else theme.colors.warning
+        status_icon = "✅" if review['approved'] else "⚠️"
+        summary.add_row("Status", f"[{status_color}]{status_icon} {'Approved' if review['approved'] else 'Needs attention'}[/{status_color}]")
+        formatter.print_info_panel("AI review completed", title="Review Results")
+        formatter.console.print(summary)
+
         if review['issues']:
-            click.echo(f"\n❌ Issues:")
-            for issue in review['issues']:
-                click.echo(f"   • {issue}")
-        
+            formatter.print_error("Issues detected:")
+            formatter.print_bullet_list(review['issues'], icon=theme.icons.error, style=theme.colors.error)
+
         if review['suggestions']:
-            click.echo(f"\n💡 Suggestions:")
-            for suggestion in review['suggestions']:
-                click.echo(f"   • {suggestion}")
+            formatter.print_info("Suggestions:")
+            formatter.print_bullet_list(review['suggestions'], icon=theme.icons.info, style=theme.colors.info)
         
     except Exception as e:
         logger.error(f"Failed to run AI review: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to run AI review", str(e))
 
 
 @ai.command('status')
@@ -544,25 +622,33 @@ def ai_status(ctx):
     try:
         orchestrator = get_ai_orchestrator(config_manager)
         status = orchestrator.get_status()
-        
-        click.echo(f"\n🤖 AI Orchestrator Status")
-        click.echo(f"\n💰 Budget:")
-        click.echo(f"   Daily Cap: ${status['budget']['daily_usd_cap']:.2f}")
-        click.echo(f"   Used: ${status['budget']['total_cost_usd']:.4f}")
-        click.echo(f"   Remaining: ${status['budget']['remaining_budget']:.4f}")
-        
-        click.echo(f"\n🔧 Models:")
-        click.echo(f"   Fast: {', '.join(status['models']['fast'])}")
-        click.echo(f"   Coding: {', '.join(status['models']['coding'])}")
-        click.echo(f"   Planning: {', '.join(status['models']['planning'])}")
-        
-        api_status = '✅ Configured' if status['api_configured'] else '❌ Not configured'
-        click.echo(f"\n🔑 API: {api_status}")
-        
+
+        formatter.print_header("AI Orchestrator Status")
+
+        budget = status['budget']
+        budget_table = formatter.table(headers=["Metric", "Value"])
+        budget_table.add_row("Daily Cap", f"${budget['daily_usd_cap']:.2f}")
+        budget_table.add_row("Used", f"${budget['total_cost_usd']:.4f}")
+        budget_table.add_row("Remaining", f"${budget['remaining_budget']:.4f}")
+        formatter.print_info_panel("Budget usage", title="Budget")
+        formatter.console.print(budget_table)
+
+        models_table = formatter.table(headers=["Tier", "Models"])
+        models_table.add_row("Fast", ", ".join(status['models']['fast']))
+        models_table.add_row("Coding", ", ".join(status['models']['coding']))
+        models_table.add_row("Planning", ", ".join(status['models']['planning']))
+        formatter.print_info_panel("Configured model tiers", title="Models")
+        formatter.console.print(models_table)
+
+        api_status = status['api_configured']
+        if api_status:
+            formatter.print_success("Abacus.ai API configured")
+        else:
+            formatter.print_warning("Abacus.ai API credentials not configured")
+
     except Exception as e:
         logger.error(f"Failed to get AI status: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to get AI status", str(e))
 
 
 @click.group()
@@ -597,31 +683,36 @@ def history_log(ctx, repo_id: Optional[str], limit: int, branch: Optional[str]):
             if len(repos) == 1:
                 repo_id = repos[0]['id']
             else:
-                click.echo("❌ Please specify --repo", err=True)
-                raise click.Abort()
-    
+                abort_with_error("Please specify --repo")
+
     try:
         commits = git_sync.get_history(repo_id, branch, limit)
-        
+
         if not commits:
-            click.echo("No commits found.")
+            formatter.print_info("No commits found.")
             return
-        
-        click.echo(f"\n📜 Commit History (showing {len(commits)} commits)\n")
-        
+
+        formatter.print_header(f"Commit History (showing {len(commits)} commits)")
+        table = formatter.table(headers=["SHA", "Message", "Author", "Timestamp"])
+
         for commit in commits:
             sha_short = commit['sha'][:8]
-            message = commit['message'].split('\n')[0]  # First line only
-            author = commit['author'].split('<')[0].strip()  # Name only
+            message = commit['message'].split('\n')[0]
+            author = commit['author'].split('<')[0].strip()
             timestamp = commit['timestamp'][:19]
-            
-            click.echo(f"🔹 {sha_short}  {message}")
-            click.echo(f"   {author} • {timestamp}\n")
-        
+
+            table.add_row(
+                f"[cyan]{sha_short}[/cyan]",
+                message,
+                author,
+                timestamp,
+            )
+
+        formatter.console.print(table)
+
     except Exception as e:
         logger.error(f"Failed to get history: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to get history", str(e))
 
 
 @history.command('revert')
@@ -644,34 +735,33 @@ def history_revert(ctx, repo_id: Optional[str], confirm: bool):
         context = git_sync.get_active_context()
         repo_id = context.get('repo_id')
         if not repo_id:
-            click.echo("❌ Please specify --repo", err=True)
-            raise click.Abort()
-    
+            abort_with_error("Please specify --repo")
+
     try:
         # Show last commit
         commits = git_sync.get_history(repo_id, limit=1)
         if not commits:
-            click.echo("❌ No commits to revert.", err=True)
-            raise click.Abort()
-        
+            abort_with_error("No commits to revert")
+
         last_commit = commits[0]
-        click.echo(f"\n⚠️  About to revert:")
-        click.echo(f"   Commit: {last_commit['sha'][:8]}")
-        click.echo(f"   Message: {last_commit['message'].split(chr(10))[0]}")
-        click.echo(f"   Author: {last_commit['author']}")
-        
+        formatter.print_header("Revert Last Commit")
+        details = formatter.table(headers=["Field", "Value"])
+        details.add_row("Commit", last_commit['sha'][:8])
+        details.add_row("Message", last_commit['message'].split(chr(10))[0])
+        details.add_row("Author", last_commit['author'])
+        formatter.console.print(details)
+
         if not confirm:
             click.confirm("\nAre you sure?", abort=True)
-        
-        click.echo("\n🔄 Reverting last commit...")
+
+        formatter.print_info("Reverting last commit...")
         git_sync.revert_last_commit(repo_id)
-        
-        click.echo("✅ Last commit reverted successfully!")
-        
+
+        formatter.print_success("Last commit reverted successfully!")
+
     except Exception as e:
         logger.error(f"Failed to revert commit: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to revert commit", str(e))
 
 
 @ai.command('generate')
@@ -696,14 +786,14 @@ def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Option
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad. Create one first.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad", "Create one first or specify --pad.")
+
     try:
-        click.echo(f"🤖 Generating code for: {prompt}")
-        
+        formatter.print_header("AI Code Generation")
+        formatter.print_info(f"Prompt: {prompt}")
+
         orchestrator = get_ai_orchestrator(config_manager)
-        
+
         # Track AI operation
         operation = git_sync.create_ai_operation(
             workpad_id=workpad_id,
@@ -711,14 +801,14 @@ def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Option
             model=config_manager.config.models.coding_model,
             prompt=prompt
         )
-        
+
         # Generate code using AI orchestrator
-        click.echo("   Planning implementation...")
-        
+        formatter.print_subheader("Planning implementation...")
+
         # Get repository context
         workpad = git_sync.get_workpad(workpad_id)
         repo = git_sync.get_repo(workpad['repo_id'])
-        
+
         repo_context = {
             'repo_path': repo['path'],
             'target_file': target_file
@@ -726,18 +816,25 @@ def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Option
         
         # Plan the implementation
         plan_response = orchestrator.plan(prompt, repo_context)
-        
-        click.echo(f"\n📋 Plan created ({plan_response.model_used}):")
-        for i, task in enumerate(plan_response.plan.tasks, 1):
-            click.echo(f"   {i}. {task}")
-        
+
+        if plan_response.plan.tasks:
+            formatter.print_info_panel(
+                f"Plan generated with {plan_response.model_used}",
+                title="Plan",
+            )
+            formatter.print_bullet_list(
+                [f"{i}. {task}" for i, task in enumerate(plan_response.plan.tasks, 1)],
+                icon=theme.icons.arrow_right,
+                style=theme.colors.blue,
+            )
+
         # Generate patch
-        click.echo("\n   Generating code...")
+        formatter.print_subheader("Generating code...")
         patch_response = orchestrator.generate_patch(
             plan_response.plan,
             repo_context
         )
-        
+
         # Update operation
         git_sync.update_ai_operation(
             operation['operation_id'],
@@ -745,16 +842,17 @@ def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Option
             response={'plan': asdict(plan_response.plan), 'patch': patch_response.patch.content},
             cost_usd=plan_response.cost_usd + patch_response.cost_usd
         )
-        
-        click.echo(f"\n✅ Code generated!")
-        click.echo(f"   Model: {patch_response.model_used}")
-        click.echo(f"   Cost: ${plan_response.cost_usd + patch_response.cost_usd:.4f}")
-        click.echo(f"\n   Apply with: evogitctl workpad-integrated apply-patch")
-        
+
+        formatter.print_success("Code generated!")
+        summary = formatter.table(headers=["Metric", "Value"])
+        summary.add_row("Model", patch_response.model_used)
+        summary.add_row("Total Cost", f"${plan_response.cost_usd + patch_response.cost_usd:.4f}")
+        summary.add_row("Next Step", "evogitctl workpad-integrated apply-patch")
+        formatter.console.print(summary)
+
     except Exception as e:
         logger.error(f"Code generation failed: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Code generation failed", str(e))
 
 
 @ai.command('refactor')
@@ -779,19 +877,18 @@ def ai_refactor(ctx, file_path: str, workpad_id: Optional[str], instruction: Opt
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
-        click.echo(f"🤖 Refactoring: {file_path}")
-        
+        formatter.print_header("AI Refactor")
+        formatter.print_info(f"Target file: {file_path}")
+
         workpad = git_sync.get_workpad(workpad_id)
         repo = git_sync.get_repo(workpad['repo_id'])
         full_path = Path(repo['path']) / file_path
-        
+
         if not full_path.exists():
-            click.echo(f"❌ File not found: {file_path}", err=True)
-            raise click.Abort()
+            abort_with_error(f"File not found: {file_path}")
         
         # Read current file
         with open(full_path, 'r') as f:
@@ -810,26 +907,25 @@ def ai_refactor(ctx, file_path: str, workpad_id: Optional[str], instruction: Opt
             model=config_manager.config.models.coding_model,
             prompt=prompt
         )
-        
-        click.echo("   Analyzing code...")
-        click.echo("   Generating refactored version...")
-        
+
+        formatter.print_subheader("Analyzing code...")
+        formatter.print_subheader("Generating refactored version...")
+
         # Simulate AI refactoring (full implementation would use orchestrator)
         response = "Refactored code would appear here"
-        
+
         git_sync.update_ai_operation(
             operation['operation_id'],
             status='completed',
             response=response
         )
-        
-        click.echo(f"\n✅ Refactoring complete!")
-        click.echo(f"   Review changes and apply if satisfied")
-        
+
+        formatter.print_success("Refactoring complete!")
+        formatter.print_info("Review changes and apply if satisfied.")
+
     except Exception as e:
         logger.error(f"Refactoring failed: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Refactoring failed", str(e))
 
 
 @ai.command('test-gen')
@@ -854,19 +950,18 @@ def ai_test_gen(ctx, file_path: str, workpad_id: Optional[str], framework: str):
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
-        click.echo(f"🤖 Generating tests for: {file_path}")
-        
+        formatter.print_header("AI Test Generation")
+        formatter.print_info(f"Target file: {file_path}")
+
         workpad = git_sync.get_workpad(workpad_id)
         repo = git_sync.get_repo(workpad['repo_id'])
         full_path = Path(repo['path']) / file_path
-        
+
         if not full_path.exists():
-            click.echo(f"❌ File not found: {file_path}", err=True)
-            raise click.Abort()
+            abort_with_error(f"File not found: {file_path}")
         
         # Read source code
         with open(full_path, 'r') as f:
@@ -883,8 +978,8 @@ def ai_test_gen(ctx, file_path: str, workpad_id: Optional[str], framework: str):
             prompt=prompt
         )
         
-        click.echo(f"   Analyzing code structure...")
-        click.echo(f"   Generating {framework} tests...")
+        formatter.print_subheader("Analyzing code structure...")
+        formatter.print_subheader(f"Generating {framework} tests...")
         
         # Determine test file name
         test_file = f"test_{Path(file_path).name}"
@@ -898,14 +993,15 @@ def ai_test_gen(ctx, file_path: str, workpad_id: Optional[str], framework: str):
             response=response
         )
         
-        click.echo(f"\n✅ Tests generated!")
-        click.echo(f"   Test file: {test_file}")
-        click.echo(f"   Framework: {framework}")
-        
+        formatter.print_success("Tests generated!")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("Test file", test_file)
+        summary.add_row("Framework", framework)
+        formatter.console.print(summary)
+
     except Exception as e:
         logger.error(f"Test generation failed: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Test generation failed", str(e))
 
 
 @workpad.command('apply-patch')
@@ -931,25 +1027,24 @@ def workpad_apply_patch(ctx, patch_file: Optional[str], workpad_id: Optional[str
         context = git_sync.get_active_context()
         workpad_id = context.get('workpad_id')
         if not workpad_id:
-            click.echo("❌ No active workpad.", err=True)
-            raise click.Abort()
-    
+            abort_with_error("No active workpad")
+
     try:
         if patch_file:
             # Read patch from file
             with open(patch_file, 'r') as f:
                 patch_content = f.read()
-            click.echo(f"📥 Applying patch from: {patch_file}")
+            formatter.print_header("Apply Patch")
+            formatter.print_info(f"Applying patch from: {patch_file}")
         else:
             # Use AI-generated patch if available
-            click.echo("❌ Please specify a patch file or generate one with AI", err=True)
-            raise click.Abort()
-        
+            abort_with_error("Please specify a patch file or generate one with AI")
+
         if not message:
             message = f"Apply patch from {Path(patch_file).name if patch_file else 'AI'}"
-        
-        click.echo(f"🔄 Applying patch to workpad...")
-        
+
+        formatter.print_subheader("Applying patch to workpad...")
+
         # Apply the patch
         commit_sha = git_sync.apply_patch(workpad_id, patch_content, message)
         
@@ -961,15 +1056,16 @@ def workpad_apply_patch(ctx, patch_file: Optional[str], workpad_id: Optional[str
             result={'commit_sha': commit_sha},
             undo_data={'workpad_id': workpad_id, 'commit_sha': commit_sha}
         )
-        
-        click.echo(f"\n✅ Patch applied successfully!")
-        click.echo(f"   Commit: {commit_sha[:8]}")
-        click.echo(f"   Message: {message}")
-        
+
+        formatter.print_success("Patch applied successfully!")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("Commit", commit_sha[:8])
+        summary.add_row("Message", message)
+        formatter.console.print(summary)
+
     except Exception as e:
         logger.error(f"Failed to apply patch: {e}")
-        click.echo(f"❌ Error: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Failed to apply patch", str(e))
 
 
 @click.group()
@@ -989,20 +1085,20 @@ def edit_undo(ctx):
       evogitctl edit undo
     """
     from sologit.ui.history import undo, can_undo
-    
+
     if not can_undo():
-        click.echo("❌ Nothing to undo", err=True)
-        raise click.Abort()
-    
+        abort_with_error("Nothing to undo")
+
     try:
         entry = undo()
-        click.echo(f"✅ Undone: {entry.description}")
-        click.echo(f"   Type: {entry.type.value}")
-        click.echo(f"   Time: {entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        formatter.print_success(f"Undone: {entry.description}")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("Type", entry.type.value)
+        summary.add_row("Time", entry.timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+        formatter.console.print(summary)
     except Exception as e:
         logger.error(f"Undo failed: {e}")
-        click.echo(f"❌ Undo failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Undo failed", str(e))
 
 
 @edit.command('redo')
@@ -1016,20 +1112,20 @@ def edit_redo(ctx):
       evogitctl edit redo
     """
     from sologit.ui.history import redo, can_redo
-    
+
     if not can_redo():
-        click.echo("❌ Nothing to redo", err=True)
-        raise click.Abort()
-    
+        abort_with_error("Nothing to redo")
+
     try:
         entry = redo()
-        click.echo(f"✅ Redone: {entry.description}")
-        click.echo(f"   Type: {entry.type.value}")
-        click.echo(f"   Time: {entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        formatter.print_success(f"Redone: {entry.description}")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("Type", entry.type.value)
+        summary.add_row("Time", entry.timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+        formatter.console.print(summary)
     except Exception as e:
         logger.error(f"Redo failed: {e}")
-        click.echo(f"❌ Redo failed: {e}", err=True)
-        raise click.Abort()
+        abort_with_error("Redo failed", str(e))
 
 
 @edit.command('history')
@@ -1049,25 +1145,25 @@ def edit_history(ctx, limit: int, search: Optional[str]):
     from sologit.ui.history import get_command_history
     
     history = get_command_history()
-    
+
     if search:
         entries = history.search(search)
-        click.echo(f"\n🔍 Search results for '{search}':\n")
+        formatter.print_header(f"Search results for '{search}'")
     else:
         entries = history.get_history(limit=limit)
-        click.echo(f"\n📜 Command History (last {limit}):\n")
-    
+        formatter.print_header(f"Command History (last {limit})")
+
     if not entries:
-        click.echo("No commands found.")
+        formatter.print_info("No commands found.")
         return
-    
+
+    table = formatter.table(headers=["#", "Timestamp", "Undoable", "Description", "Type"])
     for i, entry in enumerate(entries, 1):
         timestamp = entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')
         undoable = "✓" if entry.undoable else "✗"
-        
-        click.echo(f"{i}. [{timestamp}] {undoable} {entry.description}")
-        click.echo(f"   Type: {entry.type.value}")
-        click.echo()
+        table.add_row(str(i), timestamp, undoable, entry.description, entry.type.value)
+
+    formatter.console.print(table)
 
 
 # Export command groups
