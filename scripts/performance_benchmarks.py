@@ -148,7 +148,7 @@ def benchmark_workpads(engine: GitEngine, repo_id: str, count: int = 60) -> Dict
         workpad_ids.append(pad_id)
 
     sorted_durations = sorted(durations)
-    p95_index = min(len(sorted_durations) - 1, int(0.95 * (len(sorted_durations) - 1)))
+    p95_index = min(len(sorted_durations) - 1, int(0.95 * len(sorted_durations)))
 
     return {
         "count": count,
