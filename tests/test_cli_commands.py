@@ -18,6 +18,13 @@ def mock_git_engine():
         mock_engine = MagicMock()
         mock_get.return_value = mock_engine
         yield mock_engine
+@pytest.fixture
+def mock_git_sync():
+    """Fixture for a mocked GitStateSync."""
+    with patch('sologit.cli.commands.get_git_sync') as mock_get:
+        mock_sync = MagicMock()
+        mock_get.return_value = mock_sync
+        yield mock_sync
 
 
 @pytest.fixture
@@ -133,53 +140,55 @@ def test_repo_info_not_found(mock_git_engine):
     assert "Suggested Commands" in result.output
 
 
-def test_repo_init_from_zip(mock_git_engine, tmp_path):
+def test_repo_init_from_zip(mock_git_sync, tmp_path):
     """Test `repo init` from a zip file."""
     zip_file = tmp_path / "test.zip"
     zip_file.write_text("dummy content")
 
-    mock_repo = MagicMock()
-    mock_repo.id = "new_repo"
-    mock_repo.name = "test"
-    mock_repo.path = "/path/to/new_repo"
-    mock_repo.trunk_branch = "main"
-
-    mock_git_engine.init_from_zip.return_value = "new_repo"
-    mock_git_engine.get_repo.return_value = mock_repo
+    mock_repo_info = {
+        'repo_id': 'new_repo',
+        'name': 'test',
+        'path': '/path/to/new_repo',
+        'trunk_branch': 'main',
+    }
+    mock_git_sync.init_repo_from_zip.return_value = mock_repo_info
 
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init', '--zip', str(zip_file)])
 
     assert result.exit_code == 0, result.output
-    assert "Initializing repository from zip" in result.output
+    assert "Initializing from zip" in result.output
     assert "Repository initialized!" in result.output
-    assert "Repo ID: new_repo" in result.output
-    assert "Name: test" in result.output
-    mock_git_engine.init_from_zip.assert_called_once()
+    assert "ID" in result.output
+    assert "new_repo" in result.output
+    assert "Name" in result.output
+    assert "test" in result.output
+    mock_git_sync.init_repo_from_zip.assert_called_once()
 
 
-def test_repo_init_from_git(mock_git_engine):
+def test_repo_init_from_git(mock_git_sync):
     """Test `repo init` from a git URL."""
     git_url = "https://github.com/example/repo.git"
 
-    mock_repo = MagicMock()
-    mock_repo.id = "git_repo"
-    mock_repo.name = "repo"
-    mock_repo.path = "/path/to/git_repo"
-    mock_repo.trunk_branch = "main"
-
-    mock_git_engine.init_from_git.return_value = "git_repo"
-    mock_git_engine.get_repo.return_value = mock_repo
+    mock_repo_info = {
+        'repo_id': 'git_repo',
+        'name': 'repo',
+        'path': '/path/to/git_repo',
+        'trunk_branch': 'main',
+    }
+    mock_git_sync.init_repo_from_git.return_value = mock_repo_info
 
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init', '--git', git_url])
 
     assert result.exit_code == 0, result.output
-    assert "Cloning repository from" in result.output
+    assert "Cloning from" in result.output
     assert "Repository initialized!" in result.output
-    assert "Repo ID: git_repo" in result.output
-    assert "Name: repo" in result.output
-    mock_git_engine.init_from_git.assert_called_once_with(git_url, "repo")
+    assert "ID" in result.output
+    assert "git_repo" in result.output
+    assert "Name" in result.output
+    assert "repo" in result.output
+    mock_git_sync.init_repo_from_git.assert_called_once_with(git_url, "repo")
 
 
 def test_repo_init_no_source(mock_git_engine):
@@ -187,8 +196,8 @@ def test_repo_init_no_source(mock_git_engine):
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init'])
     assert result.exit_code != 0
-    assert "Missing Repository Source" in result.output
-    assert "Provide either --zip <path> or --git <url>" in result.output
+    assert "Invalid Source Specification" in result.output
+    assert "Please specify exactly one of --zip, --git, or --empty" in result.output
 
 
 def test_repo_init_both_sources(mock_git_engine, tmp_path):
@@ -199,15 +208,15 @@ def test_repo_init_both_sources(mock_git_engine, tmp_path):
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init', '--zip', str(zip_file), '--git', git_url])
     assert result.exit_code != 0
-    assert "Conflicting Options Provided" in result.output
-    assert "Only one source can be used at a time" in result.output
+    assert "Invalid Source Specification" in result.output
+    assert "Please specify exactly one of --zip, --git, or --empty" in result.output
 
 
-def test_repo_init_git_engine_error(mock_git_engine, tmp_path):
+def test_repo_init_git_engine_error(mock_git_sync, tmp_path):
     """Test `repo init` handling a GitEngineError."""
     zip_file = tmp_path / "test.zip"
     zip_file.write_text("dummy")
-    mock_git_engine.init_from_zip.side_effect = GitEngineError("Failed to init")
+    mock_git_sync.init_repo_from_zip.side_effect = GitEngineError("Failed to init")
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init', '--zip', str(zip_file)])
     assert result.exit_code != 0

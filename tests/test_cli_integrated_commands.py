@@ -137,22 +137,23 @@ def test_workpad_status_uses_active_context(runner, mock_git_sync, config_manage
 
     assert result.exit_code == 0, result.output
     assert "Workpad Status: api-updates" in result.output
-    assert "ID: pad-9" in result.output
-    assert "Tests: ✅ green" in result.output
-    assert "Modified: 1 file" in result.output
-    assert "Test Runs: 1" in result.output
+    assert "pad-9" in result.output
+    assert "Last Test     ✓ green" in result.output
+    assert "Modified    app.py" in result.output
+    assert "Recent Test Runs (1 shown)" in result.output
 
 
 def test_workpad_diff_reports_when_empty(runner, mock_git_sync, config_manager):
     """If there are no changes the diff command should explain that."""
 
     mock_git_sync.get_active_context.return_value = {"workpad_id": "pad-3"}
+    mock_git_sync.get_workpad.return_value = {"title": "test-pad"}
     mock_git_sync.get_diff.return_value = ""
 
     result = runner.invoke(workpad, ["diff"], obj={"config": config_manager})
 
     assert result.exit_code == 0
-    assert "No changes." in result.output
+    assert "No changes between the workpad and base branch." in result.output
 
 
 def test_workpad_promote_requires_green_tests(runner, mock_git_sync, config_manager):
@@ -250,7 +251,7 @@ def test_ai_status_reports_budget(runner, mock_git_sync, config_manager):
     assert result.exit_code == 0, result.output
     assert "Daily Cap" in result.output
     assert "fast-a" in result.output
-    assert "API: ✅" in result.output
+    assert "Abacus.ai API configured" in result.output
 
 
 def test_history_log_shows_commits(runner, mock_git_sync, config_manager):
