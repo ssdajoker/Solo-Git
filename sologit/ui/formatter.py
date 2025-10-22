@@ -5,7 +5,7 @@ Rich formatter for Heaven Interface.
 Provides formatted output using the Rich library with Heaven Interface design system.
 """
 
-from typing import Optional, Dict, Any, List, Sequence
+from typing import Optional, Dict, Any, List, Sequence, Iterable
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -54,10 +54,110 @@ class RichFormatter:
         icon = theme.icons.success
         self.console.print(f"[{theme.colors.success}]{icon}[/{theme.colors.success}] {text}")
     
-    def print_error(self, text: str) -> None:
-        """Print error message."""
-        icon = theme.icons.error
-        self.console.print(f"[{theme.colors.error}]{icon}[/{theme.colors.error}] {text}")
+    def _build_message_sections(
+        self,
+        message: Optional[str] = None,
+        *,
+        help_text: Optional[str] = None,
+        tip: Optional[str] = None,
+        suggestions: Optional[Iterable[str]] = None,
+        docs_url: Optional[str] = None,
+        details: Optional[str] = None,
+    ) -> str:
+        """Compose multiline message content for Rich panels."""
+
+        sections: List[str] = []
+
+        if message:
+            sections.append(message)
+
+        if details:
+            sections.append(f"[{theme.colors.text_secondary}]{details}[/{theme.colors.text_secondary}]")
+
+        if help_text:
+            sections.append(
+                f"[bold {theme.colors.info}]Help[/bold {theme.colors.info}]\n{help_text}"
+            )
+
+        if suggestions:
+            suggestion_lines = "\n".join(
+                f"[{theme.colors.text_secondary}]{theme.icons.arrow_right} {item}[/{theme.colors.text_secondary}]"
+                for item in suggestions
+            )
+            sections.append(
+                f"[bold {theme.colors.blue}]Suggested Commands[/bold {theme.colors.blue}]\n{suggestion_lines}"
+            )
+
+        if tip:
+            sections.append(
+                f"[{theme.colors.warning}]{theme.icons.warning} Tip:[/{theme.colors.warning}] {tip}"
+            )
+
+        if docs_url:
+            sections.append(
+                f"[{theme.colors.cyan}]{theme.icons.info} Docs:[/{theme.colors.cyan}] {docs_url}"
+            )
+
+        return "\n\n".join(sections)
+
+    def _print_message_panel(
+        self,
+        *,
+        title: str,
+        message: Optional[str],
+        border_color: str,
+        icon: str,
+        help_text: Optional[str] = None,
+        tip: Optional[str] = None,
+        suggestions: Optional[Iterable[str]] = None,
+        docs_url: Optional[str] = None,
+        details: Optional[str] = None,
+    ) -> None:
+        """Render a structured message panel with contextual sections."""
+
+        content = self._build_message_sections(
+            message,
+            help_text=help_text,
+            tip=tip,
+            suggestions=suggestions,
+            docs_url=docs_url,
+            details=details,
+        )
+
+        self.print_panel(
+            content or "",
+            title=f"{icon} {title}",
+            border_color=border_color,
+        )
+
+    def print_error(
+        self,
+        title: str,
+        message: Optional[str] = None,
+        *,
+        help_text: Optional[str] = None,
+        tip: Optional[str] = None,
+        suggestions: Optional[Iterable[str]] = None,
+        docs_url: Optional[str] = None,
+        details: Optional[str] = None,
+    ) -> None:
+        """Print an error panel with helpful context."""
+
+        if message is None:
+            message = title
+            title = "Command Error"
+
+        self._print_message_panel(
+            title=title,
+            message=message,
+            border_color=theme.colors.error,
+            icon=theme.icons.error,
+            help_text=help_text,
+            tip=tip,
+            suggestions=suggestions,
+            docs_url=docs_url,
+            details=details,
+        )
     
     def print_warning(self, text: str) -> None:
         """Print warning message."""
@@ -85,10 +185,30 @@ class RichFormatter:
         """Print a panel."""
         self.console.print(self.panel(content, title, border_color))
 
-    def print_error_panel(self, content: str, title: str = "Error") -> None:
-        """Print an error panel with red border."""
-        icon = theme.icons.error
-        self.print_panel(content, title=f"{icon} {title}", border_color=theme.colors.error)
+    def print_error_panel(
+        self,
+        content: str,
+        title: str = "Error",
+        *,
+        help_text: Optional[str] = None,
+        tip: Optional[str] = None,
+        suggestions: Optional[Iterable[str]] = None,
+        docs_url: Optional[str] = None,
+        details: Optional[str] = None,
+    ) -> None:
+        """Print an error panel with rich context (legacy helper)."""
+
+        self._print_message_panel(
+            title=title,
+            message=content,
+            border_color=theme.colors.error,
+            icon=theme.icons.error,
+            help_text=help_text,
+            tip=tip,
+            suggestions=suggestions,
+            docs_url=docs_url,
+            details=details,
+        )
 
     def print_success_panel(self, content: str, title: str = "Success") -> None:
         """Print a success panel with green border."""

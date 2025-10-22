@@ -109,7 +109,8 @@ def test_repo_info_not_found(mock_git_engine):
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'info', 'nonexistent'])
     assert result.exit_code != 0
-    assert "Repository nonexistent not found" in result.output
+    assert "Repository 'nonexistent' is not registered with Solo Git." in result.output
+    assert "Suggested Commands" in result.output
 
 
 def test_repo_init_from_zip(mock_git_engine, tmp_path):
@@ -166,7 +167,8 @@ def test_repo_init_no_source(mock_git_engine):
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init'])
     assert result.exit_code != 0
-    assert "Error: Must provide either --zip or --git" in result.output
+    assert "Missing Repository Source" in result.output
+    assert "Provide either --zip <path> or --git <url>" in result.output
 
 
 def test_repo_init_both_sources(mock_git_engine, tmp_path):
@@ -177,7 +179,8 @@ def test_repo_init_both_sources(mock_git_engine, tmp_path):
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init', '--zip', str(zip_file), '--git', git_url])
     assert result.exit_code != 0
-    assert "Error: Cannot provide both --zip and --git" in result.output
+    assert "Conflicting Options Provided" in result.output
+    assert "Only one source can be used at a time" in result.output
 
 
 def test_repo_init_git_engine_error(mock_git_engine, tmp_path):
@@ -188,7 +191,8 @@ def test_repo_init_git_engine_error(mock_git_engine, tmp_path):
     runner = CliRunner()
     result = runner.invoke(cli, ['repo', 'init', '--zip', str(zip_file)])
     assert result.exit_code != 0
-    assert "Error: Failed to init" in result.output
+    assert "Repository initialization failed" in result.output
+    assert "Failed to init" in result.output
 
 
 def test_pad_create_success(mock_git_engine):
@@ -405,7 +409,8 @@ def test_test_run_failure(mock_git_engine, mock_test_orchestrator):
 
     assert result.exit_code == 0  # Command itself succeeds
     assert "❌ failed" in result.output
-    assert "Some tests require attention" in result.output
+    assert "Tests Require Attention" in result.output
+    assert "Some tests failed or timed out" in result.output
     assert "Passed: 1" in result.output
     assert "Failed: 1" in result.output
 
