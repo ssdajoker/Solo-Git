@@ -330,7 +330,6 @@ class AIOrchestrator:
 
         model_config = None
         estimated_cost = 0.0
-        actual_cost = 0.0
 
         with self._progress("AI code generation", total=100) as progress_ctx:
             progress, task_id = progress_ctx or (None, None)
