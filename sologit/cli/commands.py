@@ -564,7 +564,12 @@ def test_run(pad_id: str, target: str) -> None:
     test_configs = _build_test_configs(target)
 
     run_info = state_manager.create_test_run(pad_id, target)
-    run_id = getattr(run_info, "run_id", None) or run_info["run_id"]
+    run_id = getattr(run_info, "run_id", None)
+    if run_id is None:
+        try:
+            run_id = run_info["run_id"]
+        except (TypeError, KeyError):
+            abort_with_error("Could not determine run_id from test run info")
     state_manager.update_test_run(run_id, status="running")
 
     try:
