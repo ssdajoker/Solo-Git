@@ -20,7 +20,7 @@ from sologit.state.schema import (
     EventType,
     StateEvent,
 )
-from sologit.state.manager import StateManager
+from sologit.state.manager import JSONStateBackend, StateBackend, StateManager
 
 __all__ = [
     'WorkpadStatus',
@@ -35,5 +35,7 @@ __all__ = [
     'GlobalState',
     'EventType',
     'StateEvent',
+    'StateBackend',
+    'JSONStateBackend',
     'StateManager',
 ]

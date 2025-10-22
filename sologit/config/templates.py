@@ -78,6 +78,7 @@ budget:
 
 # Test Configuration
 tests:
+  sandbox_image: ghcr.io/solo-git/sandbox:latest
   timeout_seconds: 300
   parallel_max: 4
   

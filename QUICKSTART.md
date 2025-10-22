@@ -16,8 +16,13 @@ Solo Git is a frictionless Git workflow for AI-augmented solo developers that el
 
 ✅ **All dependencies installed successfully!**
 - Python 3.11.6
-- All required packages (Rich, Textual, GitPython, Docker, etc.)
+- All required packages (Rich, Textual, GitPython, etc.)
 - CLI entry point: `evogitctl` (available in PATH)
+
+### 🚫 Container Policy
+
+Solo Git refuses to bundle container tooling. The CLI and TUI expect direct subprocess
+execution, keeping the workflow lean and explicitly rejecting container overhead.
 
 ---
 
@@ -480,7 +485,7 @@ Powered by:
 - Rich (beautiful CLI formatting)
 - Textual (TUI framework)
 - GitPython (Git operations)
-- Docker (sandboxed testing)
+- Native subprocess runner (sandboxed testing without containers)
 
 ---
 
