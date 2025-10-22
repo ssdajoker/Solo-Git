@@ -186,8 +186,10 @@ def show_config(ctx: click.Context, secrets: bool) -> None:
     formatter.console.print(api_table)
 
     budget_table = formatter.table(headers=["Budget", "Value"])
-    budget_table.add_row("Daily Cap", f"${config.budget.daily_usd_cap:,.2f}")
-    budget_table.add_row("Alert Threshold", f"{config.budget.alert_threshold:.0%}")
+    daily_cap = getattr(config.budget, 'daily_usd_cap', None)
+    alert_threshold = getattr(config.budget, 'alert_threshold', None)
+    budget_table.add_row("Daily Cap", _format_currency(daily_cap))
+    budget_table.add_row("Alert Threshold", f"{alert_threshold:.0%}" if alert_threshold is not None else "Not configured")
     formatter.console.print(budget_table)
 
 
@@ -250,7 +252,7 @@ def budget_status(ctx: click.Context) -> None:
     config = config_manager.get_config()
 
     formatter.print_header("Solo Git Budget Status")
-    
+
     if not isinstance(config.budget, BudgetConfig):
         abort_with_error(
             "Invalid budget configuration",
@@ -258,7 +260,7 @@ def budget_status(ctx: click.Context) -> None:
             help_text="Please check your configuration file and ensure the 'budget' section is correctly specified.",
             tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
         )
-    
+
     guard = CostGuard(config.budget)
     status = guard.get_status()
 
