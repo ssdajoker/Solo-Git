@@ -30,7 +30,7 @@ def set_formatter_console(console) -> None:
 
 
 def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
-    """Ensure the Click context object is a dictionary."""
+    """Ensure the Click context has an initialized object dictionary and return it."""
     ctx.ensure_object(dict)
     return ctx.obj  # type: ignore[return-value]
 
