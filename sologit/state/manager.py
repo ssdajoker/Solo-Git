@@ -563,7 +563,6 @@ class StateManager:
         if repo and workpad_id in repo.workpads:
             repo.workpads.remove(workpad_id)
             self.backend.write_repository(repo)
-    
     # Test Runs
     
     def create_test_run(self, workpad_id: Optional[str], target: str) -> TestRun:
