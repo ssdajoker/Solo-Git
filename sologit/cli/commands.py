@@ -2,9 +2,10 @@
 """Command implementations for Solo Git CLI."""
 
 import asyncio
+import time
 import click
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, TypeVar
 
 from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
@@ -23,6 +24,8 @@ from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 
 logger = get_logger(__name__)
+
+StageResult = TypeVar("StageResult")
 
 # Initialize Rich formatter
 formatter = RichFormatter()
@@ -180,37 +183,59 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
                 name = Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning repository from: {git_url}")
 
-        with formatter.create_progress() as progress:
-            overall_task = progress.add_task("Repository setup", total=3)
+        with formatter.progress("Setting up repository") as progress:
+            total_steps = 3
+            overall_task = progress.add_task("Repository initialization", total=total_steps)
+
+            def run_stage(description: str, operation: Callable[[], StageResult]) -> StageResult:
+                stage_task = progress.add_task(description, total=None)
+                progress.update(overall_task, description=description)
+                success = False
+                start = time.perf_counter()
+                try:
+                    result = operation()
+                    success = True
+                    return result
+                finally:
+                    progress.remove_task(stage_task)
+                    if success:
+                        progress.advance(overall_task, 1)
+                        duration = time.perf_counter() - start
+                        logger.debug("Stage '%s' completed in %.2fs", description, duration)
 
             if zip_file:
-                read_task = progress.add_task("Reading archive from disk", total=None)
-                zip_data = zip_path.read_bytes()
-                progress.remove_task(read_task)
-                progress.advance(overall_task, 1)
+                zip_data = run_stage("Loading archive from disk", lambda: zip_path.read_bytes())
 
                 if not name:
                     name = zip_path.stem
 
-                import_task = progress.add_task("Importing archive contents", total=None)
-                repo_id = git_engine.init_from_zip(zip_data, name)
-                progress.remove_task(import_task)
-                progress.advance(overall_task, 1)
-
+                repo_id = run_stage(
+                    "Importing files & creating initial commit",
+                    lambda: git_engine.init_from_zip(zip_data, name),
+                )
             else:  # git_url
-                prepare_task = progress.add_task("Preparing clone parameters", total=None)
-                progress.remove_task(prepare_task)
-                progress.advance(overall_task, 1)
+                run_stage("Preparing clone parameters", lambda: None)
 
-                clone_task = progress.add_task("Cloning remote repository", total=None)
-                repo_id = git_engine.init_from_git(git_url, name)
-                progress.remove_task(clone_task)
-                progress.advance(overall_task, 1)
+                repo_id = run_stage(
+                    "Cloning remote repository",
+                    lambda: git_engine.init_from_git(git_url, name),
+                )
 
-            finalize_task = progress.add_task("Finalizing repository metadata", total=None)
-            repo = git_engine.get_repo(repo_id)
-            progress.remove_task(finalize_task)
-            progress.advance(overall_task, 1)
+            final_stage_label = (
+                "Verifying initial commit & metadata"
+                if zip_file
+                else "Recording repository metadata"
+            )
+            repo = run_stage(
+                final_stage_label,
+                lambda: git_engine.get_repo(repo_id),
+            )
+
+            progress.update(
+                overall_task,
+                description="Repository ready",
+                completed=total_steps,
+            )
 
         formatter.print_success("Repository initialized!")
         formatter.print_info(f"Repo ID: {repo.id}")
