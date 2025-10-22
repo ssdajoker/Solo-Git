@@ -640,7 +640,8 @@ class ConfigManager:
                 'parallel_max': self.config.tests.parallel_max,
                 'fast_tests': self.config.tests.fast_tests,
                 'full_tests': self.config.tests.full_tests,
-                'smoke_tests': self.config.tests.smoke_tests
+                'smoke_tests': self.config.tests.smoke_tests,
+                'log_dir': self.config.tests.log_dir,
             },
             'ci': asdict(self.config.ci),
             'repos_path': self.config.repos_path,
