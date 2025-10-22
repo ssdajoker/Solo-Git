@@ -58,7 +58,7 @@ def abort_with_error(
     tip: Optional[str] = None,
     suggestions: Optional[List[str]] = None,
     docs_url: Optional[str] = None,
-) -> None:
+) -> NoReturn:
     """Display a formatted error with rich context and abort the command."""
 
     default_help = help_text or "Use the --help flag to review available options."
@@ -77,12 +77,6 @@ def abort_with_error(
         docs_url=docs_url or "docs/SETUP.md",
         details=details,
     )
-def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
-    """Display a formatted error and abort the command."""
-    content = f"[bold]Error: {message}[/bold]"
-    if details:
-        content += f"\n\n{details}"
-    formatter.print_error_panel(content)
     raise click.Abort()
 
 
@@ -255,41 +249,23 @@ def repo() -> None:
 @click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
 @click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
 @click.option('--name', type=str, help='Repository name (optional)')
-def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
+def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]) -> None:
     """Initialize a new repository from zip file or Git URL."""
     formatter.print_header("Repository Initialization")
 
-    sources = [bool(zip_file), bool(git_url), empty]
-    if sum(1 for flag in sources if flag) != 1:
-        abort_with_error("Must specify exactly one of --zip, --git, or --empty")
-def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]) -> None:
-    """Initialize a new repository from zip file or Git URL."""
-    formatter.print_header("Repository Initialization")
-
-    if not zip_file and not git_url:
+    # Count provided sources - need to check truthiness for zip_file and git_url, but empty is always provided
+    provided_sources = sum([bool(zip_file), bool(git_url), empty])
+    if provided_sources != 1:
         abort_with_error(
-            "Missing Repository Source",
-            "Provide either --zip <path> or --git <url> so Solo Git knows where to initialize from.",
+            "Missing or Conflicting Repository Source",
+            "Provide exactly one of --zip <path>, --git <url>, or --empty so Solo Git knows where to initialize from.",
             title="Repository Initialization Blocked",
-            help_text="Choose exactly one source option. Use --zip for local archives or --git for remote repositories.",
+            help_text="Choose exactly one source option. Use --zip for local archives, --git for remote repositories, or --empty for a new empty repository.",
             tip="If you already cloned locally, package it as a zip and pass --zip to speed up initialization.",
             suggestions=[
                 "evogitctl repo init --zip app.zip",
                 "evogitctl repo init --git https://github.com/org/project.git",
-            ],
-            docs_url="docs/SETUP.md#initialize-a-repository",
-        )
-
-    if zip_file and git_url:
-        abort_with_error(
-            "Conflicting Options Provided",
-            "Only one source can be used at a time. Pass either --zip or --git, not both.",
-            title="Repository Initialization Blocked",
-            help_text="Remove one of the flags and rerun the command.",
-            tip="Use --zip when you have a packaged archive and --git for hosted repositories.",
-            suggestions=[
-                "evogitctl repo init --zip app.zip",
-                "evogitctl repo init --git https://github.com/org/project.git",
+                "evogitctl repo init --empty --name my-repo",
             ],
             docs_url="docs/SETUP.md#initialize-a-repository",
         )
@@ -297,88 +273,21 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
     git_sync = get_git_sync()
 
     try:
-        if zip_file is not None:
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
             repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
         elif zip_file:
-        if zip_file:
-            if zip_file is None:
-                abort_with_error("Internal error: zip_file is unexpectedly None")
             zip_path = Path(zip_file)
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
             repo_name = name or zip_path.stem
             repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
         else:
+            # Must be git_url based on validation above
             assert git_url is not None
-            if not name:
-                name = Path(git_url).stem.replace(".git", "")
+            repo_name = name or Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning repository from: {git_url}")
-
-        with formatter.progress("Setting up repository") as progress:
-            total_steps = 3
-            overall_task = progress.add_task("Repository initialization", total=total_steps)
-
-            def run_stage(description: str, operation: Callable[[], StageResult]) -> StageResult:
-                stage_task = progress.add_task(description, total=None)
-                progress.update(overall_task, description=description)
-                success = False
-                start = time.perf_counter()
-                try:
-                    result = operation()
-                    success = True
-                    return result
-                finally:
-                    progress.remove_task(stage_task)
-                    if success:
-                        progress.advance(overall_task, 1)
-                        duration = time.perf_counter() - start
-                        logger.debug("Stage '%s' completed in %.2fs", description, duration)
-
-            if zip_file:
-                zip_data = run_stage("Loading archive from disk", lambda: zip_path.read_bytes())
-
-                if not name:
-                    name = zip_path.stem
-
-                repo_id = run_stage(
-                    "Importing files & creating initial commit",
-                    lambda: git_engine.init_from_zip(zip_data, name),
-                )
-            else:  # git_url
-                run_stage("Preparing clone parameters", lambda: None)
-
-                assert git_url is not None
-                repo_id = run_stage(
-                    "Cloning remote repository",
-                    lambda: git_engine.init_from_git(git_url, name),
-                )
-
-            final_stage_label = (
-                "Verifying initial commit & metadata"
-                if zip_file
-                else "Recording repository metadata"
-            )
-            repo = _require_repository(
-                run_stage(
-                    final_stage_label,
-                    lambda: git_engine.get_repo(repo_id),
-                ),
-                repo_id,
-            )
-
-            progress.update(
-                overall_task,
-                description="Repository ready",
-                completed=total_steps,
-            )
-            if git_url is None:
-                abort_with_error("Internal error: git_url is unexpectedly None")
-            if not name:
-                name = Path(git_url).stem.replace('.git', '')
-            formatter.print_info(f"Cloning repository from: {git_url}")
-            repo_info = git_sync.init_repo_from_git(git_url, name)
+            repo_info = git_sync.init_repo_from_git(git_url, repo_name)
 
         formatter.print_success("Repository initialized!")
         formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
@@ -409,8 +318,6 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
         )
 
 
-@repo.command("list")
-def repo_list():
 @repo.command('list')
 def repo_list() -> None:
     """List all repositories."""
@@ -461,9 +368,6 @@ def repo_delete(repo_id: str, keep_files: bool):
     formatter.console.print()
 
 
-@repo.command("info")
-@click.argument("repo_id")
-def repo_info(repo_id: str):
 @repo.command('info')
 @click.argument('repo_id')
 def repo_info(repo_id: str) -> None:
@@ -507,10 +411,6 @@ def pad() -> None:
     pass
 
 
-@pad.command("create")
-@click.argument("title")
-@click.option("--repo", "repo_id", type=str, help="Repository ID (required if multiple repos)")
-def pad_create(title: str, repo_id: Optional[str]):
 @pad.command('create')
 @click.argument('title')
 @click.option('--repo', 'repo_id', type=str, help='Repository ID (required if multiple repos)')
@@ -568,9 +468,6 @@ def pad_create(title: str, repo_id: Optional[str]) -> None:
         abort_with_error("Failed to create workpad", str(e))
 
 
-@pad.command("list")
-@click.option("--repo", "repo_id", type=str, help="Filter by repository ID")
-def pad_list(repo_id: Optional[str]):
 @pad.command('list')
 @click.option('--repo', 'repo_id', type=str, help='Filter by repository ID')
 def pad_list(repo_id: Optional[str]) -> None:
@@ -621,9 +518,6 @@ def pad_list(repo_id: Optional[str]) -> None:
     formatter.console.print()
 
 
-@pad.command("info")
-@click.argument("pad_id")
-def pad_info(pad_id: str):
 @pad.command('info')
 @click.argument('pad_id')
 def pad_info(pad_id: str) -> None:
@@ -665,9 +559,6 @@ def pad_info(pad_id: str) -> None:
         )
 
 
-@pad.command("promote")
-@click.argument("pad_id")
-def pad_promote(pad_id: str):
 @pad.command('promote')
 @click.argument('pad_id')
 def pad_promote(pad_id: str) -> None:
@@ -675,9 +566,6 @@ def pad_promote(pad_id: str) -> None:
     git_engine = get_git_engine()
 
     workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
-    workpad = git_engine.get_workpad(pad_id)
-    if workpad is None:
-        abort_with_error(f"Workpad {pad_id} not found")
 
     # Check if can promote
     if not git_engine.can_promote(pad_id):
@@ -706,9 +594,6 @@ def pad_promote(pad_id: str) -> None:
         abort_with_error("Promotion failed", str(e))
 
 
-@pad.command("diff")
-@click.argument("pad_id")
-def pad_diff(pad_id: str):
 @pad.command('diff')
 @click.argument('pad_id')
 def pad_diff(pad_id: str) -> None:
@@ -716,9 +601,6 @@ def pad_diff(pad_id: str) -> None:
     git_engine = get_git_engine()
 
     workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
-    workpad = git_engine.get_workpad(pad_id)
-    if workpad is None:
-        abort_with_error(f"Workpad {pad_id} not found")
 
     try:
         diff = git_engine.get_diff(pad_id)
@@ -737,11 +619,6 @@ def test() -> None:
     pass
 
 
-@test.command("run")
-@click.argument("pad_id")
-@click.option("--target", type=click.Choice(["fast", "full"]), default="fast", help="Test target")
-@click.option("--parallel/--sequential", default=True, help="Parallel execution")
-def test_run(pad_id: str, target: str, parallel: bool):
 @test.command('run')
 @click.argument('pad_id')
 @click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
@@ -763,7 +640,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     run_started_at = time.time()
 
     if target == 'fast':
-    if target == "fast":
         tests = [
             TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
         ]
@@ -893,7 +769,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         )
 
         if summary['status'] == 'green':
-        if summary["status"] == "green":
             formatter.print_success("All tests passed! Ready to promote.")
         else:
             formatter.print_error(
@@ -1083,9 +958,6 @@ def pad_auto_merge(
         abort_with_error("Auto-merge failed", str(e))
 
 
-@pad.command("evaluate")
-@click.argument("pad_id")
-def pad_evaluate(pad_id: str):
 @pad.command('evaluate')
 @click.argument('pad_id')
 def pad_evaluate(pad_id: str) -> None:
@@ -1135,10 +1007,6 @@ def ci() -> None:
     pass
 
 
-@ci.command("smoke")
-@click.argument("repo_id")
-@click.option("--commit", help="Commit hash to test (default: HEAD)")
-def ci_smoke(repo_id: str, commit: Optional[str]):
 @ci.command('smoke')
 @click.argument('repo_id')
 @click.option('--commit', help='Commit hash to test (default: HEAD)')
@@ -1174,8 +1042,6 @@ def ci_smoke(repo_id: str, commit: Optional[str]) -> None:
 
     # Create orchestrator
     orchestrator = CIOrchestrator(git_engine, test_orchestrator)
-
-    def progress_callback(message: str):
     
     def progress_callback(message: str) -> None:
         formatter.print(f"   {message}")
@@ -1204,11 +1070,6 @@ def ci_smoke(repo_id: str, commit: Optional[str]) -> None:
         abort_with_error("Smoke tests failed", str(e))
 
 
-@ci.command("rollback")
-@click.argument("repo_id")
-@click.option("--commit", required=True, help="Commit hash to rollback")
-@click.option("--recreate-pad/--no-recreate-pad", default=True, help="Recreate workpad for fixes")
-def ci_rollback(repo_id: str, commit: str, recreate_pad: bool):
 @ci.command('rollback')
 @click.argument('repo_id')
 @click.option('--commit', required=True, help='Commit hash to rollback')
@@ -1263,9 +1124,6 @@ def ci_rollback(repo_id: str, commit: str, recreate_pad: bool) -> None:
         abort_with_error("Rollback failed", str(e))
 
 
-@test.command("analyze")
-@click.argument("pad_id")
-def test_analyze(pad_id: str):
 @test.command('analyze')
 @click.argument('pad_id')
 def test_analyze(pad_id: str) -> None:
@@ -1301,8 +1159,6 @@ def test_analyze(pad_id: str) -> None:
 
 
 def execute_pair_loop(
-    ctx,
-def execute_pair_loop(
     ctx: click.Context,
     prompt: str,
     repo_id: Optional[str],
@@ -1310,7 +1166,6 @@ def execute_pair_loop(
     no_test: bool,
     no_promote: bool,
     target: str,
-):
 ) -> None:
     """
     Execute the complete AI pair programming loop.

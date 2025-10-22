@@ -80,19 +80,12 @@ def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
     sys.exit(1)
 
 
-@click.group(name="config")
-def config_group():
 @click.group(name='config')
 def config_group() -> None:
     """Configuration management commands."""
     pass
 
 
-@config_group.command(name="setup")
-@click.option("--api-key", help="Abacus.ai API key")
-@click.option("--endpoint", help="Abacus.ai API endpoint", default="https://api.abacus.ai/v1")
-@click.option("--interactive/--no-interactive", default=True, help="Interactive setup mode")
-def setup_config(api_key, endpoint, interactive):
 @config_group.command(name='setup')
 @click.option('--api-key', help='Abacus.ai API key')
 @click.option('--endpoint', help='Abacus.ai API endpoint',
@@ -269,8 +262,6 @@ def test_config(ctx: click.Context) -> None:
     error_messages: List[str] = errors
 
     if not is_valid:
-        formatter.print_error_panel(
-            "Configuration validation failed. Review the following issues:", title="Validation"
         formatter.print_error(
             "Configuration Validation Failed",
             "Review the issues below and update your configuration file.",
@@ -432,9 +423,6 @@ def budget_status(ctx: click.Context) -> None:
 
 @config_group.command(name="init")
 @click.option("--force", is_flag=True, help="Overwrite existing config file")
-def init_config(force):
-@config_group.command(name='init')
-@click.option('--force', is_flag=True, help='Overwrite existing config file')
 def init_config(force: bool) -> None:
     """Initialize a new configuration file with defaults."""
     config_path = ConfigManager.DEFAULT_CONFIG_FILE
@@ -461,8 +449,6 @@ def init_config(force: bool) -> None:
 
 
 @config_group.command(name="env-template")
-def env_template():
-@config_group.command(name='env-template')
 def env_template() -> None:
     """Generate .env template file."""
     env_path = Path.cwd() / ".env.example"
@@ -479,8 +465,6 @@ def env_template() -> None:
 
 
 @config_group.command(name="path")
-def config_path():
-@config_group.command(name='path')
 def config_path() -> None:
     """Show configuration file path."""
     formatter.print_header("Configuration Path")
