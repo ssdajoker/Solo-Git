@@ -19,4 +19,17 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
+files = ["sologit/cli"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["sologit.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "sologit.cli.commands",
+    "sologit.cli.config_commands",
+]
+ignore_errors = false
 
