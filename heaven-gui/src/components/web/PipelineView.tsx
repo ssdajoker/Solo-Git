@@ -36,46 +36,6 @@ export interface PipelineViewProps {
   className?: string
 }
 
-// Helper function to get pipeline stage status icon
-const getStageStatusIcon = (status: PipelineStageStatus): string => {
-  switch (status) {
-    case 'success':
-      return '✓'
-    case 'failed':
-      return '✗'
-    case 'running':
-      return '◉'
-    case 'pending':
-      return '○'
-    case 'unstable':
-      return '⚠'
-    case 'cancelled':
-      return '⊗'
-    default:
-      return '?'
-  }
-}
-
-// Helper function to get build status color
-const getBuildStatusColor = (status: BuildStatus | PipelineStageStatus): string => {
-  switch (status) {
-    case 'success':
-      return 'text-heaven-accent-green'
-    case 'failed':
-      return 'text-heaven-accent-red'
-    case 'running':
-      return 'text-heaven-accent-blue'
-    case 'pending':
-      return 'text-heaven-text-tertiary'
-    case 'unstable':
-      return 'text-heaven-accent-orange'
-    case 'cancelled':
-      return 'text-heaven-text-secondary'
-    default:
-      return 'text-heaven-text-secondary'
-  }
-}
-
 export function PipelineView({
   buildNumber,
   stages,
