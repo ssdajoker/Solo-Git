@@ -432,3 +432,21 @@ def test_test_run_pad_not_found(mock_git_engine, mock_test_orchestrator):
     result = runner.invoke(cli, ['test', 'run', 'nonexistent'])
     assert result.exit_code != 0
     assert "Workpad nonexistent not found" in result.output
+
+
+def test_test_run_exception_handler(mock_git_engine, mock_test_orchestrator):
+    """Test `test run` exception handler provides workpad context."""
+    mock_pad = MagicMock()
+    mock_pad.title = "test-pad"
+    mock_git_engine.get_workpad.return_value = mock_pad
+    
+    # Make run_tests raise an exception
+    mock_test_orchestrator.run_tests.side_effect = Exception("Unexpected test failure")
+    
+    runner = CliRunner()
+    result = runner.invoke(cli, ['test', 'run', 'pad123'])
+    
+    assert result.exit_code != 0
+    assert "Test execution failed" in result.output
+    assert "Workpad: pad123" in result.output  # Verify pad_id is shown
+    assert "Unexpected test failure" in result.output

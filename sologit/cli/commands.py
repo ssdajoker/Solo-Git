@@ -828,6 +828,10 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             )
 
     except Exception as exc:
+        abort_with_error(
+            "Test execution failed",
+            f"Workpad: {pad_id}\n{exc}"
+        )
         formatter.print_error(
             "Test Execution Failed",
             "Solo Git could not complete the requested test run.",
