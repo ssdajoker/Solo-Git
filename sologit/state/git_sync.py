@@ -143,7 +143,6 @@ class GitStateSync:
             'trunk_branch': repo.trunk_branch,
             'source_type': repo.source_type,
         }
-    
     def get_repo(self, repo_id: str) -> Optional[Dict[str, Any]]:
         """Get repository info from both state and git."""
         repo = self.git_engine.get_repo(repo_id)
