@@ -206,7 +206,8 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
             zip_path = Path(zip_file)
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
         else:
-            assert git_url is not None
+            if git_url is None:
+                abort_with_error("Internal error: git_url is unexpectedly None")
             if not name:
                 name = Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning repository from: {git_url}")
