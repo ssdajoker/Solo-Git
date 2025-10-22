@@ -8,6 +8,7 @@ Provides commands to setup, view, and validate configuration.
 import click
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
 from sologit.api.client import AbacusClient
 from sologit.config.manager import ConfigManager
@@ -26,6 +27,22 @@ formatter = RichFormatter()
 def set_formatter_console(console) -> None:
     """Configure the shared console instance."""
     formatter.set_console(console)
+
+
+def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
+    """Ensure the Click context object is a dictionary."""
+    ctx.ensure_object(dict)
+    return ctx.obj  # type: ignore[return-value]
+
+
+def _get_config_manager(ctx: click.Context) -> ConfigManager:
+    """Retrieve a ConfigManager instance from the context or create one."""
+    context_obj = _ensure_context(ctx)
+    config_manager = context_obj.get('config')
+    if config_manager is None:
+        config_manager = ConfigManager()
+        context_obj['config'] = config_manager
+    return config_manager
 
 
 def abort_with_error(message: str, details: str | None = None) -> None:
@@ -115,9 +132,7 @@ def setup_config(api_key, endpoint, interactive):
 @click.pass_context
 def show_config(ctx, secrets):
     """Display current configuration."""
-    config_manager = ctx.obj.get('config')
-    if not config_manager:
-        abort_with_error("No configuration found")
+    config_manager = _get_config_manager(ctx)
 
     config = config_manager.get_config()
 
@@ -183,9 +198,7 @@ def show_config(ctx, secrets):
 @click.pass_context
 def test_config(ctx):
     """Test API connection and validate configuration."""
-    config_manager = ctx.obj.get('config')
-    if not config_manager:
-        abort_with_error("No configuration found")
+    config_manager = _get_config_manager(ctx)
 
     formatter.print_header("Testing Solo Git Configuration")
 
@@ -241,19 +254,16 @@ def test_config(ctx):
 @click.pass_context
 def budget_group(ctx):
     """Budget monitoring commands."""
-
-    if 'config' not in ctx.obj:
-        ctx.obj['config'] = ConfigManager()
+    context_obj = _ensure_context(ctx)
+    if 'config' not in context_obj:
+        context_obj['config'] = ConfigManager()
 
 
 @budget_group.command(name='status')
 @click.pass_context
 def budget_status(ctx):
     """Show current AI budget status."""
-
-    config_manager: ConfigManager = ctx.obj.get('config')
-    if not config_manager:
-        abort_with_error("No configuration found")
+    config_manager = _get_config_manager(ctx)
 
     config = config_manager.get_config()
     guard_config = BudgetConfig(
