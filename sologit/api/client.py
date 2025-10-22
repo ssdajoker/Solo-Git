@@ -15,6 +15,7 @@ For OpenAI-compatible RouteLLM access, you need a ChatLLM subscription.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Dict, Any, Generator, List, Optional, Tuple
 
@@ -135,37 +136,64 @@ class AbacusClient:
         *,
         stream: bool = False,
         timeout: int = 60,
+        max_retries: int = 3,
     ):
         url = f"{self.endpoint}{path}"
         logger.debug("POST %s", url)
-        try:
-            response = self.session.post(
-                url,
-                json=payload,
-                stream=stream,
-                timeout=timeout,
-            )
-        except requests.RequestException as exc:
-            raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    url,
+                    json=payload,
+                    stream=stream,
+                    timeout=timeout,
+                )
+            except requests.RequestException as exc:
+                raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
 
-        if response.status_code >= 400:
+            if response.status_code < 400:
+                if stream:
+                    return response
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    snippet = response.text[:200]
+                    raise AbacusAPIError(
+                        f"Invalid JSON response from {path}: {snippet}"
+                    ) from exc
+                if not data.get('success', True):
+                    raise AbacusAPIError(self._extract_error_message(data))
+                return data
+
+            if response.status_code in (429, 503) and attempt < max_retries - 1:
+                delay = self._get_retry_delay(response, attempt)
+                logger.warning(
+                    "Request to %s failed with status %d. Retrying in %.2fs...",
+                    path, response.status_code, delay
+                )
+                time.sleep(delay)
+                continue
+
             raise self._build_http_error(path, response)
+        else:
+            raise AbacusAPIError(f"Request to {path} failed after {max_retries} retries.")
 
-        if stream:
-            return response
+    def _get_retry_delay(self, response: requests.Response, attempt: int) -> float:
+        """Calculate retry delay with exponential backoff and jitter."""
+        # Check for Retry-After header
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return float(retry_after)
+            except ValueError:
+                pass
 
-        try:
-            data = response.json()
-        except ValueError as exc:
-            snippet = response.text[:200]
-            raise AbacusAPIError(
-                f"Invalid JSON response from {path}: {snippet}"
-            ) from exc
-
-        if not data.get('success', True):
-            raise AbacusAPIError(self._extract_error_message(data))
-
-        return data
+        # Exponential backoff with jitter
+        import random
+        base_delay = 1.5  # seconds
+        max_delay = 30.0  # seconds
+        delay = min(base_delay * (2 ** attempt), max_delay)
+        return delay + random.uniform(0, 0.5)
 
     def _build_http_error(self, path: str, response: requests.Response) -> AbacusAPIError:
         message = f"HTTP {response.status_code} calling {path}"
@@ -461,3 +489,8 @@ class AbacusClient:
             final_payload['response']['content'] = ''.join(combined_chunks)
 
         return self._build_chat_response(final_payload, model)
+
+    def get_usage_summary(self) -> Dict[str, Any]:
+        """Retrieve usage summary."""
+        data = self._post('/getUsageSummary', {})
+        return data.get('usageSummary', {})

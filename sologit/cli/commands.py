@@ -72,15 +72,6 @@ def abort_with_error(
         docs_url=docs_url or "docs/SETUP.md",
         details=details,
     )
-def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
-    """Display a formatted error and abort the command."""
-    plain_message = f"Error: {message}"
-    formatter.print_error(plain_message)
-
-    content = f"[bold]{plain_message}[/bold]"
-    if details:
-        content += f"\n\n{details}"
-    formatter.print_error_panel(content)
     raise click.Abort()
 
 
@@ -234,66 +225,47 @@ def repo() -> None:
 @click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
 @click.option('--name', type=str, help='Repository name (optional)')
 def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
-    """Initialize a new repository from zip file or Git URL."""
+    """Initialize a new repository from zip file, Git URL, or empty."""
     formatter.print_header("Repository Initialization")
 
-    sources = [bool(zip_file), bool(git_url), empty]
-    if sum(1 for flag in sources if flag) != 1:
-        abort_with_error("Must specify exactly one of --zip, --git, or --empty")
-def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]) -> None:
-    """Initialize a new repository from zip file or Git URL."""
-    formatter.print_header("Repository Initialization")
+    sources = {
+        'zip': zip_file,
+        'git': git_url,
+        'empty': empty
+    }
 
-    if not zip_file and not git_url:
+    provided_sources = [name for name, value in sources.items() if value]
+
+    if len(provided_sources) != 1:
         abort_with_error(
-            "Missing Repository Source",
-            "Provide either --zip <path> or --git <url> so Solo Git knows where to initialize from.",
+            "Invalid Source Specification",
+            f"Please specify exactly one of --zip, --git, or --empty. Provided: {', '.join(provided_sources) or 'None'}",
             title="Repository Initialization Blocked",
-            help_text="Choose exactly one source option. Use --zip for local archives or --git for remote repositories.",
-            tip="If you already cloned locally, package it as a zip and pass --zip to speed up initialization.",
+            help_text="Choose one initialization method.",
             suggestions=[
                 "evogitctl repo init --zip app.zip",
-                "evogitctl repo init --git https://github.com/org/project.git",
-            ],
-            docs_url="docs/SETUP.md#initialize-a-repository",
-        )
-
-    if zip_file and git_url:
-        abort_with_error(
-            "Conflicting Options Provided",
-            "Only one source can be used at a time. Pass either --zip or --git, not both.",
-            title="Repository Initialization Blocked",
-            help_text="Remove one of the flags and rerun the command.",
-            tip="Use --zip when you have a packaged archive and --git for hosted repositories.",
-            suggestions=[
-                "evogitctl repo init --zip app.zip",
-                "evogitctl repo init --git https://github.com/org/project.git",
-            ],
-            docs_url="docs/SETUP.md#initialize-a-repository",
+                "evogitctl repo init --git https://github.com/user/repo.git",
+                "evogitctl repo init --empty --path ./new-repo",
+            ]
         )
 
     git_sync = get_git_sync()
 
     try:
+        repo_info = None
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
             repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
         elif zip_file:
-        if zip_file:
-            if zip_file is None:
-                abort_with_error("Internal error: zip_file is unexpectedly None")
             zip_path = Path(zip_file)
-            formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
             repo_name = name or zip_path.stem
+            formatter.print_info(f"Initializing from zip: {zip_path.name}")
             repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
-        else:
-            if git_url is None:
-                abort_with_error("Internal error: git_url is unexpectedly None")
-            if not name:
-                name = Path(git_url).stem.replace('.git', '')
-            formatter.print_info(f"Cloning repository from: {git_url}")
-            repo_info = git_sync.init_repo_from_git(git_url, name)
+        elif git_url:
+            repo_name = name or Path(git_url).stem.replace('.git', '')
+            formatter.print_info(f"Cloning from: {git_url}")
+            repo_info = git_sync.init_repo_from_git(git_url, repo_name)
 
         formatter.print_success("Repository initialized!")
         formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
