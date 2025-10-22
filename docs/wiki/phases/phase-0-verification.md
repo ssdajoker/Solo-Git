@@ -80,7 +80,7 @@ User-facing errors are clear and actionable.
 ## Known Limitations
 
 1. **API Testing**: Cannot fully test API connectivity without valid credentials
-2. **Docker Integration**: Docker support pending Phase 1
+2. **Container Integration (Legacy)**: Runtime support pending Phase 1 (later replaced by subprocess sandboxing)
 3. **Unit Tests**: Comprehensive test suite pending
 
 ## Recommendations for Phase 1

@@ -9,7 +9,7 @@ Before installing Solo Git, ensure you have:
 
 - **Python 3.9+** installed
 - **Git 2.30+** installed
-- **Docker** (optional, for test sandboxing in Phase 1+)
+- No container runtime required (Solo Git forbids containerized execution)
 - **Abacus.ai API credentials** (for AI features in Phase 2+)
 
 ## Installation
@@ -110,21 +110,11 @@ evogitctl config validate
 evogitctl config test
 ```
 
-## Docker Setup (Optional)
+## Container Tooling (Banned)
 
-For test sandboxing (Phase 1+):
-
-```bash
-# Install Docker
-# See: https://docs.docker.com/get-docker/
-
-# Verify Docker is running
-docker --version
-docker ps
-
-# Pull base image (when available)
-docker pull ghcr.io/yourusername/evogit-sandbox:latest
-```
+Solo Git deliberately prohibits container runtimes in the setup process. All historical
+instructions were removed in favor of native subprocess execution. If you encounter old
+guides mentioning container images, ignore them—they are obsolete by design.
 
 ## First Steps
 
