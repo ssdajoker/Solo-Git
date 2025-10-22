@@ -260,7 +260,14 @@ def budget_status(ctx: click.Context) -> None:
     config_manager = _get_config_manager(ctx)
     config = config_manager.get_config()
 
-    guard = CostGuard(config.budget if isinstance(config.budget, BudgetConfig) else BudgetConfig())
+    if not isinstance(config.budget, BudgetConfig):
+        abort_with_error(
+            "Invalid budget configuration",
+            "The 'budget' section of your configuration is missing or malformed.",
+            help_text="Please check your configuration file and ensure the 'budget' section is correctly specified.",
+            tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
+        )
+    guard = CostGuard(config.budget)
     status = guard.get_status()
 
     daily_cap = status.get("daily_cap", config.budget.daily_usd_cap)
