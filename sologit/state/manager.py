@@ -1,21 +1,20 @@
 
-"""
-State Manager for Solo Git Heaven Interface.
+"""State Manager for Solo Git Heaven Interface.
 
-Provides an abstraction layer for state persistence with a JSON backend and lays
-the groundwork for additional storage engines. Planned future backends include
-SQLite for local persistence and a REST-based service for distributed
-deployments.
+The manager exposes a pluggable :class:`StateBackend` abstraction that now uses
+Python's ``abc`` module to define a consistent contract for all persistence
+implementations. The default JSON backend remains the on-disk implementation,
+while planned future backends include SQLite for richer local state management
+and a REST service for distributed deployments.
 """
 
 import json
 import threading
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
-import uuid
 
 from sologit.state.schema import (
     CommitNode,
@@ -43,62 +42,77 @@ class StateBackend(ABC):
     @abstractmethod
     def read_global_state(self) -> GlobalState:
         """Read the global state from the backend."""
+        ...
 
     @abstractmethod
     def write_global_state(self, state: GlobalState) -> None:
         """Persist the provided global state."""
+        ...
 
     @abstractmethod
     def read_repository(self, repo_id: str) -> Optional[RepositoryState]:
         """Return the repository state for the given repository identifier."""
+        ...
 
     @abstractmethod
     def write_repository(self, state: RepositoryState) -> None:
         """Persist the provided repository state."""
+        ...
 
     @abstractmethod
     def list_repositories(self) -> List[RepositoryState]:
         """List repository states known to the backend."""
+        ...
 
     @abstractmethod
     def read_workpad(self, workpad_id: str) -> Optional[WorkpadState]:
         """Return the workpad state for the provided identifier."""
+        ...
 
     @abstractmethod
     def write_workpad(self, state: WorkpadState) -> None:
         """Persist the provided workpad state."""
+        ...
 
     @abstractmethod
     def list_workpads(self, repo_id: Optional[str] = None) -> List[WorkpadState]:
         """List workpad states, optionally filtered by repository identifier."""
+        ...
 
     @abstractmethod
     def read_test_run(self, run_id: str) -> Optional[TestRun]:
         """Return the recorded test run for the provided identifier."""
+        ...
 
     @abstractmethod
     def write_test_run(self, test_run: TestRun) -> None:
         """Persist the provided test run."""
+        ...
 
     @abstractmethod
     def list_test_runs(self, workpad_id: Optional[str] = None) -> List[TestRun]:
         """List test runs, optionally filtered by workpad identifier."""
+        ...
 
     @abstractmethod
     def read_ai_operation(self, operation_id: str) -> Optional[AIOperation]:
         """Return the AI operation for the provided identifier."""
+        ...
 
     @abstractmethod
     def write_ai_operation(self, operation: AIOperation) -> None:
         """Persist the provided AI operation."""
+        ...
 
     @abstractmethod
     def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[AIOperation]:
         """List AI operations, optionally filtered by workpad identifier."""
+        ...
 
     @abstractmethod
     def write_promotion_record(self, record: PromotionRecord) -> None:
         """Persist a promotion record."""
+        ...
 
     @abstractmethod
     def list_promotion_records(
@@ -108,22 +122,27 @@ class StateBackend(ABC):
         limit: int = 100,
     ) -> List[PromotionRecord]:
         """List promotion records filtered by repository or workpad."""
+        ...
 
     @abstractmethod
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
         """Return commit nodes for the specified repository."""
+        ...
 
     @abstractmethod
     def write_commit(self, repo_id: str, commit: CommitNode) -> None:
         """Persist a commit for the specified repository."""
+        ...
 
     @abstractmethod
     def write_event(self, event: StateEvent) -> None:
         """Persist a state event."""
+        ...
 
     @abstractmethod
     def read_events(self, since: Optional[str] = None, limit: int = 100) -> List[StateEvent]:
         """List recent state events."""
+        ...
 
 
 class JSONStateBackend(StateBackend):
@@ -359,7 +378,7 @@ class StateManager:
         """Get current global state."""
         return self.backend.read_global_state()
     
-    def update_global_state(self, **kwargs) -> GlobalState:
+    def update_global_state(self, **kwargs: Any) -> GlobalState:
         """Update global state fields."""
         state = self.get_global_state()
         for key, value in kwargs.items():
@@ -385,7 +404,7 @@ class StateManager:
         """Get repository state by ID."""
         return self.backend.read_repository(repo_id)
     
-    def update_repository(self, repo_id: str, **kwargs) -> Optional[RepositoryState]:
+    def update_repository(self, repo_id: str, **kwargs: Any) -> Optional[RepositoryState]:
         """Update repository state fields."""
         state = self.get_repository(repo_id)
         if state:
@@ -428,7 +447,7 @@ class StateManager:
         """Get workpad state by ID."""
         return self.backend.read_workpad(workpad_id)
     
-    def update_workpad(self, workpad_id: str, **kwargs) -> Optional[WorkpadState]:
+    def update_workpad(self, workpad_id: str, **kwargs: Any) -> Optional[WorkpadState]:
         """Update workpad state fields."""
         state = self.get_workpad(workpad_id)
         if state:
@@ -466,7 +485,7 @@ class StateManager:
         self._emit_event(EventType.TEST_STARTED, {"run_id": run.run_id, "workpad_id": workpad_id})
         return run
     
-    def update_test_run(self, run_id: str, **kwargs) -> Optional[TestRun]:
+    def update_test_run(self, run_id: str, **kwargs: Any) -> Optional[TestRun]:
         """Update test run fields."""
         test_run = self.backend.read_test_run(run_id)
         if test_run:
@@ -520,7 +539,7 @@ class StateManager:
         })
         return operation
     
-    def update_ai_operation(self, operation_id: str, **kwargs) -> Optional[AIOperation]:
+    def update_ai_operation(self, operation_id: str, **kwargs: Any) -> Optional[AIOperation]:
         """Update AI operation fields."""
         operation = self.backend.read_ai_operation(operation_id)
         if operation:

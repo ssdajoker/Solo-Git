@@ -518,25 +518,18 @@ class WorkpadState:
 ```
 
 **State Manager** (`sologit/state/manager.py`):
-```python
-class StateManager:
-    def __init__(self, repo_path: Path):
-        self.repo_path = repo_path
-        self.state_file = repo_path / ".sologit" / "state.json"
-        self.lock = threading.Lock()
-    
-    def load_state(self) -> SoloGitState:
-        """Load state from JSON file"""
-        
-    def save_state(self, state: SoloGitState) -> None:
-        """Persist state to JSON file"""
-        
-    def watch_for_changes(self, callback: Callable) -> None:
-        """Watch state file for external changes"""
-        
-    def sync_with_git(self) -> None:
-        """Sync state with actual Git repository"""
-```
+
+- Uses an abstract :class:`StateBackend` to define the persistence contract with
+  Python's ``abc`` module. This removes direct ``NotImplementedError`` stubs in
+  favor of explicit abstract methods.
+- Ships with a ``JSONStateBackend`` implementation that stores repositories,
+  workpads, promotions, events, and test runs as structured JSON files under
+  ``~/.sologit/state`` by default.
+- Roadmap backends include:
+  - **SQLite backend** for a transactional local database with richer queries.
+  - **REST backend** for a centralized, multi-client deployment.
+- The high-level ``StateManager`` coordinates caching, emits state events, and
+  delegates persistence to the selected backend.
 
 **State File Location**:
 ```
