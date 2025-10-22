@@ -3,7 +3,6 @@ use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::path::Path;
 use std::process::Command;
 
 use chrono::Utc;
@@ -324,9 +323,32 @@ pub(crate) fn apply_patch(
         trimmed_message
     };
 
-    let temp_path = env::temp_dir().join(format!("sologit_patch_{}.diff", Uuid::new_v4().simple()));
-    fs::write(&temp_path, diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
+    let temp_dir = env::temp_dir();
+    let mut temp_file = Builder::new()
+        .prefix("sologit_patch_")
+        .suffix(".diff")
+        .tempfile_in(&temp_dir)
+        .map_err(|e| {
+            format!(
+                "Failed to create temporary patch file in {}: {}",
+                temp_dir.display(),
+                e
+            )
+        })?;
 
+    temp_file
+        .write_all(diff.as_bytes())
+        .map_err(|e| format!("Failed to write patch diff: {}", e))?;
+
+    let (_file, patch_path) = temp_file.keep().map_err(|e| {
+        format!(
+            "Failed to persist temporary patch {}: {}",
+            e.file.path().display(),
+            e.error
+        )
+    })?;
+
+    let patch_arg = patch_path
     let patch_path = store_patch_diff(&workpad.workpad_id, &diff)?;
 
     workpad.status = "in_progress".to_string();
@@ -363,7 +385,7 @@ pub(crate) fn apply_patch(
         .and_then(|mut file| file.write_all(entry.as_bytes()));
     let result = run_cli_command(cli_args);
 
-    let _ = fs::remove_file(&temp_path);
+    let _ = fs::remove_file(&patch_path);
     result?;
 
     load_workpad(&workpad_id)
