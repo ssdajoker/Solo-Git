@@ -254,7 +254,6 @@ class JSONStateBackend(StateBackend):
                 path.unlink()
             except Exception as exc:
                 logger.error(f"Failed to delete repository {repo_id}: {exc}")
-    
     def read_workpad(self, workpad_id: str) -> Optional[WorkpadState]:
         path = self.workpads_dir / f"{workpad_id}.json"
         data = self._read_json(path)
