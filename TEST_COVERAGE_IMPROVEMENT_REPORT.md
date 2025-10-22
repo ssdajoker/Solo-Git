@@ -133,8 +133,8 @@ The following components require significant additional test coverage:
 - **Current:** 40% coverage
 - **Target:** >90% coverage
 - **Gap:** 50%
-- **Reason:** Requires Docker integration which is not available in test environment
-- **Recommendation:** Mock Docker operations or use test doubles
+- **Reason:** Historical reliance on container runtimes is incompatible with our test environment
+- **Recommendation:** Continue replacing container hooks with subprocess-friendly test doubles
 
 #### 2. Logger Utility
 - **Current:** 41% coverage
@@ -210,7 +210,7 @@ All CLI components currently have 0% coverage:
 ### Test Execution Summary
 - **Total Tests:** 409 passing
 - **Failed Tests:** 9 (pre-existing failures)
-- **Errors:** 7 (Docker-related, expected in CI environment)
+- **Errors:** 7 (-related, expected in CI environment)
 - **Warnings:** 21 (mostly pytest collection warnings)
 
 ### Coverage by Category
@@ -265,10 +265,10 @@ All CLI components currently have 0% coverage:
 
 ## Challenges Encountered
 
-### 1. Docker Dependency
-**Issue:** Test orchestrator requires Docker for containerized test execution  
-**Impact:** Cannot achieve full coverage in environments without Docker  
-**Workaround:** Mock Docker operations in tests
+### 1. Container Runtime Dependency (Historical)
+**Issue:** The legacy test orchestrator expected a container runtime for isolation
+**Impact:** Full coverage was impossible in environments where containers are banned
+**Workaround:** Replace container hooks with subprocess mocks in tests
 
 ### 2. CLI Testing Complexity
 **Issue:** CLI components require special testing infrastructure  
@@ -317,7 +317,7 @@ def test_cli_command():
 #### 3. Test Orchestrator Enhancement (134 statements, 40% coverage)
 **Estimated Effort:** 2 days  
 **Approach:**
-- Mock Docker operations
+- Mock container runtime operations
 - Test configuration parsing
 - Test result aggregation
 - Test timeout handling
@@ -403,13 +403,13 @@ The overall project coverage improved from 70% to 72%, with 27 additional statem
 While significant progress was made, the following areas still require attention:
 - CLI components (high priority)
 - Logger utility (medium priority)
-- Test orchestrator (Docker dependency issue)
+- Test orchestrator ( dependency issue)
 - API client (depends on MCP server)
 
 ### Next Steps
 1. Implement CLI testing using Click's CliRunner
 2. Add logger utility tests
-3. Mock Docker operations for test orchestrator
+3. Mock container runtime operations for test orchestrator
 4. Complete CI orchestrator and promotion gate tests
 5. Fix remaining test failures in git_engine tests
 

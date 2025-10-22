@@ -1,7 +1,7 @@
 """
 Enhanced mock-based tests for Phase 3 components.
 
-These tests don't require Docker and use mocks to test the logic
+These tests avoid all containerization and use mocks to test the logic
 of auto-merge workflow and CI orchestrator.
 """
 

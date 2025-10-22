@@ -374,8 +374,8 @@ async def test_run_smoke_tests_async(...):
 
 ## Challenges Overcome
 
-### 1. **Docker Dependencies**
-Some tests required Docker which wasn't available in test environment. Solution: Used mocks to simulate Docker-dependent behavior.
+### 1. ** Dependencies**
+Some tests required  which wasn't available in test environment. Solution: Used mocks to simulate container-dependent behavior.
 
 ### 2. **API Mismatches in Old Tests**
 Some existing tests had outdated API signatures. Solution: Created new comprehensive test files with correct APIs.
@@ -400,7 +400,7 @@ Some lines appeared uncovered due to import issues. Solution: Verified actual co
 
 ### 2. **Integration Testing**
 - Add more end-to-end integration tests
-- Test real Docker scenarios (when available)
+- Test real  scenarios (when available)
 - Test actual Git operations
 
 ### 3. **Performance Testing**

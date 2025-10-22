@@ -17,7 +17,7 @@ The Heaven Interface system for Solo Git has been thoroughly tested across CLI, 
 - ✅ TUI application initializes and works
 - ✅ GUI components are well-implemented
 - ⚠️ GUI requires Rust/Tauri compilation to test fully
-- ⚠️ Test orchestrator requires Docker (not available in test environment)
+- ⚠️ Test orchestrator historically depended on container runtimes (intentionally unavailable)
 - ⚠️ AI chat in GUI is a stub (requires backend integration)
 
 ---
@@ -183,10 +183,12 @@ All state files use correct JSON schema with expected fields:
 | StateManager | ✅ PASS | State read/write working |
 | ConfigManager | ✅ PASS | Config loaded from ~/.sologit/config.yaml |
 | GitEngine | ✅ PASS | Repository operations working |
-| TestOrchestrator | ⚠️ DOCKER | Requires Docker (not available) |
+| TestOrchestrator | ⚠️  | Previously relied on container runtimes (not available) |
 
 ### Test Orchestrator Note:
-The TestOrchestrator requires Docker to run tests in sandboxed containers. In the test environment, Docker is not available, which is expected. The component correctly detects the missing Docker daemon and provides a clear error message.
+The TestOrchestrator previously required a container daemon to run tests in sandboxed environments.
+In our test environment the daemon is intentionally absent, and the component correctly detects the
+ban while emitting a clear error message.
 
 ---
 
@@ -213,7 +215,7 @@ The TestOrchestrator requires Docker to run tests in sandboxed containers. In th
 - [~] GUI test execution - redirects to CLI
 
 ### Environment Dependencies 🔧 (3%):
-- [ ] Docker for test sandboxing
+- [ ]  for test sandboxing
 - [ ] Rust/Cargo for GUI compilation
 - [ ] Jenkins for CI/CD integration (optional)
 
@@ -275,7 +277,7 @@ evogitctl tui
 ## 9. Testing Limitations & Assumptions
 
 ### Test Environment Constraints:
-1. **No Docker**: Test orchestrator functionality couldn't be fully tested
+1. **No **: Test orchestrator functionality couldn't be fully tested
 2. **No Rust**: GUI couldn't be compiled and run directly
 3. **No Abacus.ai API**: AI features tested for structure only
 4. **No Jenkins**: CI/CD integration not verified
@@ -329,7 +331,7 @@ The Heaven Interface system is **97% functional** with a well-architected codeba
 - Core features are production-ready ✅
 - GUI needs Rust compilation to deploy
 - AI features work via CLI (GUI is stub)
-- Test sandboxing requires Docker setup
+- Test sandboxing now relies on pure subprocess setup (no containers)
 - Documentation is comprehensive ✅
 
 The system demonstrates a deep understanding of minimalist design principles (Dieter Rams, Jony Ive) and provides a delightful user experience for solo developers working with AI assistants.

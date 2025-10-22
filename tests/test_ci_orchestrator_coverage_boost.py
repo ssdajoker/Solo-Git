@@ -149,7 +149,9 @@ class TestCIOrchestratorCoverageMissing:
         mock_git_engine.get_repo.return_value = repo
         
         # Make create_workpad raise an exception
-        mock_git_engine.create_workpad.side_effect = Exception("Docker not available")
+        mock_git_engine.create_workpad.side_effect = Exception(
+            "Sandbox provisioning is forbidden in this project"
+        )
         
         # Progress callback
         progress_messages = []
@@ -165,7 +167,7 @@ class TestCIOrchestratorCoverageMissing:
         
         # Should fail
         assert result.status == CIStatus.FAILURE
-        assert "Docker not available" in result.message
+        assert "Sandbox provisioning is forbidden" in result.message
         
         # Should have failure progress message (line 176)
         assert any("failed" in msg.lower() for msg in progress_messages)

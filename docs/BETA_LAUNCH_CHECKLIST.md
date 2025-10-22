@@ -132,7 +132,7 @@ This checklist ensures Solo Git meets all requirements for a successful beta lau
 - [x] **Critical Bugs**: 0 outstanding ✅
 - [x] **Major Bugs**: 0 outstanding ✅
 - [x] **Minor Issues**: 19 test failures (non-functional, test code issues)
-- [x] **Docker Tests**: 7 errors (environmental, not code issues)
+- [x] **Container Runtime Tests**: 7 errors (environmental, not code issues)
 
 **Action Items**:
 - [ ] Fix test API signature mismatches (non-blocking, test code only)
