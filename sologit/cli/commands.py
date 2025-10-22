@@ -1075,7 +1075,7 @@ def execute_pair_loop(
     overview.add_row("Auto-Promote", "Disabled" if no_promote else "Enabled")
     formatter.console.print(overview)
 
-    pad_id: Optional[str] = None
+    pad_id: Optional[str] = None  # Ensure pad_id is assigned before use; check for None if used after try block
 
     try:
         formatter.print_subheader("Workpad Setup")
