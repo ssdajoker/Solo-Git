@@ -110,7 +110,8 @@ def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: b
 
     # Save configuration
     try:
-        assert api_key is not None
+        if api_key is None:
+            abort_with_error("API key is required")
         endpoint_value = endpoint or 'https://api.abacus.ai/v1'
         config_manager.set_abacus_credentials(api_key, endpoint_value)
         config_path = cast(Path, getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE))
