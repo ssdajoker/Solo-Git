@@ -313,7 +313,8 @@ class TestOrchestrator:
     ) -> List[TestResult]:
         """Run tests sequentially while respecting dependencies."""
 
-        ordered_tests = self._resolve_execution_order(tests)
+        with self._progress_stage(progress, overall_task, "Resolving execution order", 0):
+            ordered_tests = self._resolve_execution_order(tests)
         results: List[TestResult] = []
         result_map: Dict[str, TestResult] = {}
         active = active_tasks if active_tasks is not None else {}
@@ -367,7 +368,8 @@ class TestOrchestrator:
     ) -> List[TestResult]:
         """Run tests in parallel with dependency awareness."""
 
-        graph = self._build_dependency_graph(tests)
+        with self._progress_stage(progress, overall_task, "Analyzing test dependencies", 0):
+            graph = self._build_dependency_graph(tests)
         results: List[TestResult] = []
         result_map: Dict[str, TestResult] = {}
         completed = set()

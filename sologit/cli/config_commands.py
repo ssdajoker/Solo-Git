@@ -5,10 +5,13 @@ Configuration commands for Solo Git CLI.
 Provides commands to setup, view, and validate configuration.
 """
 
-import click
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
+from typing import Any, Dict, List, NoReturn, Optional, cast
+
+import click
+from rich.console import Console
 
 from sologit.api.client import AbacusClient
 from sologit.config.manager import ConfigManager
@@ -24,7 +27,7 @@ logger = get_logger(__name__)
 formatter = RichFormatter()
 
 
-def set_formatter_console(console) -> None:
+def set_formatter_console(console: Console) -> None:
     """Configure the shared console instance."""
     formatter.set_console(console)
 
@@ -32,7 +35,7 @@ def set_formatter_console(console) -> None:
 def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
     """Ensure the Click context has an initialized object dictionary and return it."""
     ctx.ensure_object(dict)
-    return ctx.obj  # type: ignore[return-value]
+    return cast(Dict[str, Any], ctx.obj)
 
 
 def _get_config_manager(ctx: click.Context) -> ConfigManager:
@@ -69,21 +72,30 @@ def abort_with_error(
         docs_url=docs_url or "docs/SETUP.md#configuration",
         details=details,
     )
+def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
+    """Display a formatted error and exit."""
+    plain_message = f"Error: {message}"
+    formatter.print_error(plain_message)
+
+    content = f"[bold]{plain_message}[/bold]"
+    if details:
+        content += f"\n\n{details}"
+    formatter.print_error_panel(content)
     sys.exit(1)
 
 @click.group(name='config')
-def config_group():
+def config_group() -> None:
     """Configuration management commands."""
     pass
 
 
 @config_group.command(name='setup')
 @click.option('--api-key', help='Abacus.ai API key')
-@click.option('--endpoint', help='Abacus.ai API endpoint', 
+@click.option('--endpoint', help='Abacus.ai API endpoint',
               default='https://api.abacus.ai/v1')
 @click.option('--interactive/--no-interactive', default=True,
               help='Interactive setup mode')
-def setup_config(api_key, endpoint, interactive):
+def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: bool) -> None:
     """
     Setup Solo Git configuration.
     
@@ -134,8 +146,11 @@ def setup_config(api_key, endpoint, interactive):
 
     # Save configuration
     try:
-        config_manager.set_abacus_credentials(api_key, endpoint)
-        config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
+        if api_key is None:
+            abort_with_error("API key is required")
+        endpoint_value = endpoint or 'https://api.abacus.ai/v1'
+        config_manager.set_abacus_credentials(api_key, endpoint_value)
+        config_path = cast(Path, getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE))
         formatter.print_success_panel(
             f"Configuration saved to [bold]{config_path}[/bold]",
             title="Configuration Saved"
@@ -167,7 +182,7 @@ def setup_config(api_key, endpoint, interactive):
 @click.option('--secrets/--no-secrets', default=False,
               help='Show API keys (masked by default)')
 @click.pass_context
-def show_config(ctx, secrets):
+def show_config(ctx: click.Context, secrets: bool) -> None:
     """Display current configuration."""
     config_manager = _get_config_manager(ctx)
 
@@ -187,7 +202,7 @@ def show_config(ctx, secrets):
     formatter.print_info_panel("Abacus.ai API Settings", title="API")
     formatter.console.print(api_table)
 
-    def render_tier(label: str, tier_config) -> None:
+    def render_tier(label: str, tier_config: Any) -> None:
         primary = tier_config.primary
         row_value = (
             f"{primary.name} [{primary.provider}]\n"
@@ -233,7 +248,7 @@ def show_config(ctx, secrets):
 
 @config_group.command(name='test')
 @click.pass_context
-def test_config(ctx):
+def test_config(ctx: click.Context) -> None:
     """Test API connection and validate configuration."""
     config_manager = _get_config_manager(ctx)
 
@@ -241,6 +256,7 @@ def test_config(ctx):
 
     # Validate configuration
     is_valid, errors = config_manager.validate()
+    error_messages: List[str] = errors
 
     if not is_valid:
         formatter.print_error(
@@ -255,7 +271,7 @@ def test_config(ctx):
             docs_url="docs/SETUP.md#configuration",
         )
         error_table = formatter.table(headers=["Issues"])
-        for error in errors:
+        for error in error_messages:
             error_table.add_row(error)
             formatter.print_error(
                 "Configuration Validation Issue",
@@ -327,7 +343,7 @@ def test_config(ctx):
 
 @config_group.group(name='budget')
 @click.pass_context
-def budget_group(ctx):
+def budget_group(ctx: click.Context) -> None:
     """Budget monitoring commands."""
     context_obj = _ensure_context(ctx)
     if 'config' not in context_obj:
@@ -336,7 +352,7 @@ def budget_group(ctx):
 
 @budget_group.command(name='status')
 @click.pass_context
-def budget_status(ctx):
+def budget_status(ctx: click.Context) -> None:
     """Show current AI budget status."""
     config_manager = _get_config_manager(ctx)
 
@@ -347,7 +363,7 @@ def budget_status(ctx):
         track_by_model=config.budget.track_by_model,
     )
     cost_guard = CostGuard(guard_config)
-    status = cost_guard.get_status()
+    status: Dict[str, Any] = cost_guard.get_status()
 
     formatter.print_header("Solo Git Budget Status")
     summary_table = formatter.table(headers=["Metric", "Value"])
@@ -374,7 +390,7 @@ def budget_status(ctx):
         formatter.print_warning("Budget alerts detected.")
         formatter.print_info_panel(alerts_panel, title="Alerts")
 
-    breakdown = status.get('usage_breakdown') or {}
+    breakdown: Dict[str, Any] = status.get('usage_breakdown') or {}
     if breakdown:
         breakdown_table = formatter.table(headers=["Metric", "Value"])
         breakdown_table.add_row(
@@ -390,7 +406,7 @@ def budget_status(ctx):
         formatter.print_info_panel("Usage breakdown", title="Detailed Usage")
         formatter.console.print(breakdown_table)
 
-    last_usage = status.get('last_usage')
+    last_usage = cast(Optional[Dict[str, Any]], status.get('last_usage'))
     if last_usage:
         last_panel = (
             f"Timestamp: {last_usage['timestamp']}\n"
@@ -403,7 +419,7 @@ def budget_status(ctx):
 
 @config_group.command(name='init')
 @click.option('--force', is_flag=True, help='Overwrite existing config file')
-def init_config(force):
+def init_config(force: bool) -> None:
     """Initialize a new configuration file with defaults."""
     config_path = ConfigManager.DEFAULT_CONFIG_FILE
     
@@ -430,7 +446,7 @@ def init_config(force):
 
 
 @config_group.command(name='env-template')
-def env_template():
+def env_template() -> None:
     """Generate .env template file."""
     env_path = Path.cwd() / '.env.example'
     
@@ -447,7 +463,7 @@ def env_template():
 
 
 @config_group.command(name='path')
-def config_path():
+def config_path() -> None:
     """Show configuration file path."""
     formatter.print_header("Configuration Path")
     formatter.print_info(str(ConfigManager.DEFAULT_CONFIG_FILE))
