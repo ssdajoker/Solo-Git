@@ -20,6 +20,11 @@ from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
 from sologit.cli import commands, config_commands
 
+try:
+    from sologit.cli import integrated_commands
+except ImportError:  # pragma: no cover - optional feature set
+    integrated_commands = None
+
 # Re-export ConfigManager for backwards compatibility with existing patches
 ConfigManager = config_commands.ConfigManager
 _ORIGINAL_CONFIG_MANAGER = ConfigManager
@@ -140,6 +145,8 @@ def cli(ctx, verbose, config):
     formatter.set_console(console)
     commands.set_formatter_console(console)
     config_commands.set_formatter_console(console)
+    if integrated_commands is not None:
+        integrated_commands.set_formatter_console(console)
 
     # Load configuration
     try:
@@ -218,6 +225,44 @@ def shortcuts():
     formatter.console.print(table)
     formatter.print_info(
         "See docs/KEYBOARD_SHORTCUTS.md or press '?' inside the TUI for the full reference."
+    """Display keyboard shortcuts for the Heaven Interface TUI."""
+    formatter.print_header("Heaven Interface TUI - Keyboard Shortcuts")
+
+    shortcuts_data = [
+        ("Navigation", "Ctrl+P", "Open command palette"),
+        ("Navigation", "Tab / Shift+Tab", "Switch between panels"),
+        ("Navigation", "← → ↑ ↓", "Navigate within panels"),
+        ("Workpads", "Ctrl+N", "Create new workpad"),
+        ("Workpads", "Ctrl+W", "Close workpad"),
+        ("Workpads", "Ctrl+D", "Show diff"),
+        ("Workpads", "Ctrl+S", "Commit changes"),
+        ("Testing", "Ctrl+T", "Run focused tests"),
+        ("Testing", "Ctrl+Shift+T", "Run all tests"),
+        ("Testing", "Ctrl+L", "Clear test output"),
+        ("AI", "Ctrl+G", "Generate code"),
+        ("AI", "Ctrl+R", "Review code"),
+        ("AI", "Ctrl+M", "Generate commit message"),
+        ("History", "Ctrl+Z", "Undo last command"),
+        ("History", "Ctrl+Shift+Z", "Redo command"),
+        ("History", "Ctrl+H", "Show command history"),
+        ("View", "Ctrl+B", "Toggle file browser"),
+        ("View", "Ctrl+1", "Focus commit graph"),
+        ("View", "Ctrl+2", "Focus workpad panel"),
+        ("View", "Ctrl+3", "Focus test output"),
+        ("View", "Ctrl+F", "Search files"),
+        ("General", "?", "Show help"),
+        ("General", "Ctrl+Q", "Quit application"),
+        ("General", "Ctrl+C", "Cancel current operation"),
+    ]
+
+    table = formatter.table(headers=["Category", "Shortcut", "Action"])
+    for category, shortcut, action in shortcuts_data:
+        table.add_row(category, shortcut, action)
+
+    formatter.console.print(table)
+    formatter.print_info(
+        "Press '?' inside the TUI to view keyboard shortcuts at any time."
+        "Press '?' inside the TUI to view this list at any time."
     )
 
 
@@ -267,7 +312,13 @@ def gui(ctx, dev: bool):
 
     formatter.print_info(f"Launching Heaven Interface GUI from {gui_path}...")
     try:
-        subprocess.Popen([str(gui_path)], env=env)
+        launch_cwd = gui_path.parent
+        subprocess.Popen(
+            [str(gui_path)],
+            env=env,
+            cwd=str(launch_cwd),
+            start_new_session=True,
+        )
     except FileNotFoundError:
         abort_with_error(
             "GUI executable not found.",
@@ -297,23 +348,20 @@ def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
         from sologit.ui.heaven_tui import run_heaven_tui
         run_heaven_tui(repo_path=repo_path)
     except ImportError as e:
-        click.echo("❌ Error: Heaven TUI dependencies not installed", err=True)
-        click.echo("Install with: pip install textual", err=True)
+        formatter.print_error("Heaven TUI dependencies not installed")
+        formatter.print_info("Install with: pip install textual")
         raise click.Abort()
     except Exception as e:
-        click.echo(f"❌ Heaven TUI launch failed: {e}", err=True)
+        formatter.print_error(f"Heaven TUI launch failed: {e}")
         logger.error(f"Heaven TUI error: {e}", exc_info=True)
         raise click.Abort()
 
 
 @cli.command()
-def tui():
+@click.option('--repo', 'repo_path', type=click.Path(exists=True), help='Repository path')
+def tui(repo_path: Optional[str] = None):
     """
-    Launch the Heaven Interface TUI (Text User Interface).
-
-    This command is an alias for ``evogitctl heaven`` and launches the
-    production HeavenTUI experience with the full-screen interface for
-    repository management, test monitoring, and workpad control.
+    Launch the Heaven Interface TUI.
 
     \b
     Keyboard Shortcuts:
@@ -325,20 +373,14 @@ def tui():
       Ctrl+Q          Quit TUI
 
     Run ``evogitctl shortcuts`` or see ``docs/KEYBOARD_SHORTCUTS.md`` for the full list.
+    This is an alias for ``evogitctl heaven`` and provides the full production
+    Heaven Interface experience for managing repositories, workpads, and tests
+    from the terminal.
     """
-    _launch_heaven_tui()
-    formatter.print_header("Heaven Interface TUI")
-    formatter.print_info("Launching classic Heaven Interface experience...")
-    try:
-        from sologit.ui.tui_app import run_tui
-        run_tui()
-    except ImportError as e:
-        abort_with_error(
-            "TUI dependencies not installed",
-            "Install with: pip install textual"
-        )
-    except Exception as e:
-        abort_with_error("TUI launch failed", str(e))
+    if repo_path is not None:
+        _launch_heaven_tui(repo_path=repo_path)
+    else:
+        _launch_heaven_tui()
 
 
 @cli.command()
@@ -389,19 +431,6 @@ def heaven(repo_path: Optional[str]):
     This command can also be accessed via the ``evogitctl tui`` alias.
     """
     _launch_heaven_tui(repo_path=repo_path)
-    formatter.print_header("Heaven Interface")
-    formatter.print_info("Launching production Heaven Interface...")
-    try:
-        from sologit.ui.heaven_tui import run_heaven_tui
-        run_heaven_tui(repo_path=repo_path)
-    except ImportError as e:
-        abort_with_error(
-            "Heaven TUI dependencies not installed",
-            "Install with: pip install textual"
-        )
-    except Exception as e:
-        logger.error(f"Heaven TUI error: {e}", exc_info=True)
-        abort_with_error("Heaven TUI launch failed", str(e))
 
 
 @cli.command()

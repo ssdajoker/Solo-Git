@@ -6,7 +6,7 @@ Wraps existing commands with Rich formatting and StateManager integration.
 
 import click
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable, TypeVar
 from datetime import datetime
 import uuid
 
@@ -20,6 +20,8 @@ from sologit.state.schema import CommitNode
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+StageResult = TypeVar("StageResult")
 
 
 class EnhancedCLI:
@@ -52,75 +54,128 @@ class EnhancedCLI:
         if self._test_orchestrator is None:
             self._test_orchestrator = TestOrchestrator(self.git_engine)
         return self._test_orchestrator
-    
+
+    def _initialize_repository_state(self, repo) -> None:
+        """Persist repository metadata and set active context."""
+
+        self.state_manager.create_repository(
+            repo_id=repo.id,
+            name=repo.name,
+            path=str(repo.path)
+        )
+        self.state_manager.set_active_context(repo_id=repo.id)
+
+    def _load_initial_commit_history(self, repo) -> None:
+        """Load initial commit history into the state manager."""
+
+        try:
+            import git
+
+            git_repo = git.Repo(repo.path)
+            for commit in list(git_repo.iter_commits())[:20]:
+                commit_node = CommitNode(
+                    sha=commit.hexsha,
+                    short_sha=commit.hexsha[:8],
+                    message=commit.message,
+                    author=commit.author.name,
+                    timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
+                    parent_sha=commit.parents[0].hexsha if commit.parents else None,
+                    is_trunk=True,
+                )
+                self.state_manager.add_commit(repo.id, commit_node)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning(f"Could not load commit history: {exc}")
+
     # Repository Commands
-    
-    def repo_init(self, zip_file: Optional[str] = None, git_url: Optional[str] = None, 
+
+    def repo_init(self, zip_file: Optional[str] = None, git_url: Optional[str] = None,
                   name: Optional[str] = None) -> None:
-        """Initialize a new repository."""
-        with self.formatter.create_progress() as progress:
-            task = progress.add_task("[cyan]Initializing repository...", total=100)
-            
-            try:
+        """Initialize a new repository with progress feedback."""
+
+        repo = None
+        progress = None
+        overall_task: Optional[int] = None
+
+        try:
+            with self.formatter.progress("Repository initialization") as progress_ctx:
+                progress = progress_ctx
+                overall_task = progress.add_task("Repository setup", total=100)
+
+                def run_stage(description: str, advance: int, operation: Callable[[], StageResult]) -> StageResult:
+                    stage_task = progress.add_task(description, total=None)
+                    progress.update(overall_task, description=description)
+                    success = False
+                    try:
+                        result = operation()
+                        success = True
+                        return result
+                    finally:
+                        progress.remove_task(stage_task)
+                        if success and advance:
+                            progress.advance(overall_task, advance)
+
                 if zip_file:
                     zip_path = Path(zip_file)
-                    zip_data = zip_path.read_bytes()
+                    zip_data = run_stage(
+                        "Loading archive from disk",
+                        25,
+                        lambda: zip_path.read_bytes(),
+                    )
+
                     if not name:
                         name = zip_path.stem
-                    
-                    progress.update(task, advance=30, description="[cyan]Extracting zip...")
-                    repo_id = self.git_engine.init_from_zip(zip_data, name)
-                    
-                else:  # git_url
+
+                    repo_id = run_stage(
+                        "Importing files & creating initial commit",
+                        35,
+                        lambda: self.git_engine.init_from_zip(zip_data, name),
+                    )
+                else:
                     if not name:
                         name = Path(git_url).stem.replace('.git', '')
-                    
-                    progress.update(task, advance=30, description="[cyan]Cloning repository...")
-                    repo_id = self.git_engine.init_from_git(git_url, name)
-                
-                progress.update(task, advance=40, description="[cyan]Initializing state...")
-                
-                # Get repo info
-                repo = self.git_engine.get_repo(repo_id)
-                
-                # Create state entry
-                self.state_manager.create_repository(
-                    repo_id=repo.id,
-                    name=repo.name,
-                    path=str(repo.path)
+
+                    repo_id = run_stage(
+                        "Cloning remote repository",
+                        60,
+                        lambda: self.git_engine.init_from_git(git_url, name),
+                    )
+
+                repo = run_stage(
+                    "Fetching repository metadata",
+                    15,
+                    lambda: self.git_engine.get_repo(repo_id),
                 )
-                
-                # Set as active
-                self.state_manager.set_active_context(repo_id=repo.id)
-                
-                # Get initial commits
-                try:
-                    import git
-                    git_repo = git.Repo(repo.path)
-                    for i, commit in enumerate(list(git_repo.iter_commits())[:20]):
-                        commit_node = CommitNode(
-                            sha=commit.hexsha,
-                            short_sha=commit.hexsha[:8],
-                            message=commit.message,
-                            author=commit.author.name,
-                            timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
-                            parent_sha=commit.parents[0].hexsha if commit.parents else None,
-                            is_trunk=True
-                        )
-                        self.state_manager.add_commit(repo.id, commit_node)
-                except Exception as e:
-                    logger.warning(f"Could not load commit history: {e}")
-                
-                progress.update(task, advance=30, description="[green]Complete!")
-            
-            except GitEngineError as e:
-                progress.stop()
-                self.formatter.print_error(f"Failed to initialize repository: {e}")
-                raise click.Abort()
-        
+
+                run_stage(
+                    "Recording repository in state store",
+                    15,
+                    lambda: self._initialize_repository_state(repo),
+                )
+
+                run_stage(
+                    "Loading recent commit history",
+                    10,
+                    lambda: self._load_initial_commit_history(repo),
+                )
+
+                progress.update(
+                    overall_task,
+                    description="[green]Repository ready",
+                    completed=100,
+                )
+
+        except GitEngineError as exc:
+            if progress is not None and overall_task is not None:
+                progress.update(overall_task, description="[red]Initialization failed")
+            self.formatter.print_error(f"Failed to initialize repository: {exc}")
+            raise click.Abort()
+
         # Print success summary
+        if repo is None:
+            return
+
         self.formatter.print_success("Repository initialized successfully!")
-        
+
         content = f"""[bold]Repository ID:[/bold] {repo.id}
 [bold]Name:[/bold] {repo.name}
 [bold]Path:[/bold] {repo.path}

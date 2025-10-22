@@ -3,25 +3,27 @@
 
 import asyncio
 import time
-import click
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Iterable, List, NoReturn, Optional, Sequence, Tuple, TypeVar, Union, cast
+
+import click
+from rich.console import Console
 
 from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
-from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
-from sologit.workflows.ci_orchestrator import CIOrchestrator
-from sologit.workflows.rollback_handler import RollbackHandler
-from sologit.state.manager import StateManager
 from sologit.engines.test_orchestrator import (
-    TestOrchestrator,
     TestConfig,
+    TestOrchestrator,
+    TestResult,
     TestStatus,
 )
+from sologit.state.manager import StateManager
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
+from sologit.workflows.ci_orchestrator import CIOrchestrator
+from sologit.workflows.rollback_handler import RollbackHandler
 
 logger = get_logger(__name__)
 
@@ -31,12 +33,12 @@ StageResult = TypeVar("StageResult")
 formatter = RichFormatter()
 
 
-def set_formatter_console(console) -> None:
+def set_formatter_console(console: Console) -> None:
     """Allow external modules to configure the console used by the formatter."""
     formatter.set_console(console)
 
 
-def abort_with_error(message: str, details: Optional[str] = None) -> None:
+def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
     """Display a formatted error and abort the command."""
     plain_message = f"Error: {message}"
     formatter.print_error(plain_message)
@@ -64,11 +66,20 @@ def get_config_manager() -> ConfigManager:
     return _config_manager
 
 
-def _tests_from_config_entries(entries: List[dict], default_timeout: int) -> List[TestConfig]:
+TestEntry = Union[TestConfig, Dict[str, Any]]
+
+
+def _tests_from_config_entries(
+    entries: Optional[Sequence[TestEntry]],
+    default_timeout: int,
+) -> List[TestConfig]:
     """Convert config entries to TestConfig objects."""
     tests: List[TestConfig] = []
 
-    for entry in entries or []:
+    if not entries:
+        return tests
+
+    for entry in entries:
         if isinstance(entry, TestConfig):
             tests.append(entry)
             continue
@@ -83,10 +94,24 @@ def _tests_from_config_entries(entries: List[dict], default_timeout: int) -> Lis
             logger.warning(f"Test entry missing name/cmd: {entry}")
             continue
 
-        timeout = int(entry.get('timeout', default_timeout)) if entry.get('timeout') is not None else default_timeout
-        depends_on = entry.get('depends_on', []) or []
-
-        tests.append(TestConfig(name=name, cmd=cmd, timeout=timeout, depends_on=depends_on))
+        timeout_value = entry.get('timeout', default_timeout)
+        timeout = int(timeout_value) if timeout_value is not None else default_timeout
+        depends_on_raw = entry.get('depends_on', []) or []
+        if isinstance(depends_on_raw, list):
+            depends_on_list = depends_on_raw
+        elif not depends_on_raw:
+            depends_on_list = []
+        else:
+            logger.warning("Ignoring non-list depends_on value for test '%s'", name)
+            depends_on_list = []
+        tests.append(
+            TestConfig(
+                name=name,
+                cmd=cmd,
+                timeout=timeout,
+                depends_on=list(depends_on_list),
+            )
+        )
 
     return tests
 
@@ -153,7 +178,7 @@ def get_test_orchestrator() -> TestOrchestrator:
 
 
 @click.group()
-def repo():
+def repo() -> None:
     """Repository management commands."""
     pass
 
@@ -162,7 +187,7 @@ def repo():
 @click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
 @click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
 @click.option('--name', type=str, help='Repository name (optional)')
-def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]):
+def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]) -> None:
     """Initialize a new repository from zip file or Git URL."""
     formatter.print_header("Repository Initialization")
 
@@ -176,9 +201,13 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
 
     try:
         if zip_file:
+            if zip_file is None:
+                abort_with_error("Internal error: zip_file is unexpectedly None")
             zip_path = Path(zip_file)
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
         else:
+            if git_url is None:
+                abort_with_error("Internal error: git_url is unexpectedly None")
             if not name:
                 name = Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning repository from: {git_url}")
@@ -256,7 +285,7 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
 
 
 @repo.command('list')
-def repo_list():
+def repo_list() -> None:
     """List all repositories."""
     git_engine = get_git_engine()
     repos = git_engine.list_repos()
@@ -285,12 +314,12 @@ def repo_list():
 
 @repo.command('info')
 @click.argument('repo_id')
-def repo_info(repo_id: str):
+def repo_info(repo_id: str) -> None:
     """Show repository information."""
     git_engine = get_git_engine()
     repo = git_engine.get_repo(repo_id)
-    
-    if not repo:
+
+    if repo is None:
         formatter.print_error(f"Repository {repo_id} not found")
         raise click.Abort()
     
@@ -310,7 +339,7 @@ def repo_info(repo_id: str):
 
 
 @click.group()
-def pad():
+def pad() -> None:
     """Workpad management commands."""
     pass
 
@@ -318,7 +347,7 @@ def pad():
 @pad.command('create')
 @click.argument('title')
 @click.option('--repo', 'repo_id', type=str, help='Repository ID (required if multiple repos)')
-def pad_create(title: str, repo_id: Optional[str]):
+def pad_create(title: str, repo_id: Optional[str]) -> None:
     """Create a new workpad."""
     git_engine = get_git_engine()
 
@@ -370,7 +399,7 @@ def pad_create(title: str, repo_id: Optional[str]):
 
 @pad.command('list')
 @click.option('--repo', 'repo_id', type=str, help='Filter by repository ID')
-def pad_list(repo_id: Optional[str]):
+def pad_list(repo_id: Optional[str]) -> None:
     """List all workpads."""
     git_engine = get_git_engine()
     workpads = git_engine.list_workpads(repo_id)
@@ -414,7 +443,7 @@ def pad_list(repo_id: Optional[str]):
 
 @pad.command('info')
 @click.argument('pad_id')
-def pad_info(pad_id: str):
+def pad_info(pad_id: str) -> None:
     """Show workpad information."""
     git_engine = get_git_engine()
     workpad = git_engine.get_workpad(pad_id)
@@ -456,12 +485,12 @@ def pad_info(pad_id: str):
 
 @pad.command('promote')
 @click.argument('pad_id')
-def pad_promote(pad_id: str):
+def pad_promote(pad_id: str) -> None:
     """Promote workpad to trunk (fast-forward merge)."""
     git_engine = get_git_engine()
 
     workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
+    if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
 
     # Check if can promote
@@ -493,12 +522,12 @@ def pad_promote(pad_id: str):
 
 @pad.command('diff')
 @click.argument('pad_id')
-def pad_diff(pad_id: str):
+def pad_diff(pad_id: str) -> None:
     """Show diff between workpad and trunk."""
     git_engine = get_git_engine()
 
     workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
+    if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
 
     try:
@@ -513,7 +542,7 @@ def pad_diff(pad_id: str):
 
 
 @click.group()
-def test():
+def test() -> None:
     """Test execution commands."""
     pass
 
@@ -522,14 +551,14 @@ def test():
 @click.argument('pad_id')
 @click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
 @click.option('--parallel/--sequential', default=True, help='Parallel execution')
-def test_run(pad_id: str, target: str, parallel: bool):
+def test_run(pad_id: str, target: str, parallel: bool) -> None:
     """Run tests for a workpad with live output streaming."""
 
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
 
     workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
+    if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
 
     if target == 'fast':
@@ -561,10 +590,10 @@ def test_run(pad_id: str, target: str, parallel: bool):
                     style=style,
                 )
 
-            def handle_complete(result) -> None:
+            def handle_complete(result: TestResult) -> None:
                 progress.advance(task)
 
-            results = asyncio.run(
+            results: List[TestResult] = asyncio.run(
                 test_orchestrator.run_tests(
                     pad_id,
                     tests,
@@ -609,7 +638,7 @@ def test_run(pad_id: str, target: str, parallel: bool):
 
         formatter.console.print(table)
 
-        summary = test_orchestrator.get_summary(results)
+        summary: Dict[str, Any] = test_orchestrator.get_summary(results)
         status_color = "green" if summary['status'] == 'green' else "red"
         summary_text = f"""[bold]Total:[/bold] {summary['total']}
 [bold]Passed:[/bold] [green]{summary['passed']}[/green]
@@ -654,7 +683,13 @@ def test_run(pad_id: str, target: str, parallel: bool):
     help='Override tests as NAME=CMD[:TIMEOUT] (repeat for multiple tests)'
 )
 @click.pass_context
-def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_overrides: Tuple[str, ...]):
+def pad_auto_merge(
+    ctx: click.Context,
+    pad_id: str,
+    target: str,
+    no_auto_promote: bool,
+    test_overrides: Tuple[str, ...],
+) -> None:
     """
     Run tests and auto-promote if they pass (Phase 3).
     
@@ -672,10 +707,14 @@ def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_ov
     state_manager = StateManager()
 
     workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
+    if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
 
-    config_manager: ConfigManager = ctx.obj.get('config') if ctx and ctx.obj else ConfigManager()
+    config_manager: ConfigManager
+    if ctx.obj and isinstance(ctx.obj, dict) and 'config' in ctx.obj:
+        config_manager = cast(ConfigManager, ctx.obj['config'])
+    else:
+        config_manager = ConfigManager()
     config_tests = config_manager.config.tests
     default_timeout = config_tests.timeout_seconds
 
@@ -750,7 +789,7 @@ def pad_auto_merge(ctx, pad_id: str, target: str, no_auto_promote: bool, test_ov
 
 @pad.command('evaluate')
 @click.argument('pad_id')
-def pad_evaluate(pad_id: str):
+def pad_evaluate(pad_id: str) -> None:
     """
     Evaluate promotion gate without promoting (Phase 3).
     
@@ -761,7 +800,7 @@ def pad_evaluate(pad_id: str):
     git_engine = get_git_engine()
 
     workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
+    if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
     
     # Configure rules
@@ -794,7 +833,7 @@ def pad_evaluate(pad_id: str):
 
 
 @click.group()
-def ci():
+def ci() -> None:
     """CI and smoke test commands (Phase 3)."""
     pass
 
@@ -802,7 +841,7 @@ def ci():
 @ci.command('smoke')
 @click.argument('repo_id')
 @click.option('--commit', help='Commit hash to test (default: HEAD)')
-def ci_smoke(repo_id: str, commit: Optional[str]):
+def ci_smoke(repo_id: str, commit: Optional[str]) -> None:
     """
     Run smoke tests for a commit (Phase 3).
     
@@ -831,7 +870,7 @@ def ci_smoke(repo_id: str, commit: Optional[str]):
     # Create orchestrator
     orchestrator = CIOrchestrator(git_engine, test_orchestrator)
     
-    def progress_callback(message: str):
+    def progress_callback(message: str) -> None:
         formatter.print(f"   {message}")
 
     try:
@@ -865,7 +904,7 @@ def ci_smoke(repo_id: str, commit: Optional[str]):
 @click.argument('repo_id')
 @click.option('--commit', required=True, help='Commit hash to rollback')
 @click.option('--recreate-pad/--no-recreate-pad', default=True, help='Recreate workpad for fixes')
-def ci_rollback(repo_id: str, commit: str, recreate_pad: bool):
+def ci_rollback(repo_id: str, commit: str, recreate_pad: bool) -> None:
     """
     Manually rollback a commit (Phase 3).
     
@@ -917,7 +956,7 @@ def ci_rollback(repo_id: str, commit: str, recreate_pad: bool):
 
 @test.command('analyze')
 @click.argument('pad_id')
-def test_analyze(pad_id: str):
+def test_analyze(pad_id: str) -> None:
     """
     Analyze test failures for a workpad (Phase 3).
     
@@ -949,8 +988,15 @@ def test_analyze(pad_id: str):
 # Phase 4: Complete Pair Loop Implementation
 # ============================================================================
 
-def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[str],
-                      no_test: bool, no_promote: bool, target: str):
+def execute_pair_loop(
+    ctx: click.Context,
+    prompt: str,
+    repo_id: Optional[str],
+    title: Optional[str],
+    no_test: bool,
+    no_promote: bool,
+    target: str,
+) -> None:
     """
     Execute the complete AI pair programming loop.
     
@@ -980,7 +1026,10 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
     import time
     
     git_engine = get_git_engine()
-    config_manager = ctx.obj.get('config')
+    if ctx.obj and isinstance(ctx.obj, dict) and 'config' in ctx.obj:
+        config_manager = cast(ConfigManager, ctx.obj['config'])
+    else:
+        config_manager = ConfigManager()
 
     formatter.print_header("AI Pair Programming Session")
 
@@ -1025,6 +1074,8 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
     overview.add_row("Tests", "Skipped" if no_test else target)
     overview.add_row("Auto-Promote", "Disabled" if no_promote else "Enabled")
     formatter.console.print(overview)
+
+    pad_id: Optional[str] = None  # Ensure pad_id is assigned before use; check for None if used after try block
 
     try:
         formatter.print_subheader("Workpad Setup")
