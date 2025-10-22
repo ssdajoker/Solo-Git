@@ -1,21 +1,9 @@
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
+import { useSoloGitOperations } from '../hooks/useSoloGitOperations'
+import type { NotificationType, WorkpadState } from '../types/soloGit'
 import './WorkpadList.css'
-
-type NotificationType = 'success' | 'error' | 'warning' | 'info'
-
-interface Workpad {
-  workpad_id: string
-  repo_id: string
-  title: string
-  status: string
-  branch_name: string
-  base_commit: string
-  patches_applied: number
-  test_runs: string[]
-  created_at: string
-}
 
 interface WorkpadListProps {
   repoId: string | null | undefined
@@ -25,29 +13,61 @@ interface WorkpadListProps {
 }
 
 export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, notify }: WorkpadListProps) {
-  const [workpads, setWorkpads] = useState<Workpad[]>([])
+  const [workpads, setWorkpads] = useState<WorkpadState[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (repoId) {
-      loadWorkpads()
-      const interval = setInterval(loadWorkpads, 3000)
-      return () => clearInterval(interval)
-    }
-  }, [repoId])
-
-  const loadWorkpads = async () => {
+  const loadWorkpads = useCallback(async () => {
     if (!repoId) return
 
     try {
       setLoading(true)
-      const data = await invoke<Workpad[]>('list_workpads', { repoId })
+      const data = await invoke<WorkpadState[]>('list_workpads', { repoId })
       setWorkpads(data || [])
     } catch (e) {
       console.error('Failed to load workpads:', e)
     } finally {
       setLoading(false)
+    }
+  }, [repoId])
+
+  useEffect(() => {
+    if (repoId) {
+      void loadWorkpads()
+      const interval = setInterval(() => { void loadWorkpads() }, 3000)
+      return () => clearInterval(interval)
+    }
+  }, [repoId, loadWorkpads])
+
+  const refreshAfterOperation = useCallback(async () => {
+    await loadWorkpads()
+    if (onStateUpdated) {
+      await onStateUpdated()
+    }
+  }, [loadWorkpads, onStateUpdated])
+
+  const {
+    createWorkpad: createWorkpadOperation,
+    runTests: runTestsOperation,
+    promoteWorkpad: promoteWorkpadOperation,
+    applyPatch: applyPatchOperation,
+    rollbackWorkpad: rollbackWorkpadOperation,
+    deleteWorkpad: deleteWorkpadOperation,
+  } = useSoloGitOperations({
+    onStateUpdated: refreshAfterOperation,
+  })
+
+  const getErrorMessage = (error: unknown) => {
+    if (error instanceof Error) {
+      return error.message
+    }
+    if (typeof error === 'string') {
+      return error
+    }
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return 'Unknown error'
     }
   }
 
@@ -73,13 +93,11 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
     try {
       setPendingAction('create')
       notify?.('Creating workpad...', 'info')
-      await invoke<Workpad>('create_workpad', { repoId, title: title.trim() })
+      await createWorkpadOperation({ repoId, title: title.trim() })
       notify?.('Workpad created', 'success')
-      await loadWorkpads()
-      onStateUpdated?.()
     } catch (e) {
       console.error('Failed to create workpad:', e)
-      notify?.(`Failed to create workpad: ${e}`, 'error')
+      notify?.(`Failed to create workpad: ${getErrorMessage(e)}`, 'error')
     } finally {
       setPendingAction(null)
     }
@@ -93,13 +111,11 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
     try {
       setPendingAction(workpadId)
       notify?.('Running tests...', 'info')
-      await invoke('run_tests', { workpadId, target })
+      await runTestsOperation({ workpadId, target })
       notify?.('Tests completed', 'success')
-      await loadWorkpads()
-      onStateUpdated?.()
     } catch (e) {
       console.error('Failed to run tests:', e)
-      notify?.(`Failed to run tests: ${e}`, 'error')
+      notify?.(`Failed to run tests: ${getErrorMessage(e)}`, 'error')
     } finally {
       setPendingAction(null)
     }
@@ -114,13 +130,11 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
     try {
       setPendingAction(workpadId)
       notify?.('Promoting workpad...', 'info')
-      await invoke('promote_workpad', { workpadId })
+      await promoteWorkpadOperation({ workpadId })
       notify?.('Workpad promoted', 'success')
-      await loadWorkpads()
-      onStateUpdated?.()
     } catch (e) {
       console.error('Failed to promote workpad:', e)
-      notify?.(`Failed to promote workpad: ${e}`, 'error')
+      notify?.(`Failed to promote workpad: ${getErrorMessage(e)}`, 'error')
     } finally {
       setPendingAction(null)
     }
@@ -141,13 +155,11 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
     try {
       setPendingAction(workpadId)
       notify?.('Applying patch...', 'info')
-      await invoke('apply_patch', { workpadId, message: message.trim(), diff })
+      await applyPatchOperation({ workpadId, message: message.trim(), diff })
       notify?.('Patch applied', 'success')
-      await loadWorkpads()
-      onStateUpdated?.()
     } catch (e) {
       console.error('Failed to apply patch:', e)
-      notify?.(`Failed to apply patch: ${e}`, 'error')
+      notify?.(`Failed to apply patch: ${getErrorMessage(e)}`, 'error')
     } finally {
       setPendingAction(null)
     }
@@ -162,13 +174,11 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
     try {
       setPendingAction(workpadId)
       notify?.('Deleting workpad...', 'info')
-      await invoke('delete_workpad', { workpadId })
+      await deleteWorkpadOperation({ workpadId })
       notify?.('Workpad deleted', 'success')
-      await loadWorkpads()
-      onStateUpdated?.()
     } catch (e) {
       console.error('Failed to delete workpad:', e)
-      notify?.(`Failed to delete workpad: ${e}`, 'error')
+      notify?.(`Failed to delete workpad: ${getErrorMessage(e)}`, 'error')
     } finally {
       setPendingAction(null)
     }
@@ -182,13 +192,11 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
     try {
       setPendingAction(workpadId)
       notify?.('Rolling back workpad...', 'info')
-      await invoke('rollback_workpad', { workpadId, reason: reason ?? undefined })
+      await rollbackWorkpadOperation({ workpadId, reason: reason ?? undefined })
       notify?.('Workpad rolled back', 'success')
-      await loadWorkpads()
-      onStateUpdated?.()
     } catch (e) {
       console.error('Failed to rollback workpad:', e)
-      notify?.(`Failed to rollback workpad: ${e}`, 'error')
+      notify?.(`Failed to rollback workpad: ${getErrorMessage(e)}`, 'error')
     } finally {
       setPendingAction(null)
     }
