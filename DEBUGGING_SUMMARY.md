@@ -104,9 +104,9 @@
 - [x] State Manager
 - [x] Config Manager
 - [x] Git Engine
-- [~] Test Orchestrator (requires Docker)*
+- [~] Test Orchestrator (historically required a container runtime)*
 
-*Note: Test orchestrator correctly detects missing Docker and provides clear error
+*Note: Test orchestrator correctly detects missing container runtimes and provides clear error
 
 ---
 
@@ -217,7 +217,7 @@ Date:   October 17, 2025
 ### Prerequisites for Full GUI Deployment:
 1. Install Rust and Cargo
 2. Compile Tauri application: `cd heaven-gui && npm run tauri build`
-3. Optional: Set up Docker for test sandboxing
+3. Optional: Legacy step removed—container sandboxing is no longer supported
 4. Optional: Configure Jenkins for CI/CD
 5. Optional: Connect AI chat to CLI backend
 

@@ -172,10 +172,10 @@ Production Code:   ~3,370 statements
 3. **1 Patch Engine Test** - Mock configuration
 4. **1 Promotion Gate Test** - Mock attribute issue
 
-**7 Docker Errors** (Expected):
-- Docker not available in test environment
+**7 Legacy Container Errors** (Expected):
+- Container runtime deliberately absent in test environment
 - Mocked versions of these tests pass
-- Feature works in environments with Docker
+- Feature works with pure subprocess execution
 
 **Impact**: ⚠️ **Low** - All failures are test code issues or environmental, not implementation bugs
 
@@ -328,9 +328,9 @@ Production Code:   ~3,370 statements
 - **Mitigation**: Document, fix during polish phase
 
 **Environmental Issues** (7 errors):
-- Docker not available in test environment
+- Container runtime intentionally unavailable in test environment
 - **Impact**: None (mocked tests pass)
-- **Mitigation**: Run in Docker-enabled environment
+- **Mitigation**: Maintain subprocess strategy; no container enablement planned
 
 **Missing Community Docs**:
 - CONTRIBUTING.md
@@ -480,7 +480,7 @@ Production Code:   ~3,370 statements
 
 ### Challenges Overcome ⚠️
 1. **Test Failures** - Identified as test code issues
-2. **Docker Dependency** - Resolved with subprocess
+2. **Container Dependency** - Resolved with subprocess
 3. **Format String Bugs** - Fixed with review
 4. **Scope Creep** - Stayed focused on essentials
 
