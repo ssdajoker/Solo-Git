@@ -5,7 +5,7 @@ import asyncio
 import time
 import click
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple, TypeVar
+from typing import Callable, Dict, List, NoReturn, Optional, Tuple, TypeVar
 
 from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
@@ -23,6 +23,9 @@ from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 
+from sologit.core.repository import Repository
+from sologit.core.workpad import Workpad
+
 logger = get_logger(__name__)
 
 StageResult = TypeVar("StageResult")
@@ -36,7 +39,7 @@ def set_formatter_console(console) -> None:
     formatter.set_console(console)
 
 
-def abort_with_error(message: str, details: Optional[str] = None) -> None:
+def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
     """Display a formatted error and abort the command."""
     plain_message = f"Error: {message}"
     formatter.print_error(plain_message)
@@ -53,6 +56,20 @@ _git_engine: Optional[GitEngine] = None
 _patch_engine: Optional[PatchEngine] = None
 _test_orchestrator: Optional[TestOrchestrator] = None
 _config_manager: Optional[ConfigManager] = None
+
+
+def _require_repository(repo: Optional[Repository], repo_id: str) -> Repository:
+    """Ensure a repository object is available."""
+    if repo is None:
+        abort_with_error(f"Repository {repo_id} not found")
+    return repo
+
+
+def _require_workpad(workpad: Optional[Workpad], pad_id: str) -> Workpad:
+    """Ensure a workpad object is available."""
+    if workpad is None:
+        abort_with_error(f"Workpad {pad_id} not found")
+    return workpad
 
 
 def get_config_manager() -> ConfigManager:
@@ -175,10 +192,11 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
     git_engine = get_git_engine()
 
     try:
-        if zip_file:
+        if zip_file is not None:
             zip_path = Path(zip_file)
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
         else:
+            assert git_url is not None
             if not name:
                 name = Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning repository from: {git_url}")
@@ -216,6 +234,7 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
             else:  # git_url
                 run_stage("Preparing clone parameters", lambda: None)
 
+                assert git_url is not None
                 repo_id = run_stage(
                     "Cloning remote repository",
                     lambda: git_engine.init_from_git(git_url, name),
@@ -226,9 +245,12 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
                 if zip_file
                 else "Recording repository metadata"
             )
-            repo = run_stage(
-                final_stage_label,
-                lambda: git_engine.get_repo(repo_id),
+            repo = _require_repository(
+                run_stage(
+                    final_stage_label,
+                    lambda: git_engine.get_repo(repo_id),
+                ),
+                repo_id,
             )
 
             progress.update(
@@ -348,9 +370,10 @@ def pad_create(title: str, repo_id: Optional[str]):
 
     try:
         formatter.print_info(f"Creating workpad: {title}")
+        assert repo_id is not None
         pad_id = git_engine.create_workpad(repo_id, title)
 
-        workpad = git_engine.get_workpad(pad_id)
+        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
         formatter.print_success("Workpad created!")
         formatter.print_info(f"Pad ID: {workpad.id}")
         formatter.print_info(f"Title: {workpad.title}")
@@ -417,10 +440,7 @@ def pad_list(repo_id: Optional[str]):
 def pad_info(pad_id: str):
     """Show workpad information."""
     git_engine = get_git_engine()
-    workpad = git_engine.get_workpad(pad_id)
-
-    if not workpad:
-        abort_with_error(f"Workpad {pad_id} not found")
+    workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
 
     formatter.print_header(f"Workpad Details: {workpad.title}")
 
@@ -460,9 +480,7 @@ def pad_promote(pad_id: str):
     """Promote workpad to trunk (fast-forward merge)."""
     git_engine = get_git_engine()
 
-    workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
-        abort_with_error(f"Workpad {pad_id} not found")
+    workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
 
     # Check if can promote
     if not git_engine.can_promote(pad_id):
@@ -497,9 +515,7 @@ def pad_diff(pad_id: str):
     """Show diff between workpad and trunk."""
     git_engine = get_git_engine()
 
-    workpad = git_engine.get_workpad(pad_id)
-    if not workpad:
-        abort_with_error(f"Workpad {pad_id} not found")
+    workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
 
     try:
         diff = git_engine.get_diff(pad_id)
@@ -813,9 +829,7 @@ def ci_smoke(repo_id: str, commit: Optional[str]):
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
 
-    repo = git_engine.get_repo(repo_id)
-    if not repo:
-        abort_with_error(f"Repository {repo_id} not found")
+    repo = _require_repository(git_engine.get_repo(repo_id), repo_id)
     
     # Get commit hash
     if not commit:
@@ -1029,8 +1043,9 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
     try:
         formatter.print_subheader("Workpad Setup")
         formatter.print_info("Creating ephemeral workpad...")
+        assert repo_id is not None
         pad_id = git_engine.create_workpad(repo_id, title)
-        workpad = git_engine.get_workpad(pad_id)
+        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
         formatter.print_success("Workpad created")
 
         workpad_table = formatter.table(headers=["Field", "Value"])
@@ -1069,14 +1084,26 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
         plan = plan_response.plan
         plan_table = formatter.table(headers=["Aspect", "Details"])
         plan_table.add_row("Description", plan.description or "-")
-        plan_table.add_row(
-            "Modify",
-            ', '.join(plan.files_to_modify) if plan.files_to_modify else "None"
-        )
-        plan_table.add_row(
-            "Create",
-            ', '.join(plan.files_to_create) if plan.files_to_create else "None"
-        )
+
+        modifications = [
+            change.path
+            for change in plan.file_changes
+            if change.action.lower() == "modify"
+        ]
+        creations = [
+            change.path
+            for change in plan.file_changes
+            if change.action.lower() == "create"
+        ]
+        deletions = [
+            change.path
+            for change in plan.file_changes
+            if change.action.lower() == "delete"
+        ]
+
+        plan_table.add_row("Modify", ', '.join(modifications) if modifications else "None")
+        plan_table.add_row("Create", ', '.join(creations) if creations else "None")
+        plan_table.add_row("Delete", ', '.join(deletions) if deletions else "None")
         plan_table.add_row("Test Strategy", plan.test_strategy or "None")
         formatter.console.print(plan_table)
 
@@ -1085,9 +1112,17 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
         formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
         start_time = time.time()
 
+        existing_files: Dict[str, str] = {}
+        for change in plan.file_changes:
+            if change.action.lower() != "modify":
+                continue
+            file_path = repo.path / change.path
+            if file_path.exists():
+                existing_files[change.path] = file_path.read_text()
+
         patch_response = orchestrator.generate_patch(
             plan=plan,
-            repo_context=context
+            file_contents=existing_files,
         )
 
         coding_time = time.time() - start_time
@@ -1097,20 +1132,20 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
         formatter.print_info_panel(patch_panel, title="Patch Generation")
 
         patch = patch_response.patch
-        if patch.description:
-            formatter.print_info(f"Patch notes: {patch.description}")
 
         # Step 5: Apply Patch
         formatter.print_subheader("Applying Patch")
         patch_engine = get_patch_engine()
 
         try:
-            result = patch_engine.apply_patch(pad_id, patch.diff)
-            formatter.print_success("Patch applied successfully")
+            checkpoint_id = patch_engine.apply_patch(pad_id, patch.diff)
+            formatter.print_success(
+                f"Patch applied successfully (checkpoint {checkpoint_id})"
+            )
             diff_table = formatter.table(headers=["Metric", "Value"])
-            diff_table.add_row("Files Changed", str(result.files_changed))
-            diff_table.add_row("Insertions", f"+{result.insertions}")
-            diff_table.add_row("Deletions", f"-{result.deletions}")
+            diff_table.add_row("Files Changed", str(len(patch.files_changed)))
+            diff_table.add_row("Insertions", f"+{patch.additions}")
+            diff_table.add_row("Deletions", f"-{patch.deletions}")
             formatter.console.print(diff_table)
 
         except Exception as e:
