@@ -3,6 +3,7 @@
 
 import asyncio
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, NoReturn, Optional, Sequence, Tuple, TypeVar, Union, cast
 
@@ -19,6 +20,7 @@ from sologit.engines.test_orchestrator import (
     TestStatus,
 )
 from sologit.state.manager import StateManager
+from sologit.state.schema import TestResult as StateTestResult
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
@@ -628,10 +630,16 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
+    state_manager = StateManager()
 
     workpad = git_engine.get_workpad(pad_id)
     if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
+
+    run_record = state_manager.create_test_run(pad_id, target)
+    run_id = run_record.run_id
+    state_manager.update_test_run(run_id, status="running")
+    run_started_at = time.time()
 
     if target == 'fast':
         tests = [
@@ -679,7 +687,9 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 
         table = formatter.table(headers=["Test", "Status", "Duration", "Mode", "Notes", "Log"])
 
-        for result in results:
+        state_results: List[StateTestResult] = []
+
+        for index, result in enumerate(results):
             if result.status == TestStatus.PASSED:
                 status_icon = "✅"
             elif result.status == TestStatus.SKIPPED:
@@ -708,6 +718,24 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                 log_display,
             )
 
+            output_segments: List[str] = []
+            if result.stdout:
+                output_segments.append(result.stdout.strip())
+            if result.stderr:
+                output_segments.append(result.stderr.strip())
+            combined_output = "\n".join(segment for segment in output_segments if segment)
+
+            state_results.append(
+                StateTestResult(
+                    test_id=f"{run_id}:{index}",
+                    name=result.name,
+                    status=result.status.value,
+                    duration_ms=result.duration_ms,
+                    output=combined_output,
+                    error=result.error,
+                )
+            )
+
         formatter.console.print(table)
 
         summary: Dict[str, Any] = test_orchestrator.get_summary(results)
@@ -722,6 +750,21 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         formatter.print_panel(summary_text, title="📊 Test Summary")
 
         workpad.test_status = summary['status']
+
+        total_duration_ms = sum(result.duration_ms for result in results)
+        failed_total = summary['failed'] + summary.get('timeout', 0) + summary.get('error', 0)
+        state_status = "passed" if summary['status'] == 'green' else "failed"
+        state_manager.update_test_run(
+            run_id,
+            status=state_status,
+            completed_at=datetime.utcnow().isoformat(),
+            total_tests=summary['total'],
+            passed=summary['passed'],
+            failed=failed_total,
+            skipped=summary['skipped'],
+            duration_ms=total_duration_ms,
+            tests=state_results,
+        )
 
         if summary['status'] == 'green':
             formatter.print_success("All tests passed! Ready to promote.")
@@ -746,6 +789,28 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             )
 
     except Exception as exc:
+        if run_id:
+            elapsed_ms = int((time.time() - run_started_at) * 1000)
+            error_result = StateTestResult(
+                test_id=f"{run_id}:error",
+                name="test-runner",
+                status="error",
+                duration_ms=elapsed_ms,
+                output=str(exc),
+                error=str(exc),
+            )
+            state_manager.update_test_run(
+                run_id,
+                status="failed",
+                completed_at=datetime.utcnow().isoformat(),
+                total_tests=1,
+                passed=0,
+                failed=1,
+                skipped=0,
+                duration_ms=elapsed_ms,
+                tests=[error_result],
+            )
+
         formatter.print_error(
             "Test Execution Failed",
             "Solo Git could not complete the requested test run.",
