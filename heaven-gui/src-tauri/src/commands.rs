@@ -14,8 +14,8 @@ use tempfile::Builder;
 use uuid::Uuid;
 
 use crate::{
-    get_repos_dir, get_settings_path, get_state_dir, AIOperation, GlobalState, PromotionRecord,
-    RepositoryState, TestRun, WorkpadState,
+    get_state_dir, list_test_runs, AIOperation, GlobalState, PromotionRecord, RepositoryState,
+    TestRun, WorkpadState,
 };
 
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
