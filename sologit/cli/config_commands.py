@@ -7,6 +7,7 @@ Provides commands to setup, view, and validate configuration.
 
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
 from typing import Any, Dict, List, NoReturn, Optional, cast
 
 import click
@@ -47,6 +48,30 @@ def _get_config_manager(ctx: click.Context) -> ConfigManager:
     return config_manager
 
 
+def abort_with_error(
+    message: str,
+    details: str | None = None,
+    *,
+    title: str | None = None,
+    help_text: str | None = None,
+    tip: str | None = None,
+    suggestions: List[str] | None = None,
+    docs_url: str | None = None,
+) -> None:
+    """Display a formatted error panel with context and exit."""
+
+    formatter.print_error(
+        title or "Configuration Error",
+        message,
+        help_text=help_text or "Review the command options below and fix the highlighted issues.",
+        tip=tip or "Run 'evogitctl config --help' to see all configuration subcommands.",
+        suggestions=suggestions or [
+            "evogitctl config show",
+            "evogitctl config setup",
+        ],
+        docs_url=docs_url or "docs/SETUP.md#configuration",
+        details=details,
+    )
 def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
     """Display a formatted error and exit."""
     plain_message = f"Error: {message}"
@@ -106,7 +131,18 @@ def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: b
 
     # Validate inputs
     if not api_key:
-        abort_with_error("API key is required")
+        abort_with_error(
+            "API key is required",
+            title="Configuration Incomplete",
+            help_text="Provide your Abacus.ai API key using --api-key or rerun this command in interactive mode to enter it securely.",
+            tip="You can export ABACUS_API_KEY in your shell and rerun 'evogitctl config setup --no-interactive'.",
+            suggestions=[
+                "evogitctl config setup --interactive",
+                "export ABACUS_API_KEY=...",
+            ],
+            docs_url="docs/SETUP.md#configuration",
+        )
+
 
     # Save configuration
     try:
@@ -128,7 +164,18 @@ def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: b
         ], icon=theme.icons.arrow_right, style=theme.colors.blue)
 
     except Exception as e:
-        abort_with_error("Error saving configuration", str(e))
+        abort_with_error(
+            "Error saving configuration",
+            str(e),
+            title="Configuration Write Failed",
+            help_text="Verify that the destination directory is writable and that the configuration file is not locked by another process.",
+            tip="Run again with sudo only if your config directory truly requires elevated permissions.",
+            suggestions=[
+                f"Check permissions on {config_path}",
+                "evogitctl config show",
+            ],
+            docs_url="docs/SETUP.md#configuration",
+        )
 
 
 @config_group.command(name='show')
@@ -212,14 +259,31 @@ def test_config(ctx: click.Context) -> None:
     error_messages: List[str] = errors
 
     if not is_valid:
-        formatter.print_error_panel(
-            "Configuration validation failed. Review the following issues:",
-            title="Validation"
+        formatter.print_error(
+            "Configuration Validation Failed",
+            "Review the issues below and update your configuration file.",
+            help_text="Each row highlights a required configuration value that is missing or malformed.",
+            tip="Open the config file listed in the Paths section and correct the highlighted fields before rerunning this check.",
+            suggestions=[
+                "evogitctl config show --secrets",
+                "evogitctl config setup --no-interactive",
+            ],
+            docs_url="docs/SETUP.md#configuration",
         )
         error_table = formatter.table(headers=["Issues"])
         for error in error_messages:
             error_table.add_row(error)
-            formatter.print_error(error)
+            formatter.print_error(
+                "Configuration Validation Issue",
+                error,
+                help_text="Update the configuration file entry so it matches the expected format.",
+                tip="Open the config file shown below and correct the value before retrying 'evogitctl config test'.",
+                suggestions=[
+                    "evogitctl config show --secrets",
+                    "evogitctl config setup --no-interactive",
+                ],
+                docs_url="docs/SETUP.md#configuration",
+            )
         formatter.console.print(error_table)
         sys.exit(1)
 
@@ -245,10 +309,31 @@ def test_config(ctx: click.Context) -> None:
             )
             formatter.print_success("API connection successful")
         else:
-            abort_with_error("API connection failed")
+            abort_with_error(
+                "API connection failed",
+                title="API Connectivity Issue",
+                help_text="Verify the endpoint URL and network connectivity. Solo Git could not reach Abacus.ai.",
+                tip="Check if a corporate proxy or firewall is blocking outbound requests to https://api.abacus.ai/v1.",
+                suggestions=[
+                    f"curl -I {config.abacus.endpoint}",
+                    "evogitctl config show",
+                ],
+                docs_url="docs/SETUP.md#configuration",
+            )
 
     except Exception as e:
-        abort_with_error("API connection failed", str(e))
+        abort_with_error(
+            "API connection failed",
+            str(e),
+            title="API Connectivity Issue",
+            help_text="Inspect the exception details below and ensure your network allows outbound HTTPS to Abacus.ai.",
+            tip="If you're behind a proxy, set HTTPS_PROXY before rerunning this command.",
+            suggestions=[
+                "export HTTPS_PROXY=...",
+                f"curl -I {config.abacus.endpoint}",
+            ],
+            docs_url="docs/SETUP.md#configuration",
+        )
 
     formatter.print_success_panel(
         "All checks passed! Solo Git is ready to use.",

@@ -145,6 +145,47 @@ class EnhancedCLI:
                     15,
                     lambda: self.git_engine.get_repo(repo_id),
                 )
+                
+                # Set as active
+                self.state_manager.set_active_context(repo_id=repo.id)
+                
+                # Get initial commits
+                try:
+                    import git
+                    git_repo = git.Repo(repo.path)
+                    for i, commit in enumerate(list(git_repo.iter_commits())[:20]):
+                        commit_node = CommitNode(
+                            sha=commit.hexsha,
+                            short_sha=commit.hexsha[:8],
+                            message=commit.message,
+                            author=commit.author.name,
+                            timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
+                            parent_sha=commit.parents[0].hexsha if commit.parents else None,
+                            is_trunk=True
+                        )
+                        self.state_manager.add_commit(repo.id, commit_node)
+                except Exception as e:
+                    logger.warning(f"Could not load commit history: {e}")
+                
+                progress.update(task, advance=30, description="[green]Complete!")
+            
+            except GitEngineError as e:
+                progress.stop()
+                existing = self.state_manager.list_repositories()
+                repo_suggestions = [
+                    f"{repo.repo_id} • {repo.name}" for repo in existing
+                ]
+                self.formatter.print_error(
+                    "Repository Initialization Failed",
+                    "Solo Git could not complete the initialization process.",
+                    help_text="Confirm the source path or Git URL is accessible and that you have the necessary credentials.",
+                    tip="Run the command again with --verbose to surface the underlying git output for troubleshooting.",
+                    suggestions=["evogitctl repo list"] + repo_suggestions[:4],
+                    docs_url="docs/SETUP.md#initialize-a-repository",
+                    details=str(e),
+                )
+                raise click.Abort()
+        
 
                 run_stage(
                     "Recording repository in state store",
@@ -224,7 +265,16 @@ class EnhancedCLI:
         repo = self.state_manager.get_repository(repo_id)
         
         if not repo:
-            self.formatter.print_error(f"Repository not found: {repo_id}")
+            repos = self.state_manager.list_repositories()
+            options = [f"{r.repo_id} • {r.name}" for r in repos]
+            self.formatter.print_error(
+                "Repository Not Found",
+                f"Repository '{repo_id}' is not tracked in the Solo Git state manager.",
+                help_text="Pick one of the listed repository IDs or initialize a new repository with 'evogitctl repo init'.",
+                tip="Set a default repository with 'evogitctl repo use <repo-id>' to avoid this prompt.",
+                suggestions=["evogitctl repo list"] + options[:5],
+                docs_url="docs/SETUP.md#initialize-a-repository",
+            )
             raise click.Abort()
         
         # Repository details panel
@@ -283,7 +333,15 @@ class EnhancedCLI:
                 if len(repos) == 1:
                     repo_id = repos[0].repo_id
                 else:
-                    self.formatter.print_error("No active repository. Specify with --repo or set active repo.")
+                    repo_suggestions = [f"{r.repo_id} • {r.name}" for r in repos]
+                    self.formatter.print_error(
+                        "No Active Repository",
+                        "Solo Git could not determine which repository to use for this command.",
+                        help_text="Pass --repo <repo-id> explicitly or set a default repository using the repo commands.",
+                        tip="Run 'evogitctl repo list' to copy the correct repository identifier before retrying.",
+                        suggestions=["evogitctl repo list"] + repo_suggestions[:5],
+                        docs_url="docs/SETUP.md#initialize-a-repository",
+                    )
                     raise click.Abort()
         
         with self.formatter.create_progress() as progress:
@@ -311,7 +369,18 @@ class EnhancedCLI:
             
             except Exception as e:
                 progress.stop()
-                self.formatter.print_error(f"Failed to create workpad: {e}")
+                self.formatter.print_error(
+                    "Workpad Creation Failed",
+                    "Solo Git could not create the workpad in the target repository.",
+                    help_text="Ensure the repository is initialized and free of uncommitted changes that might block workpad creation.",
+                    tip="Try syncing the repository with 'git status' and resolving outstanding changes before retrying.",
+                    suggestions=[
+                        f"evogitctl pad list --repo {repo_id}",
+                        "evogitctl repo info <repo-id>",
+                    ],
+                    docs_url="docs/HEAVEN_INTERFACE_GUIDE.md#workpads",
+                    details=str(e),
+                )
                 raise click.Abort()
         
         # Show success
@@ -379,7 +448,25 @@ class EnhancedCLI:
         workpad = self.state_manager.get_workpad(workpad_id)
         
         if not workpad:
-            self.formatter.print_error(f"Workpad not found: {workpad_id}")
+            context = self.state_manager.get_active_context()
+            active_repo_id = context.get('repo_id')
+            workpads = self.state_manager.list_workpads(active_repo_id) if active_repo_id else []
+            options = [f"{wp.workpad_id[:8]} • {wp.title}" for wp in workpads]
+            suggestion_commands = []
+            if active_repo_id:
+                suggestion_commands.append(f"evogitctl pad list --repo {active_repo_id}")
+            else:
+                suggestion_commands.append("evogitctl pad list")
+            suggestion_commands.append("evogitctl pad create \"<title>\"")
+
+            self.formatter.print_error(
+                "Workpad Not Found",
+                f"Workpad '{workpad_id}' is not tracked in the Solo Git state manager.",
+                help_text="Select one of the available workpad IDs below or create a new workpad with 'evogitctl pad create'.",
+                tip="If you recently created the workpad elsewhere, run 'evogitctl pad list' to refresh the cached state.",
+                suggestions=suggestion_commands + options[:5],
+                docs_url="docs/HEAVEN_INTERFACE_GUIDE.md#workpads",
+            )
             raise click.Abort()
         
         # Print workpad summary
