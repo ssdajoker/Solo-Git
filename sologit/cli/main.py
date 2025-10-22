@@ -135,6 +135,7 @@ def cli(ctx, verbose, config):
     # Initialize context
     ctx.ensure_object(dict)
     ctx.obj['console'] = console
+    ctx.obj['history'] = get_command_history()
     formatter.set_console(console)
     commands.set_formatter_console(console)
     config_commands.set_formatter_console(console)
@@ -585,7 +586,7 @@ def _run_interactive_shell() -> int:
     formatter.print_info("Press Ctrl+R for history search, Tab for autocomplete.")
 
     cli_history_path = get_cli_history_path()
-    session = create_enhanced_prompt(history_path=cli_history_path)
+    session = create_enhanced_prompt(history_path=cli_history_path, cli_app=cli)
 
     def _load_history_strings() -> List[str]:
         if not cli_history_path.exists():
