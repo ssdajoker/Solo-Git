@@ -404,8 +404,9 @@ def pad_list(repo_id: Optional[str]) -> None:
     table = formatter.table(headers=["ID", "Title", "Status", "Checkpoints", "Tests", "Created"])
 
     for pad_obj in workpads:
-        status_color = theme.get_status_color(getattr(pad_obj, "status", "unknown"))
-        status_icon = theme.get_status_icon(getattr(pad_obj, "status", "unknown"))
+        status = getattr(pad_obj, "status", "unknown")
+        status_color = theme.get_status_color(status)
+        status_icon = theme.get_status_icon(status)
         status_display = f"[{status_color}]{status_icon} {pad_obj.status}[/{status_color}]"
 
         test_display = ""
