@@ -7,7 +7,7 @@ This guide walks you through setting up Solo Git for the first time.
 
 - Python 3.9 or higher
 - Git 2.30 or higher
-- Docker (for Phase 1+ test sandboxing)
+- No container runtime required (Solo Git rejects container setups)
 - Abacus.ai API account and credentials
 
 ## Installation

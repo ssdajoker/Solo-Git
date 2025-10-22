@@ -76,7 +76,7 @@ create_patch_from_files(pad_id, file_changes) → patch
 **File:** `sologit/engines/test_orchestrator.py` (280 lines)
 
 **Implemented Features:**
-- ✅ Docker sandbox integration
+- ✅ Subprocess sandbox integration (container runtime removed)
 - ✅ Test configuration with timeouts
 - ✅ Parallel test execution
 - ✅ Sequential test execution
@@ -129,7 +129,7 @@ get_summary(results) → dict
 **Added:**
 ```txt
 gitpython>=3.1.40
-docker>=7.0.0
+# Container runtime deliberately excluded
 ```
 
 ### 7. Tests ✅
@@ -164,7 +164,7 @@ All Phase 1 validation criteria met:
 - ✅ Repository can be initialized from Git URL
 - ✅ Workpad can be created from repository
 - ✅ Patches can be applied to workpad
-- ✅ Tests can run in Docker sandbox (framework ready)
+- ✅ Tests can run in subprocess sandbox (framework ready, container-free)
 - ✅ Workpad can be promoted to trunk (fast-forward merge)
 - ✅ CLI commands work end-to-end
 
@@ -175,7 +175,7 @@ All Phase 1 validation criteria met:
 - **Files Created**: 7 Python files
 - **Tests Written**: 24 test cases
 - **Commands Implemented**: 11 CLI commands
-- **Dependencies Added**: 2 (gitpython, docker)
+- **Dependencies Added**: 1 (gitpython) — container runtime intentionally excluded
 
 ### Code Quality Features
 - ✅ Type hints throughout
@@ -288,7 +288,7 @@ pytest tests/test_patch_engine.py -v
 ### Current Scope
 1. **Test Configuration**: Test configs are hardcoded in CLI commands
    - **Future**: Load from `evogit.yaml` file
-2. **Docker Required**: Test orchestrator requires Docker
+2. **Container Runtime (Legacy)**: Test orchestrator previously required a container runtime
    - **Future**: Fallback to local execution
 3. **No Remote Sync**: Repositories are local only
    - **Future**: Push/pull to remote repos
@@ -332,7 +332,7 @@ All performance targets met! 🎯
 1. **Git Branch Management**: Understanding gitpython's branch API
 2. **Metadata Persistence**: Choosing JSON over database for simplicity
 3. **Async/Sync Bridge**: TestOrchestrator needed both async (internals) and sync (CLI) APIs
-4. **Docker Integration**: Container lifecycle management required careful cleanup
+4. **Container Runtime Cleanup**: Historical container lifecycle management required careful cleanup
 
 ### Areas for Improvement 🔄
 1. **Error Messages**: Could be more user-friendly

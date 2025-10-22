@@ -342,11 +342,13 @@ class BudgetConfig:
 class TestConfig:
     """Test execution configuration."""
 
+    sandbox_image: str = "ghcr.io/solo-git/sandbox:latest"
     timeout_seconds: int = 300
     parallel_max: int = 4
     fast_tests: list = None
     full_tests: list = None
     smoke_tests: list = None
+    execution_mode: str = "auto"
     log_dir: Optional[str] = None
 
     def __post_init__(self):
@@ -442,11 +444,13 @@ class SoloGitConfig:
                 'track_by_model': self.budget.track_by_model,
             },
             'tests': {
+                'sandbox_image': self.tests.sandbox_image,
                 'timeout_seconds': self.tests.timeout_seconds,
                 'parallel_max': self.tests.parallel_max,
                 'fast_tests': self.tests.fast_tests,
                 'full_tests': self.tests.full_tests,
                 'smoke_tests': self.tests.smoke_tests,
+                'execution_mode': self.tests.execution_mode,
                 'log_dir': self.tests.log_dir,
             },
             'ci': {
@@ -631,12 +635,12 @@ class ConfigManager:
             },
             'budget': asdict(self.config.budget),
             'tests': {
+                'sandbox_image': self.config.tests.sandbox_image,
                 'timeout_seconds': self.config.tests.timeout_seconds,
                 'parallel_max': self.config.tests.parallel_max,
                 'fast_tests': self.config.tests.fast_tests,
                 'full_tests': self.config.tests.full_tests,
-                'smoke_tests': self.config.tests.smoke_tests,
-                'log_dir': self.config.tests.log_dir,
+                'smoke_tests': self.config.tests.smoke_tests
             },
             'ci': asdict(self.config.ci),
             'repos_path': self.config.repos_path,

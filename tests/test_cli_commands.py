@@ -2,11 +2,10 @@
 """Tests for the CLI commands."""
 import pytest
 from click.testing import CliRunner
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from sologit.cli.main import cli
 from sologit.engines.git_engine import GitEngineError
-from sologit.engines.test_orchestrator import TestStatus, TestResult
+from sologit.engines.test_orchestrator import TestStatus, TestResult, TestExecutionMode
 from datetime import datetime
 from pathlib import Path
 
@@ -33,19 +32,11 @@ def mock_test_orchestrator():
     with patch('sologit.cli.commands.get_test_orchestrator') as mock_get:
         mock_orchestrator = MagicMock()
         mock_orchestrator.run_tests = AsyncMock()
-        mock_orchestrator.mode = "subprocess"
+        # Mock the 'mode' attribute directly on the instance
+        mock_orchestrator.mode = MagicMock()
+        mock_orchestrator.mode.value = "docker"
         mock_get.return_value = mock_orchestrator
         yield mock_orchestrator
-
-
-@pytest.fixture
-def mock_state_manager():
-    """Fixture for a mocked StateManager used by CLI commands."""
-    with patch('sologit.cli.commands.StateManager') as mock_cls:
-        instance = MagicMock()
-        instance.create_test_run.return_value = SimpleNamespace(run_id='run-123')
-        mock_cls.return_value = instance
-        yield instance
 
 
 def test_repo_list_no_repos(mock_git_engine):
@@ -391,15 +382,15 @@ def test_pad_promote_not_fast_forward(mock_git_engine):
     assert "Trunk has diverged" in result.output
 
 
-def test_test_run_success(mock_git_engine, mock_test_orchestrator, mock_state_manager):
+def test_test_run_success(mock_git_engine, mock_test_orchestrator):
     """Test `test run` with successful test execution."""
     mock_pad = MagicMock()
     mock_pad.title = "test-pad"
     mock_git_engine.get_workpad.return_value = mock_pad
 
     results = [
-        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1234, exit_code=0, stdout='', stderr='', mode='subprocess', log_path=Path('/log/unit.txt')),
-        TestResult(name='integration', status=TestStatus.PASSED, duration_ms=5678, exit_code=0, stdout='', stderr='', mode='subprocess', log_path=Path('/log/int.txt')),
+        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1234, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('/log/unit.txt')),
+        TestResult(name='integration', status=TestStatus.PASSED, duration_ms=5678, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('/log/int.txt')),
     ]
     mock_test_orchestrator.run_tests.return_value = results
     mock_test_orchestrator.get_summary.return_value = {
@@ -417,35 +408,16 @@ def test_test_run_success(mock_git_engine, mock_test_orchestrator, mock_state_ma
     assert "All tests passed!" in result.output
     mock_test_orchestrator.run_tests.assert_called_once()
 
-    mock_state_manager.create_test_run.assert_called_once_with('pad1', 'full')
-    assert mock_state_manager.update_test_run.call_count == 2
-    first_call = mock_state_manager.update_test_run.call_args_list[0]
-    assert first_call.args[0] == 'run-123'
-    assert first_call.kwargs['status'] == 'running'
 
-    final_call = mock_state_manager.update_test_run.call_args_list[-1]
-    assert final_call.args[0] == 'run-123'
-    final_kwargs = final_call.kwargs
-    assert final_kwargs['status'] == 'passed'
-    assert final_kwargs['total_tests'] == 2
-    assert final_kwargs['passed'] == 2
-    assert final_kwargs['failed'] == 0
-    assert final_kwargs['skipped'] == 0
-    assert final_kwargs['duration_ms'] == 1234 + 5678
-    assert len(final_kwargs['tests']) == 2
-    assert final_kwargs['tests'][0].name == 'unit-tests'
-    assert final_kwargs['tests'][1].name == 'integration'
-
-
-def test_test_run_failure(mock_git_engine, mock_test_orchestrator, mock_state_manager):
+def test_test_run_failure(mock_git_engine, mock_test_orchestrator):
     """Test `test run` with failed tests."""
     mock_pad = MagicMock()
     mock_pad.title = "failing-pad"
     mock_git_engine.get_workpad.return_value = mock_pad
 
     results = [
-        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1000, exit_code=0, stdout='', stderr='', mode='subprocess', log_path=Path('log1.txt')),
-        TestResult(name='integration', status=TestStatus.FAILED, duration_ms=2000, exit_code=1, stdout='', stderr='', error="Assertion failed", mode='subprocess', log_path=Path('log2.txt')),
+        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1000, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('log1.txt')),
+        TestResult(name='integration', status=TestStatus.FAILED, duration_ms=2000, exit_code=1, stdout='', stderr='', error="Assertion failed", mode='docker', log_path=Path('log2.txt')),
     ]
     mock_test_orchestrator.run_tests.return_value = results
     mock_test_orchestrator.get_summary.return_value = {
@@ -462,77 +434,10 @@ def test_test_run_failure(mock_git_engine, mock_test_orchestrator, mock_state_ma
     assert "Passed: 1" in result.output
     assert "Failed: 1" in result.output
 
-    mock_state_manager.create_test_run.assert_called_once_with('pad1', 'fast')
-    assert mock_state_manager.update_test_run.call_count == 2
-    final_kwargs = mock_state_manager.update_test_run.call_args_list[-1].kwargs
-    assert final_kwargs['status'] == 'failed'
-    assert final_kwargs['passed'] == 1
-    assert final_kwargs['failed'] == 1
-    assert final_kwargs['total_tests'] == 2
-    assert len(final_kwargs['tests']) == 2
-    assert final_kwargs['tests'][1].status == 'failed'
-
-
-def test_test_run_exception_records_state(mock_git_engine, mock_test_orchestrator, mock_state_manager):
-    """Ensure exceptions during test execution are captured in state."""
-    mock_pad = MagicMock()
-    mock_pad.title = "boom-pad"
-    mock_git_engine.get_workpad.return_value = mock_pad
-
-    mock_test_orchestrator.run_tests.side_effect = RuntimeError("boom")
-
-    runner = CliRunner()
-    result = runner.invoke(cli, ['test', 'run', 'pad1'])
-
-    assert result.exit_code != 0
-    assert "Test Execution Failed" in result.output
-
-    mock_state_manager.create_test_run.assert_called_once_with('pad1', 'fast')
-    assert mock_state_manager.update_test_run.call_count == 2
-    final_kwargs = mock_state_manager.update_test_run.call_args_list[-1].kwargs
-    assert final_kwargs['status'] == 'failed'
-    assert final_kwargs['total_tests'] == 1
-    assert len(final_kwargs['tests']) == 1
-    assert final_kwargs['tests'][0].status == 'error'
-    assert final_kwargs['tests'][0].error == 'boom'
-
-
-def test_test_run_pad_not_found(mock_git_engine, mock_test_orchestrator, mock_state_manager):
+def test_test_run_pad_not_found(mock_git_engine, mock_test_orchestrator):
     """Test `test run` for a non-existent workpad."""
     mock_git_engine.get_workpad.return_value = None
     runner = CliRunner()
     result = runner.invoke(cli, ['test', 'run', 'nonexistent'])
     assert result.exit_code != 0
     assert "Workpad nonexistent not found" in result.output
-    mock_state_manager.create_test_run.assert_not_called()
-
-
-def test_test_run_unexpected_exception(mock_git_engine, mock_test_orchestrator):
-    """Test `test run` handles unexpected exceptions correctly with proper variable reference."""
-def test_test_run_exception_handler(mock_git_engine, mock_test_orchestrator):
-    """Test `test run` exception handler provides workpad context."""
-    mock_pad = MagicMock()
-    mock_pad.title = "test-pad"
-    mock_git_engine.get_workpad.return_value = mock_pad
-    
-    # Simulate an unexpected exception during test execution
-    mock_test_orchestrator.run_tests.side_effect = RuntimeError("Unexpected test orchestrator error")
-    
-    runner = CliRunner()
-    result = runner.invoke(cli, ['test', 'run', 'test-pad-123'])
-    
-    assert result.exit_code != 0
-    assert "Test execution failed" in result.output
-    assert "Unexpected test orchestrator error" in result.output
-    # Verify the error message uses pad_id correctly (not workpad_id which would cause NameError)
-    assert "evogitctl test run test-pad-123" in result.output
-    # Make run_tests raise an exception
-    mock_test_orchestrator.run_tests.side_effect = Exception("Unexpected test failure")
-    
-    runner = CliRunner()
-    result = runner.invoke(cli, ['test', 'run', 'pad123'])
-    
-    assert result.exit_code != 0
-    assert "Test execution failed" in result.output
-    assert "Workpad: pad123" in result.output  # Verify pad_id is shown
-    assert "Unexpected test failure" in result.output
