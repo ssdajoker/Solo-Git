@@ -76,6 +76,13 @@ See the [Heaven Interface Design System](docs/HEAVEN_INTERFACE.md) and [Heaven I
 - **Intelligent Analysis**: AI diagnoses failures and suggests fixes
 - **CI Integration**: Optional Jenkins/GitHub Actions for post-merge smoke tests
 
+## Zero Tolerance for Container Tooling
+
+Solo Git proudly enforces a no-container policy. Historical container workflows were
+excised, and we now rely exclusively on native subprocess execution. Container stacks
+are considered needless complexity for a solo developer and are intentionally shunned
+throughout the codebase and documentation.
+
 ### 🎯 **Production Ready**
 - **76% Test Coverage**: 555 tests passing, comprehensive validation
 - **Battle-Tested**: Phases 0-3 complete and verified

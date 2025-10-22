@@ -654,38 +654,21 @@ Deployment and CI/CD configuration.
 
 ```
 infrastructure/
-├── docker/                         # Docker images
-│   ├── Dockerfile.cli             # CLI container
-│   ├── Dockerfile.sandbox         # Test sandbox
-│   └── docker-compose.yml         # Multi-container setup
-│
 ├── jenkins/                        # Jenkins CI/CD
 │   ├── Jenkinsfile                # Pipeline definition
 │   ├── jenkins-config.xml         # Jenkins configuration
 │   └── plugins.txt                # Required plugins
 │
-└── sandbox/                        # Test sandbox configs
+└── sandbox/                        # Legacy sandbox configs (kept for history)
     ├── sandbox.yml                # Sandbox configuration
     └── entrypoint.sh              # Sandbox entry script
 ```
 
-### Docker Setup
+### Infrastructure Philosophy
 
-**CLI Container** (`Dockerfile.cli`):
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY sologit/ ./sologit/
-CMD ["evogitctl"]
-```
-
-**Sandbox Container** (`Dockerfile.sandbox`):
-- Isolated test environment
-- No network access
-- Timeout enforcement
-- Resource limits
+All container images were intentionally purged. We rely on direct subprocess execution
+and proudly refuse to ship or maintain container recipes. This repository treats
+containerization as an anti-pattern for Solo Git's workflows.
 
 ---
 

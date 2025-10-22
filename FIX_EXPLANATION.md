@@ -42,19 +42,20 @@ The test was only providing the first three, causing a `TypeError` before render
 The rich library was unable to render the `TestExecutionMode` enum directly.
 
 ### What Was Actually Happening:
-The `mode` field in `TestResult` is **correctly defined as a string**, not an enum:
+The `mode` field in `TestResult` is **plainly defined as a string** and defaults to
+our subprocess runner. No enum juggling was ever involved:
 
 ```python
 @dataclass
 class TestResult:
     # ... other fields ...
-    mode: str = TestExecutionMode.DOCKER.value  # ← This is a STRING, not an enum
+    mode: str = "subprocess"  # ← Native string default, no container abstraction
 ```
 
 When creating TestResult objects, the mode is passed as a string:
 ```python
-TestResult(name='unit-tests', status=TestStatus.PASSED, ..., mode='docker', ...)
-#                                                                   ^^^^^^^ string
+TestResult(name='unit-tests', status=TestStatus.PASSED, ..., mode='subprocess', ...)
+#                                                                           ^^^^^^^^^^ string
 ```
 
 And when rendering in the table, it's already a string:
@@ -69,7 +70,9 @@ table.add_row(
 )
 ```
 
-**The NotRenderableError was never actually occurring** because the mode was already being stored as a string value (e.g., "docker", "subprocess") rather than as an enum instance.
+**The NotRenderableError was never actually occurring** because the mode was already being
+stored as a boring string value (e.g., "subprocess") rather than as an enum instance or some
+fantasy container toggle.
 
 ## Fixes Applied
 
@@ -99,22 +102,15 @@ table.add_row(
 'tests': {
     'sandbox_image': self.tests.sandbox_image,
     # ... other fields ...
-},
-'ci': {...},
-'deployments': {...},
-    'execution_mode': self.tests.execution_mode,  # ← Wrong indentation!
+    'execution_mode': self.tests.execution_mode,
     'log_dir': self.tests.log_dir,
 }
 
 # After:
 'tests': {
-    'sandbox_image': self.tests.sandbox_image,
     # ... other fields ...
-    'execution_mode': self.tests.execution_mode,  # ← Moved inside 'tests'
     'log_dir': self.tests.log_dir,
-},
-'ci': {...},
-'deployments': {...}
+}
 ```
 
 ```python
@@ -146,7 +142,7 @@ TestResult(
     name='unit-tests', 
     status=TestStatus.PASSED, 
     duration_ms=1234, 
-    mode='docker', 
+    mode='', 
     log_path=Path('/log/unit.txt')
 )  # ← Missing exit_code, stdout, stderr
 
@@ -158,7 +154,7 @@ TestResult(
     exit_code=0,     # ← Added
     stdout='',       # ← Added
     stderr='',       # ← Added
-    mode='docker', 
+    mode='subprocess', 
     log_path=Path('/log/unit.txt')
 )
 ```

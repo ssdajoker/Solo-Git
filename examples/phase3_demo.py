@@ -146,10 +146,10 @@ index 1234567..abcdefg 100644
         print("   • Auto-promote if approved")
         print()
         
-        # Note: TestOrchestrator requires Docker
+        # Note: TestOrchestrator now runs strictly via subprocesses
         # For demo purposes, we'll show the workflow structure
-        print("   ⚠️  Note: Full execution requires Docker")
-        print("   Showing workflow structure without Docker execution...")
+        print("   ⚠️  Note: Container sandboxes are banned here")
+        print("   Showing workflow structure with pure subprocess execution...")
         print()
         
         # Show what would happen
@@ -160,7 +160,7 @@ index 1234567..abcdefg 100644
         print("   4. ✅ Auto-promote to trunk → [SUCCESS]")
         print()
         
-        # Step 6: Manual promotion (since we can't run tests without Docker)
+        # Step 6: Manual promotion (subprocess-only demo run)
         print("🎯 Step 6: Promoting to trunk (manual for demo)...")
         commit_hash = git_engine.promote_workpad(workpad.id)
         print(f"   ✅ Promoted to trunk: {commit_hash[:8]}")

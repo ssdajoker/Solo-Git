@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Removed
+- Dropped container-based sandbox execution; tests now run directly via subprocesses.
+
+### Changed
+- Simplified test configuration by removing `sandbox_image` and `execution_mode` options.
+- Updated documentation to reflect the native subprocess test runner.
+
 ## [0.4.0] - 2025-10-17
 
 ### Added - Phase 4: Documentation, Polish & Beta Preparation

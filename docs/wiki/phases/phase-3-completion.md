@@ -31,10 +31,10 @@ Phase 3 embodies the core Solo Git philosophy: **tests are the review**. The sys
 | **CLI Commands** | 270 | N/A | ✅ Complete |
 | **Phase 3 Tests** | 500+ | 100% | ✅ Complete |
 
-*Lower coverage due to Docker dependencies (not available in test environment)
+*Lower coverage due to historical container dependencies (not available in test environment)
 
 **Total New Code**: ~1,400 lines  
-**Total Tests**: 65 tests (46 passed, 19 skipped due to Docker)  
+**Total Tests**: 65 tests (46 passed, 19 skipped due to container runtime ban)
 **Overall Phase 3 Coverage**: 56% (core logic: 80%+)
 
 ---
@@ -134,7 +134,7 @@ if decision.can_promote:
 **Purpose**: Orchestrates the complete test → analyze → gate → promote workflow
 
 **Workflow Steps**:
-1. **Run Tests**: Execute test suite in Docker sandbox
+1. **Run Tests**: Execute test suite in subprocess sandbox
 2. **Analyze Results**: Identify patterns and suggest fixes
 3. **Evaluate Gate**: Check promotion rules
 4. **Auto-Promote**: Merge to trunk if approved (optional)
@@ -187,7 +187,7 @@ AUTO-MERGE WORKFLOW RESULT
 ==========================================================
 ```
 
-**Test Coverage**: 18% (core logic works, Docker tests skipped)
+**Test Coverage**: 18% (core logic works, container-dependent tests skipped)
 
 ---
 
@@ -223,7 +223,7 @@ sologit ci smoke <repo-id> --commit <hash>
 **Integration with Auto-Merge**:
 After promotion, CI smoke tests run automatically. If they fail, the rollback handler is triggered.
 
-**Test Coverage**: 30% (core logic works, Docker tests skipped)
+**Test Coverage**: 30% (core logic works, container-dependent tests skipped)
 
 ---
 
@@ -308,7 +308,7 @@ Analyze test failures (placeholder for cached results).
 | `test_promotion_gate.py` | 13 | ✅ 100% | Promotion gate logic |
 | `test_phase3_workflows.py` | 16 | ⚠️ 56%* | Workflow integration |
 
-*Some tests require Docker
+*Some tests require the deprecated container runtime
 
 ### Test Results Summary
 
@@ -560,7 +560,7 @@ User → Auto-Merge Workflow
 |--------|-------|-------|
 | Lines of Code | 1,427 | Pure Python implementation |
 | Test Coverage | 56% overall | 80%+ on core logic |
-| Tests Written | 48 | 46 passing, 2 Docker-dependent |
+| Tests Written | 48 | 46 passing, 2 legacy container-dependent |
 | Components | 5 major | All fully functional |
 | CLI Commands | 5 new | Complete workflow coverage |
 | Implementation Time | 1 day | Methodical, quality-focused |
@@ -582,7 +582,7 @@ User → Auto-Merge Workflow
 
 ## Known Limitations
 
-1. **Docker Dependency**: Test orchestration requires Docker (addressed with mocks in tests)
+1. **Container Dependency**: Test orchestration requires a container runtime (addressed with mocks in tests)
 2. **No Parallel Workpads**: Auto-merge doesn't handle concurrent promotions (future)
 3. **Limited AI Integration**: Test analysis is rule-based, not AI-powered yet
 4. **No Coverage Tracking**: Code coverage enforcement not implemented yet

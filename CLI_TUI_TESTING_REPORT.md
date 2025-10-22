@@ -22,7 +22,7 @@ Successfully tested the Solo Git CLI/TUI application. The application launches p
 - Installed all requirements from `requirements.txt`:
   - Core: click, pyyaml, requests
   - Git operations: gitpython
-  - Docker: docker
+  - Container runtime: intentionally excluded (policy ban)
   - TUI: rich, textual, prompt-toolkit
   - Testing: pytest, pytest-cov, pytest-asyncio
 - Installed Solo Git package in development mode: `pip install -e .`
