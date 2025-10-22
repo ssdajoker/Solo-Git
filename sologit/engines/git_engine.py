@@ -254,7 +254,6 @@ class GitEngine:
             if repo_path.exists():
                 shutil.rmtree(repo_path)
             raise GitEngineError(f"Failed to create empty repository: {exc}")
-    
     def create_workpad(self, repo_id: str, title: str) -> str:
         """
         Create ephemeral workpad.
