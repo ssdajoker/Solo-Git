@@ -246,7 +246,13 @@ def gui(ctx, dev: bool):
 
     formatter.print_info(f"Launching Heaven Interface GUI from {gui_path}...")
     try:
-        subprocess.Popen([str(gui_path)], env=env)
+        launch_cwd = gui_path.parent if gui_path.is_file() else gui_path
+        subprocess.Popen(
+            [str(gui_path)],
+            env=env,
+            cwd=str(launch_cwd),
+            start_new_session=True,
+        )
     except FileNotFoundError:
         abort_with_error(
             "GUI executable not found.",
