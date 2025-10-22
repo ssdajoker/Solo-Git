@@ -8,11 +8,16 @@ with intelligent model selection and cost management.
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from enum import Enum
 
 from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
-from sologit.orchestration.model_router import ModelRouter, ModelTier, ComplexityMetrics
+from sologit.orchestration.model_router import (
+    ComplexityMetrics,
+    ModelConfig,
+    ModelRouter,
+    ModelTier,
+)
 from sologit.orchestration.cost_guard import CostGuard, BudgetConfig
 from sologit.orchestration.planning_engine import PlanningEngine, CodePlan
 from sologit.orchestration.code_generator import CodeGenerator, GeneratedPatch
@@ -70,7 +75,7 @@ class AIOrchestrator:
         self,
         config_manager: Optional[ConfigManager] = None,
         formatter: Optional[RichFormatter] = None,
-    ):
+    ) -> None:
         """
         Initialize AI orchestrator.
         
@@ -101,7 +106,9 @@ class AIOrchestrator:
         logger.info("AIOrchestrator initialized")
     
     @contextmanager
-    def _progress(self, description: str, total: float = 100.0):
+    def _progress(
+        self, description: str, total: float = 100.0
+    ) -> Iterator[Optional[Tuple[Any, int]]]:
         """Provide a progress context for long-running orchestration steps."""
         if not self.formatter:
             yield None
@@ -121,7 +128,7 @@ class AIOrchestrator:
         task_id: Optional[int],
         description: str,
         advance: float,
-    ):
+    ) -> Iterator[None]:
         """Context manager that renders a spinner for a single stage."""
         if not progress or task_id is None:
             yield
@@ -675,7 +682,7 @@ class AIOrchestrator:
             'api_configured': bool(self.config.abacus.api_key)
         }
     
-    def _find_model_by_name(self, name: str):
+    def _find_model_by_name(self, name: str) -> Optional[ModelConfig]:
         """Find a model configuration by name."""
         for tier_models in self.model_router.models.values():
             for model in tier_models:

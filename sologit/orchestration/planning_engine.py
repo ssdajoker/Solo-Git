@@ -134,7 +134,7 @@ Respond with a structured JSON plan in this format:
 
 Be specific, practical, and consider the existing codebase structure."""
     
-    def __init__(self, client: AbacusClient):
+    def __init__(self, client: AbacusClient) -> None:
         """
         Initialize planning engine.
 

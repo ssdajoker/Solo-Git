@@ -75,7 +75,7 @@ class CostTracker:
     Tracks AI API costs and usage statistics.
     """
     
-    def __init__(self, storage_path: Optional[Path] = None):
+    def __init__(self, storage_path: Optional[Path] = None) -> None:
         """
         Initialize cost tracker.
         
@@ -90,7 +90,7 @@ class CostTracker:
         
         self._load_history()
     
-    def _load_history(self):
+    def _load_history(self) -> None:
         """Load usage history from disk."""
         if self.storage_path.exists():
             try:
@@ -109,7 +109,7 @@ class CostTracker:
             self.usage_history[today] = DailyUsage(date=today)
         self.current_usage = self.usage_history[today]
     
-    def _save_history(self):
+    def _save_history(self) -> None:
         """Save usage history to disk."""
         try:
             data = {
@@ -122,7 +122,7 @@ class CostTracker:
         except Exception as e:
             logger.error("Failed to save usage history: %s", e)
     
-    def record_usage(self, usage: TokenUsage):
+    def record_usage(self, usage: TokenUsage) -> None:
         """
         Record a token usage event.
         
@@ -221,7 +221,7 @@ class CostGuard:
         config: BudgetConfig,
         tracker: Optional[CostTracker] = None,
         status_path: Optional[Path] = None,
-    ):
+    ) -> None:
         """
         Initialize cost guard.
 
@@ -280,7 +280,7 @@ class CostGuard:
 
         return status
 
-    def _save_status(self):
+    def _save_status(self) -> None:
         """Persist current status to disk."""
 
         try:
@@ -289,7 +289,7 @@ class CostGuard:
         except Exception as exc:
             logger.error("Failed to persist budget status: %s", exc)
 
-    def _record_alert(self, level: str, message: str, projected_cost: float):
+    def _record_alert(self, level: str, message: str, projected_cost: float) -> None:
         """Record an alert entry if not already captured today."""
 
         alerts: List[Dict[str, Any]] = self._status.setdefault('alerts', [])
@@ -306,7 +306,7 @@ class CostGuard:
         )
         self._save_status()
 
-    def _update_status_cost(self, current_cost: float, projected_cost: float):
+    def _update_status_cost(self, current_cost: float, projected_cost: float) -> None:
         """Update status values and persist."""
 
         self._status['current_cost'] = round(current_cost, 4)
@@ -314,7 +314,7 @@ class CostGuard:
         self._status['last_updated'] = datetime.now().isoformat()
         self._save_status()
 
-    def _reset_if_new_day(self):
+    def _reset_if_new_day(self) -> None:
         """Reset status when day changes."""
 
         today = date.today().isoformat()
@@ -374,7 +374,7 @@ class CostGuard:
         completion_tokens: int,
         cost_per_1k: float,
         task_type: str = "unknown"
-    ):
+    ) -> None:
         """
         Record API usage.
         

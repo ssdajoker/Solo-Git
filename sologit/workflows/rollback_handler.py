@@ -35,10 +35,10 @@ class RollbackHandler:
     3. Allows developer to fix and retry
     """
     
-    def __init__(self, git_engine: GitEngine):
+    def __init__(self, git_engine: GitEngine) -> None:
         """
         Initialize rollback handler.
-        
+
         Args:
             git_engine: GitEngine instance
         """
@@ -177,7 +177,7 @@ class CIMonitor:
         self,
         git_engine: GitEngine,
         rollback_handler: RollbackHandler
-    ):
+    ) -> None:
         """
         Initialize CI monitor.
         

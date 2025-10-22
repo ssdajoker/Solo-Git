@@ -143,7 +143,7 @@ class HeavenTheme:
     UI rendering across CLI/TUI and GUI.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.colors = ColorPalette()
         self.typography = Typography()
         self.spacing = Spacing()

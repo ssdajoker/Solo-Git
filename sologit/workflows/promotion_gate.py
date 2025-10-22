@@ -58,11 +58,11 @@ class PromotionDecision:
     warnings: List[str] = field(default_factory=list)
     can_promote: bool = False
     
-    def add_reason(self, reason: str):
+    def add_reason(self, reason: str) -> None:
         """Add a reason for the decision."""
         self.reasons.append(reason)
-    
-    def add_warning(self, warning: str):
+
+    def add_warning(self, warning: str) -> None:
         """Add a warning."""
         self.warnings.append(warning)
 
@@ -78,7 +78,7 @@ class PromotionGate:
         self,
         git_engine: GitEngine,
         rules: Optional[PromotionRules] = None
-    ):
+    ) -> None:
         """
         Initialize promotion gate.
         

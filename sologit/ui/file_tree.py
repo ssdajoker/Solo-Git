@@ -4,6 +4,7 @@ File Tree Viewer for Heaven Interface.
 Displays repository file structure with git status indicators.
 """
 
+from textual.app import ComposeResult
 from textual.widgets import Tree, Static
 from textual.reactive import reactive
 from textual import events
@@ -69,13 +70,13 @@ class FileTreeWidget(Static):
     repo_path: reactive[Optional[str]] = reactive(None)
     show_hidden: reactive[bool] = reactive(False)
     
-    def __init__(self, repo_path: Optional[str] = None, **kwargs):
+    def __init__(self, repo_path: Optional[str] = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._repo_path_value = repo_path
         self.file_statuses: Dict[str, FileStatus] = {}
         self.selected_file: Optional[str] = None
-    
-    def compose(self):
+
+    def compose(self) -> ComposeResult:
         """Compose the file tree."""
         tree = Tree("Repository", id="file-tree")
         tree.show_root = True
@@ -242,7 +243,7 @@ class FileTreeWidget(Static):
 class FileSelected(events.Message):
     """Message emitted when a file is selected."""
     
-    def __init__(self, file_path: str, is_dir: bool):
+    def __init__(self, file_path: str, is_dir: bool) -> None:
         super().__init__()
         self.file_path = file_path
         self.is_dir = is_dir

@@ -130,7 +130,11 @@ def abort_with_error(
     help="Path to config file (default: ~/.sologit/config.yaml)",
 )
 @click.pass_context
-def cli(ctx, verbose, config):
+def cli(
+    ctx: click.Context,
+    verbose: bool,
+    config: Optional[Path],
+) -> None:
     """
     Solo Git - Frictionless Git workflow for AI-augmented solo developers.
 
@@ -194,7 +198,7 @@ def cli(ctx, verbose, config):
 
 @cli.command()
 @click.pass_context
-def version(ctx):
+def version(ctx: click.Context) -> None:
     """Show version information."""
     formatter.print_header("Solo Git Version")
     version_table = formatter.table(headers=["Component", "Value"])
@@ -215,7 +219,7 @@ def version(ctx):
 
 
 @cli.command()
-def hello():
+def hello() -> None:
     """
     Test command to verify Solo Git is working.
 
@@ -298,7 +302,7 @@ def shortcuts(dev: bool = False) -> None:
 @cli.command()
 @click.option('--dev', is_flag=True, help='Launch in development mode')
 @click.pass_context
-def gui(ctx, dev: bool):
+def gui(ctx: click.Context, dev: bool) -> None:
     """Launch the Heaven Interface GUI."""
     config_manager = ctx.obj.get("config") if ctx and ctx.obj else None
     env = os.environ.copy()
@@ -382,7 +386,7 @@ def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
 
 @cli.command()
 @click.option('--repo', 'repo_path', type=click.Path(exists=True), help='Repository path')
-def tui(repo_path: Optional[str] = None):
+def tui(repo_path: Optional[str] = None) -> None:
     """
     Launch the Heaven Interface TUI.
 
@@ -419,7 +423,7 @@ def tui(repo_path: Optional[str] = None):
 
 @cli.command()
 @click.option("--repo", "repo_path", type=click.Path(exists=True), help="Repository path")
-def heaven(repo_path: Optional[str]):
+def heaven(repo_path: Optional[str]) -> None:
     """
     Launch the Heaven Interface TUI (Production Version).
 
@@ -481,7 +485,7 @@ def heaven(repo_path: Optional[str]):
 
 
 @cli.command()
-def heaven_legacy():
+def heaven_legacy() -> None:
     """
     Launch the Legacy Enhanced Heaven Interface TUI.
 
@@ -504,7 +508,7 @@ def heaven_legacy():
 
 
 @cli.command()
-def interactive():
+def interactive() -> None:
     """
     Launch interactive shell with autocomplete.
 
@@ -522,7 +526,7 @@ def interactive():
 
 
 @cli.command()
-def undo():
+def undo() -> None:
     """Undo the last undoable command."""
     history = get_command_history()
     entry = history.undo()
@@ -534,7 +538,7 @@ def undo():
 
 
 @cli.command()
-def redo():
+def redo() -> None:
     """Redo the next command if available."""
     history = get_command_history()
     entry = history.redo()
@@ -548,7 +552,7 @@ def redo():
 @cli.command(name="history")
 @click.option("--limit", default=10, show_default=True, type=click.IntRange(1, 1000))
 @click.option("--all", "show_all", is_flag=True, help="Include non-CLI commands.")
-def show_history(limit: int, show_all: bool):
+def show_history(limit: int, show_all: bool) -> None:
     """Display recent command history."""
     history = get_command_history()
 
@@ -589,7 +593,15 @@ def show_history(limit: int, show_all: bool):
 @click.option("--no-promote", is_flag=True, help="Disable automatic promotion")
 @click.option("--target", type=click.Choice(["fast", "full"]), default="fast", help="Test target")
 @click.pass_context
-def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
+def pair(
+    ctx: click.Context,
+    prompt: Optional[str],
+    repo_id: Optional[str],
+    title: Optional[str],
+    no_test: bool,
+    no_promote: bool,
+    target: str,
+) -> None:
     """
     Start AI pair programming session.
 
@@ -654,7 +666,7 @@ except ImportError as e:
     logger.warning(f"Could not load integrated commands: {e}")
 
 
-def main():
+def main() -> None:
     """Entry point for the CLI."""
     try:
         if len(sys.argv) == 1 and sys.stdin.isatty():

@@ -43,7 +43,7 @@ class Repository:
     last_activity: datetime = field(default_factory=datetime.now)
     """Last activity timestamp"""
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure path is a Path object."""
         if isinstance(self.path, str):
             self.path = Path(self.path)

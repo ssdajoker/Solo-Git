@@ -184,7 +184,7 @@ class ModelConfig:
             "planning": self.planning.to_dict(),
         }
 
-    def merge_ai_models(self, override: Dict[str, Any]):
+    def merge_ai_models(self, override: Dict[str, Any]) -> None:
         """Merge new-style AI model configuration overrides."""
 
         for tier_name, tier_override in override.items():
@@ -206,7 +206,7 @@ class ModelConfig:
                         fallback_override, defaults
                     )
 
-    def apply_legacy_fields(self, legacy: Dict[str, Any]):
+    def apply_legacy_fields(self, legacy: Dict[str, Any]) -> None:
         """Apply legacy flat model configuration fields."""
 
         if not isinstance(legacy, dict):
@@ -328,7 +328,7 @@ class BudgetConfig:
 
     escalation_triggers: Dict[str, Any] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.escalation_triggers is None:
             self.escalation_triggers = {
                 "patch_lines": 200,
@@ -349,7 +349,7 @@ class TestConfig:
     smoke_tests: list = None
     log_dir: Optional[str] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.fast_tests is None:
             self.fast_tests = []
         if self.full_tests is None:
@@ -388,7 +388,7 @@ class SoloGitConfig:
     ci: CISmokeConfig = None
     deployments: Dict[str, DeploymentCredentials] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.abacus is None:
             self.abacus = AbacusAPIConfig()
         if self.models is None:
@@ -399,7 +399,7 @@ class SoloGitConfig:
             self.tests = TestConfig()
         if self.ci is None:
             self.ci = CISmokeConfig()
-    
+
         if self.deployments is None:
             self.deployments = {}
 
@@ -471,7 +471,7 @@ class ConfigManager:
     DEFAULT_CONFIG_DIR = Path.home() / ".sologit"
     DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.yaml"
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Optional[Path] = None) -> None:
         """
         Initialize configuration manager.
 
@@ -615,7 +615,7 @@ class ConfigManager:
 
         return config
 
-    def save_config(self):
+    def save_config(self) -> None:
         """Save current configuration to file."""
         # Ensure config directory exists
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -669,7 +669,9 @@ class ConfigManager:
         """Get the current configuration."""
         return self.config
 
-    def set_abacus_credentials(self, api_key: str, endpoint: Optional[str] = None):
+    def set_abacus_credentials(
+        self, api_key: str, endpoint: Optional[str] = None
+    ) -> None:
         """Set Abacus.ai API credentials."""
         self.config.abacus.api_key = api_key
         if endpoint:
@@ -681,7 +683,7 @@ class ConfigManager:
         name: str,
         deployment_id: str,
         deployment_token: str,
-    ):
+    ) -> None:
         """Persist deployment credentials for an Abacus.ai deployment."""
         if not self.config.deployments:
             self.config.deployments = {}
@@ -724,7 +726,7 @@ class ConfigManager:
 
         return len(errors) == 0, errors
 
-    def _build_fernet(self):
+    def _build_fernet(self) -> Optional[Fernet]:
         """Initialise Fernet instance if encryption key is available."""
         secret = os.getenv('SOLOGIT_CONFIG_SECRET')
         if not secret:

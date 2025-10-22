@@ -72,7 +72,7 @@ Example patch format:
 
 Only output the patch itself, no explanatory text outside the diff."""
     
-    def __init__(self, client: AbacusClient):
+    def __init__(self, client: AbacusClient) -> None:
         """
         Initialize code generator.
 

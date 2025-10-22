@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 try:  # pragma: no cover - platform-specific dependency
     import resource  # type: ignore
@@ -88,7 +88,9 @@ class TestOrchestrator:
         logger.info("TestOrchestrator initialized in subprocess mode")
 
     @contextmanager
-    def _progress(self, description: str, total: Optional[int] = None):
+    def _progress(
+        self, description: str, total: Optional[int] = None
+    ) -> Iterator[Optional[Tuple[Any, int]]]:
         """Create a scoped progress context if a formatter is available."""
         if not self.formatter:
             yield None
@@ -108,7 +110,7 @@ class TestOrchestrator:
         task_id: Optional[int],
         description: str,
         advance: int = 1,
-    ):
+    ) -> Iterator[None]:
         """Show a spinner for a single orchestration stage."""
         if not progress or task_id is None:
             yield

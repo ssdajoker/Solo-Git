@@ -8,7 +8,8 @@ Provides structured logging with different levels and formatters.
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Type
 
 
 # Color codes for terminal output
@@ -35,11 +36,11 @@ class ColoredFormatter(logging.Formatter):
         'CRITICAL': Colors.RED + Colors.BOLD
     }
     
-    def __init__(self, fmt: Optional[str] = None, use_colors: bool = True):
+    def __init__(self, fmt: Optional[str] = None, use_colors: bool = True) -> None:
         super().__init__(fmt)
         self.use_colors = use_colors and sys.stderr.isatty()
-    
-    def format(self, record):
+
+    def format(self, record: logging.LogRecord) -> str:
         if self.use_colors:
             levelname = record.levelname
             if levelname in self.LEVEL_COLORS:
@@ -49,7 +50,7 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_logging(verbose: bool = False, log_file: Optional[Path] = None):
+def setup_logging(verbose: bool = False, log_file: Optional[Path] = None) -> None:
     """
     Setup logging configuration.
     
@@ -115,16 +116,21 @@ def get_logger(name: str) -> logging.Logger:
 class LogContext:
     """Context manager for temporary log level changes."""
     
-    def __init__(self, logger: logging.Logger, level: int):
+    def __init__(self, logger: logging.Logger, level: int) -> None:
         self.logger = logger
         self.level = level
         self.old_level = None
-    
-    def __enter__(self):
+
+    def __enter__(self) -> logging.Logger:
         self.old_level = self.logger.level
         self.logger.setLevel(self.level)
         return self.logger
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         self.logger.setLevel(self.old_level)
 

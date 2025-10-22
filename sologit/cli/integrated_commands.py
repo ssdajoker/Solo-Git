@@ -74,7 +74,7 @@ def get_test_orchestrator() -> TestOrchestrator:
 
 
 @click.group()
-def workpad():
+def workpad() -> None:
     """Workpad lifecycle management (integrated)."""
     pass
 
@@ -83,7 +83,7 @@ def workpad():
 @click.argument('title')
 @click.option('--repo', 'repo_id', type=str, help='Repository ID (auto-selects if only one)')
 @click.pass_context
-def workpad_create(ctx, title: str, repo_id: Optional[str]):
+def workpad_create(ctx: click.Context, title: str, repo_id: Optional[str]) -> None:
     """
     Create a new workpad (ephemeral workspace).
     
@@ -157,7 +157,9 @@ def workpad_create(ctx, title: str, repo_id: Optional[str]):
 @click.option('--status', type=click.Choice(['active', 'promoted', 'deleted']), 
               help='Filter by status')
 @click.pass_context
-def workpad_list(ctx, repo_id: Optional[str], status: Optional[str]):
+def workpad_list(
+    ctx: click.Context, repo_id: Optional[str], status: Optional[str]
+) -> None:
     """
     List all workpads.
     
@@ -218,7 +220,7 @@ def workpad_list(ctx, repo_id: Optional[str], status: Optional[str]):
 @workpad.command('status')
 @click.argument('workpad_id', required=False)
 @click.pass_context
-def workpad_status(ctx, workpad_id: Optional[str]):
+def workpad_status(ctx: click.Context, workpad_id: Optional[str]) -> None:
     """
     Show detailed workpad status.
     
@@ -319,7 +321,7 @@ def workpad_status(ctx, workpad_id: Optional[str]):
 @click.argument('workpad_id', required=False)
 @click.option('--base', default='trunk', help='Base branch to diff against')
 @click.pass_context
-def workpad_diff(ctx, workpad_id: Optional[str], base: str):
+def workpad_diff(ctx: click.Context, workpad_id: Optional[str], base: str) -> None:
     """
     Show diff for workpad.
     
@@ -357,7 +359,9 @@ def workpad_diff(ctx, workpad_id: Optional[str], base: str):
 @click.argument('workpad_id', required=False)
 @click.option('--force', is_flag=True, help='Force promote without test check')
 @click.pass_context
-def workpad_promote(ctx, workpad_id: Optional[str], force: bool):
+def workpad_promote(
+    ctx: click.Context, workpad_id: Optional[str], force: bool
+) -> None:
     """
     Promote workpad to trunk (merge).
     
@@ -415,7 +419,7 @@ def workpad_promote(ctx, workpad_id: Optional[str], force: bool):
 @click.argument('workpad_id')
 @click.option('--force', is_flag=True, help='Force delete even if not merged')
 @click.pass_context
-def workpad_delete(ctx, workpad_id: str, force: bool):
+def workpad_delete(ctx: click.Context, workpad_id: str, force: bool) -> None:
     """
     Delete a workpad.
     
@@ -453,7 +457,7 @@ def workpad_delete(ctx, workpad_id: str, force: bool):
 
 
 @click.group()
-def ai():
+def ai() -> None:
     """AI-powered operations (integrated)."""
     pass
 
@@ -461,7 +465,7 @@ def ai():
 @ai.command('commit-message')
 @click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
 @click.pass_context
-def ai_commit_message(ctx, workpad_id: Optional[str]):
+def ai_commit_message(ctx: click.Context, workpad_id: Optional[str]) -> None:
     """
     Generate AI commit message from diff.
     
@@ -530,7 +534,7 @@ def ai_commit_message(ctx, workpad_id: Optional[str]):
 @ai.command('review')
 @click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
 @click.pass_context
-def ai_review(ctx, workpad_id: Optional[str]):
+def ai_review(ctx: click.Context, workpad_id: Optional[str]) -> None:
     """
     AI code review for workpad changes.
     
@@ -615,7 +619,7 @@ def ai_review(ctx, workpad_id: Optional[str]):
 
 @ai.command('status')
 @click.pass_context
-def ai_status(ctx):
+def ai_status(ctx: click.Context) -> None:
     """Show AI orchestrator status (models, budget, etc)."""
     config_manager = ctx.obj.get('config')
     
@@ -652,7 +656,7 @@ def ai_status(ctx):
 
 
 @click.group()
-def history():
+def history() -> None:
     """Git history and log commands."""
     pass
 
@@ -662,7 +666,9 @@ def history():
 @click.option('--limit', default=20, help='Number of commits to show')
 @click.option('--branch', type=str, help='Branch name')
 @click.pass_context
-def history_log(ctx, repo_id: Optional[str], limit: int, branch: Optional[str]):
+def history_log(
+    ctx: click.Context, repo_id: Optional[str], limit: int, branch: Optional[str]
+) -> None:
     """
     Show commit history.
     
@@ -719,7 +725,7 @@ def history_log(ctx, repo_id: Optional[str], limit: int, branch: Optional[str]):
 @click.option('--repo', 'repo_id', type=str, help='Repository ID')
 @click.option('--confirm', is_flag=True, help='Skip confirmation prompt')
 @click.pass_context
-def history_revert(ctx, repo_id: Optional[str], confirm: bool):
+def history_revert(ctx: click.Context, repo_id: Optional[str], confirm: bool) -> None:
     """
     Revert last commit on trunk.
     
@@ -769,7 +775,12 @@ def history_revert(ctx, repo_id: Optional[str], confirm: bool):
 @click.option('--file', 'target_file', type=str, help='Target file to create/modify')
 @click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
 @click.pass_context
-def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Optional[str]):
+def ai_generate(
+    ctx: click.Context,
+    prompt: str,
+    target_file: Optional[str],
+    workpad_id: Optional[str],
+) -> None:
     """
     Generate code using AI.
     
@@ -860,7 +871,12 @@ def ai_generate(ctx, prompt: str, target_file: Optional[str], workpad_id: Option
 @click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
 @click.option('--instruction', type=str, help='Specific refactoring instruction')
 @click.pass_context
-def ai_refactor(ctx, file_path: str, workpad_id: Optional[str], instruction: Optional[str]):
+def ai_refactor(
+    ctx: click.Context,
+    file_path: str,
+    workpad_id: Optional[str],
+    instruction: Optional[str],
+) -> None:
     """
     Refactor code using AI.
     
@@ -933,7 +949,9 @@ def ai_refactor(ctx, file_path: str, workpad_id: Optional[str], instruction: Opt
 @click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
 @click.option('--framework', type=click.Choice(['pytest', 'unittest']), default='pytest')
 @click.pass_context
-def ai_test_gen(ctx, file_path: str, workpad_id: Optional[str], framework: str):
+def ai_test_gen(
+    ctx: click.Context, file_path: str, workpad_id: Optional[str], framework: str
+) -> None:
     """
     Generate tests for code using AI.
     
@@ -1009,7 +1027,12 @@ def ai_test_gen(ctx, file_path: str, workpad_id: Optional[str], framework: str):
 @click.option('--pad', 'workpad_id', type=str, help='Workpad ID')
 @click.option('--message', '-m', type=str, help='Commit message')
 @click.pass_context
-def workpad_apply_patch(ctx, patch_file: Optional[str], workpad_id: Optional[str], message: Optional[str]):
+def workpad_apply_patch(
+    ctx: click.Context,
+    patch_file: Optional[str],
+    workpad_id: Optional[str],
+    message: Optional[str],
+) -> None:
     """
     Apply a patch to workpad.
     
@@ -1069,14 +1092,14 @@ def workpad_apply_patch(ctx, patch_file: Optional[str], workpad_id: Optional[str
 
 
 @click.group()
-def edit():
+def edit() -> None:
     """Edit and history commands (undo/redo)."""
     pass
 
 
 @edit.command('undo')
 @click.pass_context
-def edit_undo(ctx):
+def edit_undo(ctx: click.Context) -> None:
     """
     Undo the last command.
     
@@ -1103,7 +1126,7 @@ def edit_undo(ctx):
 
 @edit.command('redo')
 @click.pass_context
-def edit_redo(ctx):
+def edit_redo(ctx: click.Context) -> None:
     """
     Redo the last undone command.
     
@@ -1132,7 +1155,9 @@ def edit_redo(ctx):
 @click.option('--limit', type=int, default=20, help='Number of entries to show')
 @click.option('--search', type=str, help='Search query')
 @click.pass_context
-def edit_history(ctx, limit: int, search: Optional[str]):
+def edit_history(
+    ctx: click.Context, limit: int, search: Optional[str]
+) -> None:
     """
     Show command history.
     

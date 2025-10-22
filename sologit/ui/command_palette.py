@@ -30,7 +30,7 @@ class Command:
     shortcut: Optional[str] = None
     keywords: List[str] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.keywords is None:
             self.keywords = []
 
@@ -88,7 +88,7 @@ class FuzzyMatcher:
 class CommandItem(Static):
     """A single command item in the palette."""
     
-    def __init__(self, command: Command, **kwargs):
+    def __init__(self, command: Command, **kwargs) -> None:
         super().__init__(**kwargs)
         self.command = command
     
@@ -164,7 +164,7 @@ class CommandPaletteScreen(ModalScreen):
     }
     """
     
-    def __init__(self, commands: List[Command], **kwargs):
+    def __init__(self, commands: List[Command], **kwargs) -> None:
         super().__init__(**kwargs)
         self.commands = commands
         self.filtered_commands: List[Command] = []
@@ -290,7 +290,7 @@ class CommandPaletteScreen(ModalScreen):
 class CommandRegistry:
     """Registry for managing available commands."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.commands: List[Command] = []
         self._setup_default_commands()
     

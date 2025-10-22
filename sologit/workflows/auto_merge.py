@@ -67,7 +67,7 @@ class AutoMergeWorkflow:
         ci_smoke_tests: Optional[List[TestConfig]] = None,
         ci_config: Optional["CISmokeConfig"] = None,
         rollback_on_ci_red: bool = True,
-    ):
+    ) -> None:
         """
         Initialize auto-merge workflow.
         

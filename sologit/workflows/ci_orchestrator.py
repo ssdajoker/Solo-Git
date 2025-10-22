@@ -61,7 +61,7 @@ class CIOrchestrator:
         self,
         git_engine: GitEngine,
         test_orchestrator: TestOrchestrator
-    ):
+    ) -> None:
         """
         Initialize CI orchestrator.
         
