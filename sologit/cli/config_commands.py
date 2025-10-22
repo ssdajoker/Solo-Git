@@ -34,6 +34,10 @@ def abort_with_error(
     title: Optional[str] = None,
     help_text: Optional[str] = None,
     tip: Optional[str] = None,
+    suggestions: Optional[List[str]] = None,
+    docs_url: Optional[str] = None,
+) -> NoReturn:
+    """Display a formatted error panel with context and exit."""
     suggestions: Optional[Iterable[str]] = None,
     docs_url: Optional[str] = None,
 ) -> None:
@@ -51,6 +55,10 @@ def abort_with_error(
         docs_url=docs_url or "docs/SETUP.md#configuration",
         details=details,
     )
+    sys.exit(1)
+
+
+@click.group(name='config')
     raise click.Abort()
 
 
@@ -87,6 +95,12 @@ def config_group() -> None:
     """Configuration management commands."""
 
 
+@config_group.command(name='setup')
+@click.option('--api-key', help='Abacus.ai API key')
+@click.option('--endpoint', help='Abacus.ai API endpoint',
+              default='https://api.abacus.ai/v1')
+@click.option('--interactive/--no-interactive', default=True,
+              help='Interactive setup mode')
 @config_group.command(name="setup")
 @click.option("--api-key", help="Abacus.ai API key")
 @click.option(
@@ -201,6 +215,7 @@ def test_config(ctx: click.Context) -> None:
     config_manager = _get_config_manager(ctx)
     is_valid, issues = config_manager.validate()
     if not is_valid:
+        formatter.print_error(
         issue_text = "\n".join(f"- {issue}" for issue in issues)
         abort_with_error(
             "Configuration Validation Failed",
@@ -208,6 +223,13 @@ def test_config(ctx: click.Context) -> None:
             help_text="Review the issues below and update your configuration file accordingly.",
             tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
         )
+        error_table = formatter.table(headers=["Issues"])
+        for error in error_messages:
+            error_table.add_row(error)
+        formatter.console.print(error_table)
+        sys.exit(1)
+
+    formatter.print_success("Configuration is valid")
 
     config = config_manager.get_config()
     if not config.abacus.is_configured():
@@ -260,6 +282,57 @@ def budget_status(ctx: click.Context) -> None:
     config_manager = _get_config_manager(ctx)
     config = config_manager.get_config()
 
+    formatter.print_header("Solo Git Budget Status")
+    summary_table = formatter.table(headers=["Metric", "Value"])
+    summary_table.add_row("Daily Cap", f"${status['daily_cap']:.2f}")
+    summary_table.add_row("Used Today", f"${status['current_cost']:.2f}")
+    summary_table.add_row("Remaining", f"${status['remaining']:.2f}")
+    summary_table.add_row("Usage", f"{status['percentage_used']:.1f}%")
+    budget_icon = theme.icons.success if status["within_budget"] else theme.icons.warning
+    budget_color = theme.colors.success if status["within_budget"] else theme.colors.warning
+    summary_table.add_row(
+        "Within Budget",
+        f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]",
+    )
+    formatter.console.print(summary_table)
+
+    # Provide simple textual summary for log parsing/tests
+    formatter.print_info(f"Daily Cap:       ${status['daily_cap']:.2f}")
+    formatter.print_info(f"Used Today:     ${status['current_cost']:.2f}")
+    formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
+    formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
+
+    if status.get("alerts"):
+        alerts_panel = "\n".join(
+            f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
+            for alert in status["alerts"]
+        )
+        formatter.print_warning("Budget alerts detected.")
+        formatter.print_info_panel(alerts_panel, title="Alerts")
+
+    breakdown: Dict[str, Any] = status.get('usage_breakdown') or {}
+    if breakdown:
+        breakdown_table = formatter.table(headers=["Metric", "Value"])
+        breakdown_table.add_row(
+            "Total Tokens",
+            f"{breakdown.get('total_tokens', 0)} in {breakdown.get('calls_count', 0)} calls",
+        )
+        if breakdown.get("by_model"):
+            model_lines = [f"{model}: ${cost:.4f}" for model, cost in breakdown["by_model"].items()]
+            breakdown_table.add_row("By Model", "\n".join(model_lines))
+        if breakdown.get("by_task"):
+            task_lines = [f"{task}: ${cost:.4f}" for task, cost in breakdown["by_task"].items()]
+            breakdown_table.add_row("By Task", "\n".join(task_lines))
+        formatter.print_info_panel("Usage breakdown", title="Detailed Usage")
+        formatter.console.print(breakdown_table)
+
+    last_usage = cast(Optional[Dict[str, Any]], status.get('last_usage'))
+    if last_usage:
+        last_panel = (
+            f"Timestamp: {last_usage['timestamp']}\n"
+            f"Model: {last_usage['model']}\n"
+            f"Cost: ${last_usage['cost_usd']:.4f}\n"
+            f"Tokens: {last_usage['total_tokens']}"
     if not isinstance(config.budget, BudgetConfig):
         abort_with_error(
             "Invalid budget configuration",
@@ -288,6 +361,8 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_warning("Budget exceeded — consider pausing automated runs.")
 
 
+@config_group.command(name='init')
+@click.option('--force', is_flag=True, help='Overwrite existing config file')
 @config_group.command(name="init")
 @click.option("--force", is_flag=True, help="Overwrite existing configuration file")
 def init_config(force: bool) -> None:
@@ -310,6 +385,10 @@ def init_config(force: bool) -> None:
     formatter.print_success(f"Created configuration file at {config_path}")
 
 
+@config_group.command(name='env-template')
+def env_template() -> None:
+    """Generate .env template file."""
+    env_path = Path.cwd() / ".env.example"
 @config_group.command(name="path")
 def config_path() -> None:
     """Print the path to the active configuration file."""
@@ -326,3 +405,8 @@ def env_template() -> None:
     target.write_text(ENV_TEMPLATE.rstrip() + "\n", encoding="utf-8")
     formatter.print_success(f"Created .env.example at {target.resolve()}")
 
+@config_group.command(name='path')
+def config_path() -> None:
+    """Show configuration file path."""
+    formatter.print_header("Configuration Path")
+    formatter.print_info(str(ConfigManager.DEFAULT_CONFIG_FILE))
