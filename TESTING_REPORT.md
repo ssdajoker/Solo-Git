@@ -277,7 +277,7 @@ evogitctl tui
 ## 9. Testing Limitations & Assumptions
 
 ### Test Environment Constraints:
-1. **No **: Test orchestrator functionality couldn't be fully tested
+1. **No container runtime**: Test orchestrator functionality couldn't be fully tested
 2. **No Rust**: GUI couldn't be compiled and run directly
 3. **No Abacus.ai API**: AI features tested for structure only
 4. **No Jenkins**: CI/CD integration not verified
