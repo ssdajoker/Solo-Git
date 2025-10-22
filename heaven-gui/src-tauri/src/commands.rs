@@ -340,11 +340,10 @@ pub(crate) fn apply_patch(
         .write_all(diff.as_bytes())
         .map_err(|e| format!("Failed to write patch diff: {}", e))?;
 
-    let patch_path = temp_file.path().to_path_buf();
-    temp_file.keep().map_err(|e| {
+    let (_file, patch_path) = temp_file.keep().map_err(|e| {
         format!(
             "Failed to persist temporary patch {}: {}",
-            patch_path.display(),
+            e.file.path().display(),
             e.error
         )
     })?;
