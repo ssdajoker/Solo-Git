@@ -637,10 +637,6 @@ def _default_tests(target: str) -> Sequence[TestConfig]:
     ]
 
 
-@test.command('run')
-@click.argument('pad_id')
-@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
-@click.option('--parallel/--sequential', default=True, help='Parallel execution')
 @test.command("run")
 @click.argument("pad_id")
 @click.option("--target", type=click.Choice(["fast", "full"]), default="fast", help="Test target")
@@ -661,39 +657,28 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     state_manager.update_test_run(run_id, status="running")
     run_started_at = time.time()
 
-    if target == 'fast':
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-        ]
-    else:
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-            TestConfig(
-                name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120
-            ),
     tests = list(_default_tests(target))
 
+    mode_display = getattr(test_orchestrator, "mode", "subprocess")
     info_panel = "\n".join(
         [
             f"[bold]Workpad:[/bold] {workpad.title}",
             f"[bold]Tests:[/bold] {len(tests)}",
             f"[bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}",
-            f"[bold]Mode:[/bold] {test_orchestrator.mode.value if hasattr(test_orchestrator, 'mode') else 'unknown'}",
+            f"[bold]Mode:[/bold] {mode_display}",
             f"[bold]Target:[/bold] {target}",
         ]
     )
     formatter.print_panel(info_panel, title="🧪 Test Execution")
 
     try:
-        info = f"""[bold]Workpad:[/bold] {workpad.title}
-[bold]Tests:[/bold] {len(tests)}
-[bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
-[bold]Mode:[/bold] {test_orchestrator.mode}
-[bold]Target:[/bold] {target}"""
-        formatter.print_panel(info, title="🧪 Test Execution")
-
-        with formatter.create_progress() as progress:
-            task_id = progress.add_task(f"Running {target} tests...", total=len(tests))
+        with formatter.progress(f"Running {target} tests") as progress_ctx:
+            progress = progress_ctx
+            total_tests = len(tests)
+            execution_task = progress.add_task(
+                f"{target.title()} suite",
+                total=total_tests if total_tests else None,
+            )
 
             def on_output(test_name: str, stream: str, line: str) -> None:
                 style = "cyan" if stream == "stdout" else "red"
@@ -701,7 +686,8 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                 formatter.console.print(f"[{prefix}] {test_name}: {line}", style=style)
 
             def on_complete(_: TestResult) -> None:
-                progress.advance(task_id)
+                if total_tests:
+                    progress.advance(execution_task)
 
             results: Sequence[TestResult] = asyncio.run(
                 test_orchestrator.run_tests(
@@ -712,6 +698,13 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                     on_test_complete=on_complete,
                 )
             )
+
+            if total_tests:
+                progress.update(
+                    execution_task,
+                    description="[green]Test execution complete",
+                    completed=total_tests,
+                )
 
         formatter.console.print()
 
@@ -767,10 +760,8 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         total = summary.get("total", len(results))
         timeout = summary.get("timeout", 0)
 
-        if summary['status'] == 'green':
+        if summary.get("status") == "green" and timeout == 0:
             formatter.print_success("All tests passed! Ready to promote.")
-        if failed == 0 and timeout == 0:
-            formatter.print_success("All tests passed!")
             final_status = "passed"
         else:
             formatter.print_error(
@@ -782,6 +773,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         formatter.print_info(f"Passed: {passed}")
         formatter.print_info(f"Failed: {failed}")
         formatter.print_info(f"Skipped: {skipped}")
+        formatter.print_info(f"Timeouts: {timeout}")
         formatter.print_info(f"Total: {total}")
 
         duration_ms = sum(result.duration_ms for result in results)
@@ -829,7 +821,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                 f"evogitctl test run {pad_id} --target {target}",
             ],
             docs_url="docs/TESTING.md#run-tests",
-            docs_url="docs/TESTING_GUIDE.md",
             details=str(exc),
         )
         raise click.Abort()
@@ -1251,7 +1242,8 @@ def execute_pair_loop(
         formatter.print_subheader("Workpad Setup")
         formatter.print_info("Creating ephemeral workpad...")
         assert repo_id is not None
-        pad_id = git_engine.create_workpad(repo_id, title)
+        with formatter.progress("Provisioning workpad"):
+            pad_id = git_engine.create_workpad(repo_id, title)
         workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
         formatter.print_success("Workpad created")
 
@@ -1276,7 +1268,8 @@ def execute_pair_loop(
             "trunk_branch": repo.trunk_branch,
         }
 
-        plan_response = orchestrator.plan(prompt=prompt, repo_context=context)
+        with formatter.progress("Generating AI plan"):
+            plan_response = orchestrator.plan(prompt=prompt, repo_context=context)
 
         planning_time = time.time() - start_time
         plan_panel = f"""[bold]Model:[/bold] {plan_response.model_used}
@@ -1322,7 +1315,8 @@ def execute_pair_loop(
         formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
         start_time = time.time()
 
-        patch_response = orchestrator.generate_patch(plan=plan, repo_context=context)
+        with formatter.progress("Synthesizing code patch"):
+            patch_response = orchestrator.generate_patch(plan=plan, repo_context=context)
         existing_files: Dict[str, str] = {}
         for change in plan.file_changes:
             if change.action.lower() != "modify":
@@ -1349,7 +1343,8 @@ def execute_pair_loop(
         patch_engine = get_patch_engine()
 
         try:
-            checkpoint_id = patch_engine.apply_patch(pad_id, patch.diff)
+            with formatter.progress("Applying code changes"):
+                checkpoint_id = patch_engine.apply_patch(pad_id, patch.diff)
             formatter.print_success(
                 f"Patch applied successfully (checkpoint {checkpoint_id})"
             )
