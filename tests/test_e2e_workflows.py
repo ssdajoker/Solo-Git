@@ -212,7 +212,6 @@ def _run_pytest_and_record(
     git_sync.update_test_run(run["run_id"], status=status, output=combined_output, exit_code=exit_code)
     return run, results
 
-
 def _analysis_from_results(results: Iterable[TestResult]) -> TestAnalysis:
     analyzer = TestAnalyzer()
     return analyzer.analyze(list(results))
