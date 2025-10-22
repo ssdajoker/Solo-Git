@@ -131,11 +131,11 @@ def setup_config(api_key, endpoint, interactive):
             docs_url="docs/SETUP.md#configuration",
         )
 
-    config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
 
     # Save configuration
     try:
         config_manager.set_abacus_credentials(api_key, endpoint)
+        config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
         formatter.print_success_panel(
             f"Configuration saved to [bold]{config_path}[/bold]",
             title="Configuration Saved"
