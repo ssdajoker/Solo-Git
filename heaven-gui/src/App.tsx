@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -13,17 +13,9 @@ import CommandPalette from './components/CommandPalette'
 import Settings from './components/Settings'
 import NotificationSystem, { Notification } from './components/NotificationSystem'
 import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp'
+import { useSoloGitOperations } from './hooks/useSoloGitOperations'
+import type { GlobalState } from './types/soloGit'
 import './styles/App.css'
-
-interface GlobalState {
-  version: string
-  last_updated: string
-  active_repo: string | null
-  active_workpad: string | null
-  session_start: string
-  total_operations: number
-  total_cost_usd: number
-}
 
 type ViewMode = 'idle' | 'navigation' | 'planning' | 'coding' | 'commit'
 
@@ -94,6 +86,33 @@ function App() {
     return globalState.active_workpad
   }
 
+  const {
+    createRepository: createRepositoryOperation,
+    deleteRepository: deleteRepositoryOperation,
+    createWorkpad: createWorkpadOperation,
+    runTests: runTestsOperation,
+    promoteWorkpad: promoteWorkpadOperation,
+    applyPatch: applyPatchOperation,
+    rollbackWorkpad: rollbackWorkpadOperation,
+    deleteWorkpad: deleteWorkpadOperation,
+  } = useSoloGitOperations({
+    onStateUpdated: loadState,
+  })
+
+  const getErrorMessage = useCallback((error: unknown) => {
+    if (error instanceof Error) {
+      return error.message
+    }
+    if (typeof error === 'string') {
+      return error
+    }
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return 'Unknown error'
+    }
+  }, [])
+
   const createRepository = async () => {
     const name = window.prompt('Repository name', 'new-repository')
     if (!name || !name.trim()) {
@@ -104,14 +123,13 @@ function App() {
 
     try {
       addNotification('Creating repository...', 'info')
-      await invoke('create_repository', {
+      await createRepositoryOperation({
         name: name.trim(),
-        path: path && path.trim() ? path.trim() : null
+        path: path && path.trim() ? path.trim() : null,
       })
       addNotification('Repository created', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to create repository: ${e}`, 'error')
+      addNotification(`Failed to create repository: ${getErrorMessage(e)}`, 'error')
     }
   }
 
@@ -125,11 +143,10 @@ function App() {
 
     try {
       addNotification('Deleting repository...', 'info')
-      await invoke('delete_repository', { repoId })
+      await deleteRepositoryOperation({ repoId })
       addNotification('Repository deleted', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to delete repository: ${e}`, 'error')
+      addNotification(`Failed to delete repository: ${getErrorMessage(e)}`, 'error')
     }
   }
 
@@ -142,31 +159,30 @@ function App() {
 
     try {
       addNotification('Creating workpad...', 'info')
-      await invoke('create_workpad', { repoId, title: title.trim() })
+      await createWorkpadOperation({ repoId, title: title.trim() })
       addNotification('Workpad created', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to create workpad: ${e}`, 'error')
+      addNotification(`Failed to create workpad: ${getErrorMessage(e)}`, 'error')
     }
   }
 
   const runTestsOnWorkpad = useCallback(async (workpadId: string, target: string) => {
-    await invoke('run_tests', { workpadId, target })
-    await loadState()
-  }, [loadState])
+    await runTestsOperation({ workpadId, target })
+  }, [runTestsOperation])
 
   const runTestsForActive = async (target?: string) => {
     const workpadId = ensureActiveWorkpad()
     if (!workpadId) return
 
-    const actualTarget = target ?? window.prompt('Test target (leave blank for default)', 'default') || 'default'
+    const promptResult = target ?? window.prompt('Test target (leave blank for default)', 'default') ?? 'default'
+    const actualTarget = promptResult && promptResult.trim() ? promptResult.trim() : 'default'
 
     try {
       addNotification('Running tests...', 'info')
       await runTestsOnWorkpad(workpadId, actualTarget)
       addNotification('Tests completed', 'success')
     } catch (e) {
-      addNotification(`Failed to run tests: ${e}`, 'error')
+      addNotification(`Failed to run tests: ${getErrorMessage(e)}`, 'error')
     }
   }
 
@@ -178,11 +194,10 @@ function App() {
 
     try {
       addNotification('Promoting workpad...', 'info')
-      await invoke('promote_workpad', { workpadId })
+      await promoteWorkpadOperation({ workpadId })
       addNotification('Workpad promoted', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to promote workpad: ${e}`, 'error')
+      addNotification(`Failed to promote workpad: ${getErrorMessage(e)}`, 'error')
     }
   }
 
@@ -201,11 +216,10 @@ function App() {
 
     try {
       addNotification('Applying patch...', 'info')
-      await invoke('apply_patch', { workpadId, message: message.trim(), diff })
+      await applyPatchOperation({ workpadId, message: message.trim(), diff })
       addNotification('Patch applied', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to apply patch: ${e}`, 'error')
+      addNotification(`Failed to apply patch: ${getErrorMessage(e)}`, 'error')
     }
   }
 
@@ -217,11 +231,10 @@ function App() {
 
     try {
       addNotification('Rolling back workpad...', 'info')
-      await invoke('rollback_workpad', { workpadId, reason: reason ?? undefined })
+      await rollbackWorkpadOperation({ workpadId, reason: reason ?? undefined })
       addNotification('Workpad rolled back', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to rollback workpad: ${e}`, 'error')
+      addNotification(`Failed to rollback workpad: ${getErrorMessage(e)}`, 'error')
     }
   }
 
@@ -233,16 +246,15 @@ function App() {
 
     try {
       addNotification('Deleting workpad...', 'info')
-      await invoke('delete_workpad', { workpadId })
+      await deleteWorkpadOperation({ workpadId })
       addNotification('Workpad deleted', 'success')
-      await loadState()
     } catch (e) {
-      addNotification(`Failed to delete workpad: ${e}`, 'error')
+      addNotification(`Failed to delete workpad: ${getErrorMessage(e)}`, 'error')
     }
   }
 
   // Define commands for Command Palette
-  const commands: any[] = [
+  const commands = useMemo(() => ([
     {
       id: 'toggle-command-palette',
       label: 'Toggle Command Palette',
@@ -368,7 +380,16 @@ function App() {
         void deleteRepository()
       },
     },
-  ]
+  ]), [
+    runTestsForActive,
+    createWorkpad,
+    promoteActiveWorkpad,
+    applyPatchToActive,
+    rollbackActiveWorkpad,
+    deleteActiveWorkpad,
+    createRepository,
+    deleteRepository,
+  ])
 
   // Define keyboard shortcuts
   const shortcuts: KeyboardShortcut[] = [
