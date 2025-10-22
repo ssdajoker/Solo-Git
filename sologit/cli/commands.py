@@ -38,6 +38,34 @@ def set_formatter_console(console: Console) -> None:
     formatter.set_console(console)
 
 
+def abort_with_error(
+    message: str,
+    details: Optional[str] = None,
+    *,
+    title: Optional[str] = None,
+    help_text: Optional[str] = None,
+    tip: Optional[str] = None,
+    suggestions: Optional[List[str]] = None,
+    docs_url: Optional[str] = None,
+) -> None:
+    """Display a formatted error with rich context and abort the command."""
+
+    default_help = help_text or "Use the --help flag to review available options."
+    default_tip = tip or "Common fix: double-check CLI arguments and repository context."
+    default_suggestions = suggestions or [
+        "evogitctl --help",
+        "evogitctl history --recent",
+    ]
+
+    formatter.print_error(
+        title or "Command Error",
+        message,
+        help_text=default_help,
+        tip=default_tip,
+        suggestions=default_suggestions,
+        docs_url=docs_url or "docs/SETUP.md",
+        details=details,
+    )
 def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
     """Display a formatted error and abort the command."""
     plain_message = f"Error: {message}"
@@ -192,10 +220,32 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
     formatter.print_header("Repository Initialization")
 
     if not zip_file and not git_url:
-        abort_with_error("Must provide either --zip or --git")
+        abort_with_error(
+            "Missing Repository Source",
+            "Provide either --zip <path> or --git <url> so Solo Git knows where to initialize from.",
+            title="Repository Initialization Blocked",
+            help_text="Choose exactly one source option. Use --zip for local archives or --git for remote repositories.",
+            tip="If you already cloned locally, package it as a zip and pass --zip to speed up initialization.",
+            suggestions=[
+                "evogitctl repo init --zip app.zip",
+                "evogitctl repo init --git https://github.com/org/project.git",
+            ],
+            docs_url="docs/SETUP.md#initialize-a-repository",
+        )
 
     if zip_file and git_url:
-        abort_with_error("Cannot provide both --zip and --git")
+        abort_with_error(
+            "Conflicting Options Provided",
+            "Only one source can be used at a time. Pass either --zip or --git, not both.",
+            title="Repository Initialization Blocked",
+            help_text="Remove one of the flags and rerun the command.",
+            tip="Use --zip when you have a packaged archive and --git for hosted repositories.",
+            suggestions=[
+                "evogitctl repo init --zip app.zip",
+                "evogitctl repo init --git https://github.com/org/project.git",
+            ],
+            docs_url="docs/SETUP.md#initialize-a-repository",
+        )
 
     git_engine = get_git_engine()
 
@@ -281,7 +331,18 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
         formatter.console.print(summary_table)
 
     except GitEngineError as e:
-        abort_with_error(str(e), "Repository initialization failed")
+        abort_with_error(
+            "Repository initialization failed",
+            str(e),
+            title="Repository Initialization Blocked",
+            help_text="Confirm the source path or URL is reachable and that your credentials allow cloning the repository.",
+            tip="If cloning from a private remote, ensure your SSH keys or HTTPS tokens are configured locally.",
+            suggestions=[
+                "Retry the command with --verbose",
+                "Check git remote access manually",
+            ],
+            docs_url="docs/SETUP.md#initialize-a-repository",
+        )
 
 
 @repo.command('list')
@@ -318,6 +379,17 @@ def repo_info(repo_id: str) -> None:
     """Show repository information."""
     git_engine = get_git_engine()
     repo = git_engine.get_repo(repo_id)
+    
+    if not repo:
+        available = [f"{r.id} • {getattr(r, 'name', r.id)}" for r in git_engine.list_repos()]
+        formatter.print_error(
+            "Repository Not Found",
+            f"Repository '{repo_id}' is not registered with Solo Git.",
+            help_text="Select one of the available repository IDs or initialize a new repository before retrying.",
+            tip="Run 'evogitctl repo list' to review active repositories before invoking repo info.",
+            suggestions=["evogitctl repo list"] + available[:5],
+            docs_url="docs/SETUP.md#initialize-a-repository",
+        )
 
     if repo is None:
         formatter.print_error(f"Repository {repo_id} not found")
@@ -654,7 +726,18 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         if summary['status'] == 'green':
             formatter.print_success("All tests passed! Ready to promote.")
         else:
-            formatter.print_error("Some tests require attention before promoting.")
+            formatter.print_error(
+                "Tests Require Attention",
+                "Some tests failed or timed out. Promotion has been halted until the issues are resolved.",
+                help_text="Review the failing rows in the summary table above and inspect the captured logs for each failing test.",
+                tip="Target a single test with 'evogitctl test run --only <test-name>' to iterate quickly.",
+                suggestions=[
+                    f"evogitctl test run --workpad {workpad.id}",
+                    f"evogitctl pad info {workpad.id}",
+                    "evogitctl test list",
+                ],
+                docs_url="docs/TESTING_GUIDE.md",
+            )
 
         log_paths = [res.log_path for res in results if res.log_path]
         if log_paths:
@@ -663,7 +746,18 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             )
 
     except Exception as exc:
-        formatter.print_error(f"Test execution failed: {exc}")
+        formatter.print_error(
+            "Test Execution Failed",
+            "Solo Git could not complete the requested test run.",
+            help_text="Inspect the error details below and confirm the test command is valid in your repository.",
+            tip="Many failures are caused by missing dependencies—run the command locally to reproduce and install prerequisites.",
+            suggestions=[
+                f"Retry: evogitctl test run --workpad {workpad_id}",
+                "Check logs in ~/.sologit/logs",
+            ],
+            docs_url="docs/TESTING_GUIDE.md",
+            details=str(exc),
+        )
         raise click.Abort()
 
 
