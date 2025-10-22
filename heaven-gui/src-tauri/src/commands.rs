@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::path::Path;
 use std::process::Command;
 
@@ -33,12 +35,30 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
             .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
 
-    let tmp_path = path.with_extension("tmp");
     let contents = serde_json::to_string_pretty(value)
         .map_err(|e| format!("Failed to serialize value for {}: {}", path.display(), e))?;
-    fs::write(&tmp_path, contents)
-        .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("Failed to persist {}: {}", path.display(), e))
+
+    let parent_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temp_file = tempfile::NamedTempFile::new_in(parent_dir).map_err(|e| {
+        format!(
+            "Failed to create temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    temp_file.write_all(contents.as_bytes()).map_err(|e| {
+        format!(
+            "Failed to write temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    temp_file
+        .persist(path)
+        .map_err(|e| format!("Failed to persist {}: {}", path.display(), e.error))?;
+    Ok(())
 }
 
 fn run_cli_command(args: Vec<String>) -> Result<String, String> {
@@ -282,6 +302,15 @@ pub(crate) fn apply_patch(
         final_message.to_string(),
     ];
 
+    let notes_path = get_state_dir()
+        .join("workpads")
+        .join(format!("{}-notes.log", workpad.workpad_id));
+    let entry = format!("{} :: {}\n\n{}\n\n", Utc::now().to_rfc3339(), message, diff);
+    let _ = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&notes_path)
+        .and_then(|mut file| file.write_all(entry.as_bytes()));
     let result = run_cli_command(cli_args);
 
     let _ = fs::remove_file(&temp_path);
@@ -380,10 +409,7 @@ pub(crate) fn rollback_workpad(
             .create(true)
             .append(true)
             .open(&log_path)
-            .and_then(|mut file| {
-                use std::io::Write;
-                file.write_all(entry.as_bytes())
-            });
+            .and_then(|mut file| file.write_all(entry.as_bytes()));
     }
 
     let workpad = save_workpad(workpad)?;
