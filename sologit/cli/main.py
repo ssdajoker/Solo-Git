@@ -20,6 +20,11 @@ from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
 from sologit.cli import commands, config_commands
 
+try:
+    from sologit.cli import integrated_commands
+except ImportError:  # pragma: no cover - optional feature set
+    integrated_commands = None
+
 # Re-export ConfigManager for backwards compatibility with existing patches
 ConfigManager = config_commands.ConfigManager
 _ORIGINAL_CONFIG_MANAGER = ConfigManager
@@ -139,6 +144,8 @@ def cli(ctx, verbose, config):
     formatter.set_console(console)
     commands.set_formatter_console(console)
     config_commands.set_formatter_console(console)
+    if integrated_commands is not None:
+        integrated_commands.set_formatter_console(console)
 
     # Load configuration
     try:
@@ -276,11 +283,11 @@ def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
         from sologit.ui.heaven_tui import run_heaven_tui
         run_heaven_tui(repo_path=repo_path)
     except ImportError as e:
-        click.echo("❌ Error: Heaven TUI dependencies not installed", err=True)
-        click.echo("Install with: pip install textual", err=True)
+        formatter.print_error("Heaven TUI dependencies not installed")
+        formatter.print_info("Install with: pip install textual")
         raise click.Abort()
     except Exception as e:
-        click.echo(f"❌ Heaven TUI launch failed: {e}", err=True)
+        formatter.print_error(f"Heaven TUI launch failed: {e}")
         logger.error(f"Heaven TUI error: {e}", exc_info=True)
         raise click.Abort()
 
