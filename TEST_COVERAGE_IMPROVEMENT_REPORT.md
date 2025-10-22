@@ -210,7 +210,7 @@ All CLI components currently have 0% coverage:
 ### Test Execution Summary
 - **Total Tests:** 409 passing
 - **Failed Tests:** 9 (pre-existing failures)
-- **Errors:** 7 (-related, expected in CI environment)
+- **Errors:** 7 (container-related, expected in CI environment)
 - **Warnings:** 21 (mostly pytest collection warnings)
 
 ### Coverage by Category
