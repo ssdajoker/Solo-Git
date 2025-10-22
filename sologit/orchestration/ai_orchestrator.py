@@ -637,6 +637,7 @@ class AIOrchestrator:
             if insights
             else "- No specific automated insights detected"
         )
+        # Deduplicate recommendations while preserving insertion order (Python 3.7+)
         recommendation_section = "\n".join(
             f"{idx}. {item}" for idx, item in enumerate(dict.fromkeys(recommendations), start=1)
         )
