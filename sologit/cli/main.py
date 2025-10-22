@@ -319,8 +319,7 @@ def tui():
     Keyboard Shortcuts:
       Ctrl+P          Command palette
       Ctrl+T          Run focused tests
-      Ctrl+Z / Ctrl+Shift+Z
-                      Undo / Redo last command
+      Ctrl+Z / Ctrl+Shift+Z Undo / Redo last command
       Tab / Shift+Tab Switch panels
       ?               Help overlay
       Ctrl+Q          Quit TUI
