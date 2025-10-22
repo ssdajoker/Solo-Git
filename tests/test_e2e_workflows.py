@@ -14,6 +14,7 @@ import pytest
 from git import Repo
 
 from sologit.state.git_sync import GitStateSync
+from sologit.state.manager import JSONStateBackend
 from sologit.engines.patch_engine import PatchEngine
 from sologit.engines.test_orchestrator import (
     TestConfig,
@@ -95,7 +96,6 @@ def test_runner(git_sync: GitStateSync, tmp_path_factory) -> TestOrchestrator:
     log_dir = tmp_path_factory.mktemp("logs")
     return TestOrchestrator(
         git_sync.git_engine,
-        execution_mode="subprocess",
         log_dir=log_dir,
     )
 
@@ -297,6 +297,7 @@ def test_failure_workflow_analyze_and_fix(
     assert analysis.status == "red"
 
     workpad = git_sync.git_engine.get_workpad(pad_id)
+    assert workpad is not None
     assert workpad.test_status == "red"
 
     fix_patch = _generate_modify_patch(
@@ -313,7 +314,9 @@ def test_failure_workflow_analyze_and_fix(
     assert all(result.status == TestStatus.PASSED for result in passed_results)
     analysis = _analysis_from_results(passed_results)
     assert analysis.status == "green"
-    assert git_sync.git_engine.get_workpad(pad_id).test_status == "green"
+    updated_workpad = git_sync.git_engine.get_workpad(pad_id)
+    assert updated_workpad is not None
+    assert updated_workpad.test_status == "green"
 
 
 def test_ci_failure_triggers_rollback(
@@ -365,27 +368,17 @@ def test_ci_failure_triggers_rollback(
     promoted_head = repo_after_merge.head.commit.hexsha
     assert promoted_head == merge_commit
 
-    original_create_workpad = git_sync.git_engine.create_workpad
+    ci_orchestrator = CIOrchestrator(git_sync.git_engine, test_runner)
+    smoke_tests = [
+        TestConfig(name="smoke", cmd="python -c 'import sys; sys.exit(1)'", timeout=10)
+    ]
+    ci_result = ci_orchestrator.run_smoke_tests(repo_id, merge_commit, smoke_tests)
+    assert ci_result.status == CIStatus.FAILURE
 
-    def _create_workpad_object(repo_id: str, title: str):
-        pad_identifier = original_create_workpad(repo_id, title)
-        return git_sync.git_engine.get_workpad(pad_identifier)
-
-    git_sync.git_engine.create_workpad = _create_workpad_object
-    try:
-        ci_orchestrator = CIOrchestrator(git_sync.git_engine, test_runner)
-        smoke_tests = [
-            TestConfig(name="smoke", cmd="python -c 'import sys; sys.exit(1)'", timeout=10)
-        ]
-        ci_result = ci_orchestrator.run_smoke_tests(repo_id, merge_commit, smoke_tests)
-        assert ci_result.status == CIStatus.FAILURE
-
-        rollback = RollbackHandler(git_sync.git_engine)
-        rollback_result = rollback.handle_failed_ci(ci_result)
-        assert rollback_result.success is True
-        assert rollback_result.new_pad_id is not None
-    finally:
-        git_sync.git_engine.create_workpad = original_create_workpad
+    rollback = RollbackHandler(git_sync.git_engine)
+    rollback_result = rollback.handle_failed_ci(ci_result)
+    assert rollback_result.success is True
+    assert rollback_result.new_pad_id is not None
 
     repo_after_rollback = Repo(repo_path)
     assert repo_after_rollback.head.commit.hexsha != merge_commit
@@ -609,8 +602,10 @@ def test_state_manager_records_cli_operations(
     )
     _run_pytest_and_record(git_sync, test_runner, pad_id)
 
-    repo_state_path = git_sync.state_manager.backend.repos_dir / f"{repo_id}.json"
-    workpad_state_path = git_sync.state_manager.backend.workpads_dir / f"{pad_id}.json"
+    backend = git_sync.state_manager.backend
+    assert isinstance(backend, JSONStateBackend)
+    repo_state_path = backend.repos_dir / f"{repo_id}.json"
+    workpad_state_path = backend.workpads_dir / f"{pad_id}.json"
     assert repo_state_path.exists()
     assert workpad_state_path.exists()
 

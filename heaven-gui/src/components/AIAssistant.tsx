@@ -13,16 +13,37 @@ interface Message {
   tokens?: number
 }
 
+// AI operation status type aligned with backend schema
+export type AIOperationStatus = 'pending' | 'planning' | 'coding' | 'reviewing' | 'completed' | 'failed'
+
 interface AIOperation {
   operation_id: string
   type: string
-  status: string
+  status: AIOperationStatus
   prompt: string
   response: string | null
   cost_usd: number
   tokens_used: number
   model: string
   created_at: string
+}
+
+// Helper function to get AI operation status icon
+const getOperationStatusIcon = (status: AIOperationStatus): string => {
+  switch (status) {
+    case 'completed':
+      return '✓'
+    case 'failed':
+      return '✗'
+    case 'pending':
+      return '○'
+    case 'planning':
+    case 'coding':
+    case 'reviewing':
+      return '◉'
+    default:
+      return '?'
+  }
 }
 
 interface AIAssistantProps {
@@ -292,7 +313,7 @@ export default function AIAssistant({ repoId, workpadId, collapsed = false, onTo
                 <div key={op.operation_id} className="operation-item">
                   <div className="operation-header">
                     <span className={`status status-${op.status}`}>
-                      {op.status === 'completed' ? '✓' : op.status === 'failed' ? '✗' : '◉'}
+                      {getOperationStatusIcon(op.status)}
                     </span>
                     <span className="operation-type">{op.type}</span>
                     <span className="operation-cost">${op.cost_usd.toFixed(4)}</span>
