@@ -227,9 +227,6 @@ def shortcuts():
         "See docs/KEYBOARD_SHORTCUTS.md or press '?' inside the TUI for the full reference."
     )
 
-    formatter.print_info("Press '?' inside the TUI to view this list at any time.")
-
-
 @cli.command()
 @click.option('--dev', is_flag=True, help='Launch in development mode')
 @click.pass_context
