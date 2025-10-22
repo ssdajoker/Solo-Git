@@ -149,7 +149,7 @@ You: "Add Redis caching to search endpoint with 5-minute TTL"
 Solo Git:
   1. 🧠 Plans changes (GPT-4/Claude)        →  4 seconds
   2. ✍️  Generates patches (DeepSeek Coder) → 10 seconds  
-  3. 🧪 Runs tests via subprocess          → 20 seconds
+  3. 🧪 Runs tests in sandbox              → 20 seconds
   4. ✅ Auto-merges to trunk                →  1 second
   ─────────────────────────────────────────────────────
   Total: Under 1 minute, from idea to production!
@@ -167,7 +167,7 @@ Solo Git:
 ├─────────────────────────────────────────────────────┤
 │                                                      │
 │  Git Engine        ←  Workpads, patches, merges     │
-│  Test Orchestrator ←  Direct test execution        │
+│  Test Orchestrator ←  Sandboxed test execution      │
 │  AI Orchestrator   ←  Multi-model routing           │
 │  Auto-Merge        ←  Test-gated promotion          │
 │                                                      │
@@ -428,7 +428,7 @@ Test Suites:         32 suites
 - ✅ Repository initialization (ZIP/Git)
 - ✅ Workpad lifecycle management
 - ✅ Patch application with conflict detection
-- ✅ Test orchestration with local subprocess execution
+- ✅ Test orchestration with sandboxing
 - ✅ Multi-model AI integration
 - ✅ Cost tracking and budgets
 - ✅ Auto-merge on green tests
@@ -571,7 +571,9 @@ solo-git/
 │   └── BETA_LAUNCH_CHECKLIST.md
 │
 ├── infrastructure/             # Deployment configs
-│   └── pipelines/             # CI/CD automation templates
+│   ├── docker/                # Docker images
+│   ├── jenkins/               # Jenkins pipelines
+│   └── sandbox/               # Test sandbox configs
 │
 ├── .archive/                   # Historical artifacts
 │   └── historical_coverage/   # Old coverage reports
@@ -609,7 +611,7 @@ Solo Git recognizes that for solo developers working with AI:
 1. **Tests as Truth** - If tests pass, code ships. Period.
 2. **Zero Ceremony** - No branches, no PRs, no waiting.
 3. **Fast-Forward Only** - Linear history, easy rollbacks.
-4. **Ephemeral Workspaces** - Disposable working directories, not persistent branches.
+4. **Ephemeral Workspaces** - Disposable sandboxes, not persistent branches.
 5. **AI-Augmented** - Leverage AI for planning, coding, and diagnosis.
 6. **Cloud-Native** - No local model hosting, pure API simplicity.
 
@@ -660,7 +662,7 @@ Solo Git recognizes that for solo developers working with AI:
 | Feature | GitHub Copilot | Solo Git |
 |---------|----------------|----------|
 | **Scope** | Code suggestions | Full workflow automation |
-| **Testing** | Manual | Automated via subprocess |
+| **Testing** | Manual | Automated, sandboxed |
 | **Merging** | Manual | Automatic on green |
 | **Planning** | No | Yes (GPT-4/Claude) |
 | **Models** | Single (Codex) | Multi-model (best for task) |

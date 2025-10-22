@@ -330,7 +330,7 @@ def main():
     print()
     
     # Setup logger
-    setup_logging(verbose=False)
+    setup_logger(level="INFO")
     
     # Run demos
     try:
