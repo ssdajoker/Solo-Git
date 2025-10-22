@@ -388,7 +388,7 @@ def repo_info(repo_id: str) -> None:
             help_text="Select one of the available repository IDs or initialize a new repository before retrying.",
             tip="Run 'evogitctl repo list' to review active repositories before invoking repo info.",
             suggestions=["evogitctl repo list"] + available[:5],
-            docs_url="docs/SETUP.md#initialize-configuration",
+            docs_url="docs/SETUP.md#initialize-a-repository",
         )
 
     if repo is None:
