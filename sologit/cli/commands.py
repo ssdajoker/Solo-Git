@@ -663,8 +663,10 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             )
 
     except Exception as exc:
-        formatter.print_error(f"Test execution failed: {exc}")
-        raise click.Abort()
+        abort_with_error(
+            "Test execution failed",
+            f"Workpad: {pad_id}\n{exc}"
+        )
 
 
 
