@@ -370,51 +370,28 @@ def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
         from sologit.ui.heaven_tui import run_heaven_tui
 
         run_heaven_tui(repo_path=repo_path)
-    except ImportError as e:
-        formatter.print_error("Heaven TUI dependencies not installed")
-        formatter.print_info("Install with: pip install textual")
-        raise click.Abort()
-    except Exception as e:
-        formatter.print_error(f"Heaven TUI launch failed: {e}")
-        logger.error(f"Heaven TUI error: {e}", exc_info=True)
-        raise click.Abort()
+    except ImportError:
+        abort_with_error(
+            "Heaven TUI dependencies not installed", "Install with: pip install textual"
+        )
+    except Exception as exc:
+        logger.error(f"Heaven TUI error: {exc}", exc_info=True)
+        abort_with_error("Heaven TUI launch failed", str(exc))
 
 
 @cli.command()
-@click.option('--repo', 'repo_path', type=click.Path(exists=True), help='Repository path')
-def tui(repo_path: Optional[str] = None):
+@click.option("--repo", "repo_path", type=click.Path(exists=True), help="Repository path")
+@click.pass_context
+def tui(ctx, repo_path: Optional[str] = None):
     """
     Launch the Heaven Interface TUI.
 
-    \b
-    Keyboard Shortcuts:
-      Ctrl+P          Command palette
-      Ctrl+T          Run focused tests
-      Ctrl+Z / Ctrl+Shift+Z Undo / Redo last command
-      Tab / Shift+Tab Switch panels
-      ?               Help overlay
-      Ctrl+Q          Quit TUI
-
-    Run ``evogitctl shortcuts`` or see ``docs/KEYBOARD_SHORTCUTS.md`` for the full list.
-    This is an alias for ``evogitctl heaven`` and provides the full production
-    Heaven Interface experience for managing repositories, workpads, and tests
-    from the terminal.
+    This command is an alias for ``evogitctl heaven`` and launches the
+    production Heaven Interface experience for managing repositories,
+    workpads, and tests from the terminal.
     """
-    _launch_heaven_tui()
-    formatter.print_header("Heaven Interface TUI")
-    formatter.print_info("Launching classic Heaven Interface experience...")
-    try:
-        from sologit.ui.tui_app import run_tui
 
-        run_tui()
-    except ImportError as e:
-        abort_with_error("TUI dependencies not installed", "Install with: pip install textual")
-    except Exception as e:
-        abort_with_error("TUI launch failed", str(e))
-    if repo_path is not None:
-        _launch_heaven_tui(repo_path=repo_path)
-    else:
-        _launch_heaven_tui()
+    ctx.invoke(heaven, repo_path=repo_path)
 
 
 @cli.command()
@@ -464,20 +441,9 @@ def heaven(repo_path: Optional[str]):
 
     This command can also be accessed via the ``evogitctl tui`` alias.
     """
-    _launch_heaven_tui(repo_path=repo_path)
     formatter.print_header("Heaven Interface")
     formatter.print_info("Launching production Heaven Interface...")
-    try:
-        from sologit.ui.heaven_tui import run_heaven_tui
-
-        run_heaven_tui(repo_path=repo_path)
-    except ImportError as e:
-        abort_with_error(
-            "Heaven TUI dependencies not installed", "Install with: pip install textual"
-        )
-    except Exception as e:
-        logger.error(f"Heaven TUI error: {e}", exc_info=True)
-        abort_with_error("Heaven TUI launch failed", str(e))
+    _launch_heaven_tui(repo_path=repo_path)
 
 
 @cli.command()
