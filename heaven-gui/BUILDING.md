@@ -41,7 +41,7 @@ xcode-select --install
 
 ```bash
 sudo apt update
-sudo apt install libwebkit2gtk-4.0-dev \
+sudo apt install libwebkit2gtk-4.1-dev \
     build-essential \
     curl \
     wget \
@@ -49,8 +49,24 @@ sudo apt install libwebkit2gtk-4.0-dev \
     libssl-dev \
     libgtk-3-dev \
     libayatana-appindicator3-dev \
-    librsvg2-dev
+    librsvg2-dev \
+    libsoup2.4-dev \
+    libfuse2
 ```
+
+**Note on Mismatched Dependencies:** Some distributions may provide newer versions of libraries than what the build system expects (e.g., `libwebkit2gtk-4.1-dev` instead of `4.0`). If you encounter build errors related to missing `*.pc` or `*.so` files for versions ending in `-4.0`, you may need to create symbolic links as a workaround. For example:
+
+```bash
+# For pkg-config files
+sudo ln -s /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
+sudo ln -s /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc
+
+# For shared library files
+sudo ln -s /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so
+sudo ln -s /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.0.so
+```
+
+**Known Issues:** The AppImage bundle may fail to build with an `error running appimage.sh` message. The `.deb` and `.rpm` bundles are not affected by this issue.
 
 #### Linux (Fedora)
 

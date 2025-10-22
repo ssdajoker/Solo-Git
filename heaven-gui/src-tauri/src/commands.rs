@@ -13,8 +13,8 @@ use tempfile::Builder;
 use uuid::Uuid;
 
 use crate::{
-    get_repos_dir, get_settings_path, get_state_dir, AIOperation, GlobalState, PromotionRecord,
-    RepositoryState, TestRun, WorkpadState,
+    get_state_dir, list_test_runs, AIOperation, GlobalState, PromotionRecord, RepositoryState,
+    TestRun, WorkpadState,
 };
 
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
@@ -83,6 +83,45 @@ fn run_cli_command(args: Vec<String>) -> Result<String, String> {
             stderr.trim()
         ))
     }
+}
+
+fn store_patch_diff(workpad_id: &str, diff: &str) -> Result<String, String> {
+    let patches_dir = get_state_dir().join("patches");
+    fs::create_dir_all(&patches_dir).map_err(|e| {
+        format!(
+            "Failed to create patch history directory {}: {}",
+            patches_dir.display(),
+            e
+        )
+    })?;
+
+    let mut temp_file = Builder::new()
+        .prefix("sologit_patch_")
+        .suffix(".diff")
+        .tempfile_in(&patches_dir)
+        .map_err(|e| {
+            format!(
+                "Failed to create temporary patch file in {}: {}",
+                patches_dir.display(),
+                e
+            )
+        })?;
+
+    temp_file
+        .write_all(diff.as_bytes())
+        .map_err(|e| format!("Failed to write patch diff: {}", e))?;
+
+    let patch_path = patches_dir.join(format!("{}-{}.diff", workpad_id, Uuid::new_v4().simple()));
+
+    temp_file.persist_noclobber(&patch_path).map_err(|e| {
+        format!(
+            "Failed to persist patch file {}: {}",
+            patch_path.display(),
+            e
+        )
+    })?;
+
+    Ok(patch_path.to_string_lossy().to_string())
 }
 
 fn load_global_state() -> Result<GlobalState, String> {
@@ -311,6 +350,11 @@ pub(crate) fn apply_patch(
     })?;
 
     let patch_arg = patch_path
+    let patch_path = store_patch_diff(&workpad.workpad_id, &diff)?;
+
+    workpad.status = "in_progress".to_string();
+    workpad.current_commit = Some(format!("{}", Uuid::new_v4().simple()));
+    let patch_arg = temp_path
         .to_str()
         .ok_or_else(|| "Failed to encode temporary patch path".to_string())?
         .to_string();
@@ -328,7 +372,13 @@ pub(crate) fn apply_patch(
     let notes_path = get_state_dir()
         .join("workpads")
         .join(format!("{}-notes.log", workpad.workpad_id));
-    let entry = format!("{} :: {}\n\n{}\n\n", Utc::now().to_rfc3339(), message, diff);
+    let entry = format!(
+        "{} :: {}\n\n{}\n\nSaved patch file: {}\n\n",
+        Utc::now().to_rfc3339(),
+        message,
+        diff,
+        patch_path
+    );
     let _ = fs::OpenOptions::new()
         .create(true)
         .append(true)
