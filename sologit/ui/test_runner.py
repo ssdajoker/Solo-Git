@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
+from textual.app import ComposeResult
 from textual.widgets import Static, ProgressBar, Label
 from textual.containers import Container, Vertical
 from textual.reactive import reactive
@@ -54,7 +55,7 @@ class TestResult:
     timestamp: datetime = None
     log_path: Optional[Path] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.timestamp is None:
             self.timestamp = datetime.now()
     
@@ -105,7 +106,7 @@ class TestOutputWidget(Static):
     
     output_lines: reactive[List[str]] = reactive(list, init=False)
     
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._output_buffer = []
         self.auto_scroll = True
@@ -252,7 +253,7 @@ class TestRunner:
 
     __test__ = False
     
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: str) -> None:
         self.repo_path = Path(repo_path)
         self.process: Optional[subprocess.Popen] = None
         self.is_running = False
@@ -435,14 +436,14 @@ class TestRunner:
 
 class TestRunnerWidget(Container):
     """Complete test runner widget with output and summary."""
-    
-    def __init__(self, repo_path: str, **kwargs):
+
+    def __init__(self, repo_path: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.repo_path = repo_path
         self.runner = TestRunner(repo_path)
         self.current_result: Optional[TestResult] = None
-    
-    def compose(self):
+
+    def compose(self) -> ComposeResult:
         """Compose the widget."""
         yield TestSummaryWidget(id="test-summary")
         yield TestOutputWidget(id="test-output")
@@ -455,10 +456,10 @@ class TestRunnerWidget(Container):
         
         output_widget.clear_output()
         
-        def output_callback(line: str):
+        def output_callback(line: str) -> None:
             output_widget.append_output(line)
-        
-        def result_callback(result: TestResult):
+
+        def result_callback(result: TestResult) -> None:
             summary_widget.update_result(result)
             self.current_result = result
         
@@ -483,7 +484,7 @@ class TestRunnerWidget(Container):
 
 class TestsCompleted(events.Message):
     """Message emitted when tests complete."""
-    
-    def __init__(self, result: TestResult):
+
+    def __init__(self, result: TestResult) -> None:
         super().__init__()
         self.result = result

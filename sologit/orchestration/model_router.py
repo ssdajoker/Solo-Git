@@ -132,7 +132,9 @@ class ModelRouter:
         'api design', 'schema', 'model', 'interface'
     ]
     
-    def __init__(self, config: Dict[str, Any], git_sync: Optional["GitStateSync"] = None):
+    def __init__(
+        self, config: Dict[str, Any], git_sync: Optional["GitStateSync"] = None
+    ) -> None:
         """
         Initialize model router.
 

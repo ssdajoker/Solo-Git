@@ -21,8 +21,8 @@ from sologit.ui.theme import theme
 
 class CommitGraphWidget(Static):
     """Widget displaying commit graph."""
-    
-    def __init__(self, state_manager: StateManager):
+
+    def __init__(self, state_manager: StateManager) -> None:
         super().__init__()
         self.state_manager = state_manager
         self.commits = []
@@ -69,8 +69,8 @@ class CommitGraphWidget(Static):
 
 class WorkpadListWidget(Static):
     """Widget displaying workpad list."""
-    
-    def __init__(self, state_manager: StateManager):
+
+    def __init__(self, state_manager: StateManager) -> None:
         super().__init__()
         self.state_manager = state_manager
         self.workpads = []
@@ -117,8 +117,8 @@ class WorkpadListWidget(Static):
 
 class StatusBarWidget(Static):
     """Widget displaying status bar."""
-    
-    def __init__(self, state_manager: StateManager):
+
+    def __init__(self, state_manager: StateManager) -> None:
         super().__init__()
         self.state_manager = state_manager
     
@@ -147,8 +147,8 @@ class StatusBarWidget(Static):
 
 class LogViewerWidget(Log):
     """Widget for viewing logs."""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__()
         self.max_lines = 1000
 
@@ -234,7 +234,7 @@ class HeavenTUI(App):
     
     TITLE = "Solo Git - Heaven Interface"
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.state_manager = StateManager()
     
@@ -366,7 +366,7 @@ class HeavenTUI(App):
         event.input.value = ""
 
 
-def run_tui():
+def run_tui() -> None:
     """Run the TUI application."""
     app = HeavenTUI()
     app.run()

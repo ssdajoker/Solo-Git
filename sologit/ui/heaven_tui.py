@@ -42,7 +42,7 @@ class StatusBar(Static):
     }
     """
     
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.repo_name = "No repository"
         self.workpad_name = "No workpad"
@@ -62,7 +62,9 @@ class StatusBar(Static):
             f"│  {shortcuts}"
         )
     
-    def update_context(self, repo_name: str, workpad_name: str = None, test_status: str = "○"):
+    def update_context(
+        self, repo_name: str, workpad_name: Optional[str] = None, test_status: str = "○"
+    ) -> None:
         """Update status bar context."""
         self.repo_name = repo_name
         self.workpad_name = workpad_name or "No workpad"
@@ -86,7 +88,7 @@ class CommitGraphPanel(Static):
     }
     """
     
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.commits: List[Dict[str, Any]] = []
     
@@ -112,7 +114,7 @@ class CommitGraphPanel(Static):
         
         return '\n'.join(lines)
     
-    def update_commits(self, commits: List[Dict[str, Any]]):
+    def update_commits(self, commits: List[Dict[str, Any]]) -> None:
         """Update commit list."""
         self.commits = commits
         self.refresh()
@@ -130,7 +132,7 @@ class WorkpadPanel(Static):
     }
     """
     
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.workpads: List[Dict[str, Any]] = []
         self.active_workpad: Optional[str] = None
@@ -166,7 +168,9 @@ class WorkpadPanel(Static):
         
         return '\n'.join(lines)
     
-    def update_workpads(self, workpads: List[Dict[str, Any]], active_id: Optional[str] = None):
+    def update_workpads(
+        self, workpads: List[Dict[str, Any]], active_id: Optional[str] = None
+    ) -> None:
         """Update workpad list."""
         self.workpads = workpads
         self.active_workpad = active_id
@@ -185,7 +189,7 @@ class AIActivityPanel(Static):
     }
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.operations: List[Dict[str, Any]] = []
     
@@ -222,7 +226,7 @@ class AIActivityPanel(Static):
         
         return '\n'.join(lines)
     
-    def update_operations(self, operations: List[Dict[str, Any]]):
+    def update_operations(self, operations: List[Dict[str, Any]]) -> None:
         """Update operations list."""
         self.operations = operations
         self.refresh()
@@ -241,7 +245,7 @@ class AIResponsePanel(Static):
     }
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._title: Optional[str] = None
         self._lines: List[str] = []
@@ -332,7 +336,14 @@ class PromptModal(ModalScreen[Optional[str]]):
     }
     """
 
-    def __init__(self, title: str, message: str, placeholder: str = "", *, default: str = ""):
+    def __init__(
+        self,
+        title: str,
+        message: str,
+        placeholder: str = "",
+        *,
+        default: str = "",
+    ) -> None:
         super().__init__()
         self._title = title
         self._message = message
@@ -418,7 +429,7 @@ class HeavenTUI(App):
         *,
         git_sync: Optional[GitStateSync] = None,
         ai_orchestrator: Optional[AIOrchestrator] = None,
-    ):
+    ) -> None:
         super().__init__()
         self.repo_path = repo_path
         self.git_sync = git_sync or GitStateSync()

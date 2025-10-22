@@ -27,7 +27,7 @@ StageResult = TypeVar("StageResult")
 class EnhancedCLI:
     """Enhanced CLI with Rich formatting and state management."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.formatter = RichFormatter()
         self.state_manager = StateManager()
         self.graph_renderer = CommitGraphRenderer(self.formatter.console)

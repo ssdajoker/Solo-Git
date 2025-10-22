@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 class TestOutputWidget(Log):
     """Widget for displaying real-time test output."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(highlight=True, markup=True)
         self.test_run_id: Optional[str] = None
     
@@ -57,7 +57,7 @@ class CommitGraphWidget(Static):
     
     commits = reactive([])
     
-    def __init__(self, git_sync: GitStateSync):
+    def __init__(self, git_sync: GitStateSync) -> None:
         super().__init__()
         self.git_sync = git_sync
     
@@ -116,7 +116,7 @@ class WorkpadStatusWidget(Static):
     
     workpads = reactive([])
     
-    def __init__(self, git_sync: GitStateSync):
+    def __init__(self, git_sync: GitStateSync) -> None:
         super().__init__()
         self.git_sync = git_sync
     
@@ -180,7 +180,7 @@ class AIActivityWidget(Static):
     
     operations = reactive([])
     
-    def __init__(self, git_sync: GitStateSync):
+    def __init__(self, git_sync: GitStateSync) -> None:
         super().__init__()
         self.git_sync = git_sync
     
@@ -293,7 +293,7 @@ class HeavenTUI(App):
     
     TITLE = "Heaven Interface - Solo Git TUI"
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.git_sync = GitStateSync()
     
@@ -423,7 +423,7 @@ class HeavenTUI(App):
         test_output.write_line("[dim]Press any key to continue...[/dim]")
 
 
-def run_enhanced_tui():
+def run_enhanced_tui() -> None:
     """Launch the enhanced Heaven Interface TUI."""
     app = HeavenTUI()
     app.run()

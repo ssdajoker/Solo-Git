@@ -47,7 +47,7 @@ class CannotPromoteError(GitEngineError):
 class GitEngine:
     """Core Git operations engine."""
     
-    def __init__(self, data_dir: Optional[Path] = None):
+    def __init__(self, data_dir: Optional[Path] = None) -> None:
         """
         Initialize Git Engine.
         

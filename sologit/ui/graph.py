@@ -15,7 +15,7 @@ from sologit.state.schema import CommitNode
 class CommitGraphRenderer:
     """Renders commit graphs in ASCII art format."""
     
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Optional[Console] = None) -> None:
         self.console = console or Console()
         self.theme = theme
     

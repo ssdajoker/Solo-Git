@@ -48,7 +48,7 @@ class ChatResponse:
     tokens_used: int = 0
     raw: Optional[Dict[str, Any]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.total_tokens:
             self.total_tokens = self.prompt_tokens + self.completion_tokens
         if not self.tokens_used:

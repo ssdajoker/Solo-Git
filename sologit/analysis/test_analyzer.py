@@ -106,7 +106,7 @@ class TestAnalyzer:
         ]
     }
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize analyzer."""
         logger.info("TestAnalyzer initialized")
     

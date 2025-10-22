@@ -28,8 +28,8 @@ from sologit.ui.theme import theme
 
 class RichFormatter:
     """Formatter for Rich library output with Heaven Interface styling."""
-    
-    def __init__(self, console: Optional[Console] = None):
+
+    def __init__(self, console: Optional[Console] = None) -> None:
         self.console = console or Console()
         self.theme_obj = theme
     
@@ -277,7 +277,7 @@ class RichFormatter:
 class ProgressContext:
     """Context manager that manages an indeterminate task for scoped progress."""
 
-    def __init__(self, progress: Progress, description: str):
+    def __init__(self, progress: Progress, description: str) -> None:
         self._progress = progress
         self._description = description
         self._task_id: Optional[int] = None

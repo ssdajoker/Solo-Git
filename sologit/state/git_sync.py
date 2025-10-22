@@ -26,7 +26,9 @@ class GitStateSync:
     every git operation is tracked in the state system and vice versa.
     """
     
-    def __init__(self, state_dir: Optional[Path] = None, data_dir: Optional[Path] = None):
+    def __init__(
+        self, state_dir: Optional[Path] = None, data_dir: Optional[Path] = None
+    ) -> None:
         """
         Initialize Git State Sync.
         

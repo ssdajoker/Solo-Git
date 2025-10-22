@@ -51,7 +51,7 @@ class SoloGitCompleter(Completer):
         "redo",
     )
 
-    def __init__(self, cli_app: Optional[click.MultiCommand] = None):
+    def __init__(self, cli_app: Optional[click.MultiCommand] = None) -> None:
         self._cli_app = cli_app
         self.commands = self._build_command_list()
 
@@ -99,7 +99,9 @@ class SoloGitCompleter(Completer):
 
         return ordered
 
-    def get_completions(self, document, complete_event):  # type: ignore[override]
+    def get_completions(  # type: ignore[override]
+        self, document: Any, complete_event: Any
+    ) -> Iterable[Completion]:
         """Yield completions that fuzzy-match the current buffer."""
 
         word = document.get_word_before_cursor() or ""
@@ -121,7 +123,7 @@ class SoloGitCompleter(Completer):
 class CommandHistory:
     """Manages command history with persistence."""
 
-    def __init__(self, history_file: Optional[Path] = None):
+    def __init__(self, history_file: Optional[Path] = None) -> None:
         if history_file is None:
             history_file = Path.home() / ".sologit" / "command_history"
 

@@ -38,7 +38,7 @@ class PatchEngine:
     Integrates with GitEngine to apply code changes to workpads.
     """
     
-    def __init__(self, git_engine: GitEngine):
+    def __init__(self, git_engine: GitEngine) -> None:
         """
         Initialize Patch Engine.
         

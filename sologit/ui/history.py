@@ -81,7 +81,7 @@ class CommandHistory:
     undo/redo capabilities with state tracking.
     """
     
-    def __init__(self, history_file: Optional[Path] = None, max_size: int = 1000):
+    def __init__(self, history_file: Optional[Path] = None, max_size: int = 1000) -> None:
         """
         Initialize command history.
         
