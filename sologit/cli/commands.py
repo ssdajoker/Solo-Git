@@ -163,122 +163,76 @@ def repo() -> None:
     """Repository management commands."""
 
 
-@repo.command('init')
-@click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
-@click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
-@click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
-@click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
-@click.option('--name', type=str, help='Repository name (optional)')
-def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]) -> None:
-    """Initialize a new repository from zip file or Git URL."""
-    formatter.print_header("Repository Initialization")
-
-    # Count provided sources - need to check truthiness for zip_file and git_url, but empty is always provided
-    provided_sources = sum([bool(zip_file), bool(git_url), empty])
-    if provided_sources != 1:
 @repo.command("init")
 @click.option("--zip", "zip_file", type=click.Path(exists=True, path_type=Path), help="Initialize from zip file")
 @click.option("--git", "git_url", type=str, help="Initialize from Git URL")
+@click.option("--empty", is_flag=True, help="Initialize an empty repository managed by Solo Git")
+@click.option(
+    "--path",
+    "target_path",
+    type=click.Path(path_type=Path),
+    help="Directory for empty repository (defaults to Solo Git data dir)",
+)
 @click.option("--name", type=str, help="Repository name (optional)")
-def repo_init(zip_file: Optional[Path], git_url: Optional[str], name: Optional[str]) -> None:
-    """Initialize a repository from a zip archive or a Git URL."""
+def repo_init(
+    zip_file: Optional[Path],
+    git_url: Optional[str],
+    empty: bool,
+    target_path: Optional[Path],
+    name: Optional[str],
+) -> None:
+    """Initialize a repository from a zip archive, Git URL, or create an empty repo."""
 
-    formatter.print_header("Repository Initialization")
-
-    selected_sources = [bool(zip_file), bool(git_url)]
-    if sum(selected_sources) == 0:
-        abort_with_error(
-            "Missing or Conflicting Repository Source",
-            "Provide exactly one of --zip <path>, --git <url>, or --empty so Solo Git knows where to initialize from.",
-            title="Repository Initialization Blocked",
-            help_text="Choose exactly one source option. Use --zip for local archives, --git for remote repositories, or --empty for a new empty repository.",
-            tip="If you already cloned locally, package it as a zip and pass --zip to speed up initialization.",
-            suggestions=[
-                "evogitctl repo init --zip app.zip",
-                "evogitctl repo init --git https://github.com/org/project.git",
-                "evogitctl repo init --empty --name my-repo",
-            ],
-            docs_url="docs/SETUP.md#initialize-a-repository",
-            ],
-            docs_url="docs/SETUP.md#initialize-a-repository",
-        )
-
-    if all(selected_sources):
-@repo.command('init')
-@click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
-@click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
-@click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
-@click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
-@click.option('--name', type=str, help='Repository name (optional)')
-def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
-    """Initialize a new repository from zip file, Git URL, or empty."""
     formatter.print_header("Repository Initialization")
 
     sources = {
-        'zip': zip_file,
-        'git': git_url,
-        'empty': empty
+        "zip": bool(zip_file),
+        "git": bool(git_url),
+        "empty": bool(empty),
     }
+    selected = [key for key, value in sources.items() if value]
 
-    provided_sources = [name for name, value in sources.items() if value]
-
-    if len(provided_sources) != 1:
+    if len(selected) != 1:
         abort_with_error(
             "Invalid Source Specification",
-            f"Please specify exactly one of --zip, --git, or --empty. Provided: {', '.join(provided_sources) or 'None'}",
+            f"Please specify exactly one of --zip, --git, or --empty. Provided: {', '.join(selected) or 'None'}",
             title="Repository Initialization Blocked",
             help_text="Choose one initialization method.",
             suggestions=[
                 "evogitctl repo init --zip app.zip",
                 "evogitctl repo init --git https://github.com/user/repo.git",
                 "evogitctl repo init --empty --path ./new-repo",
-            ]
+            ],
+            docs_url="docs/SETUP.md#initialize-a-repository",
         )
 
-    git_engine = get_git_engine()
+    git_sync = get_git_sync()
 
     try:
-        repo_info = None
-        if zip_file is not None:
+        if zip_file:
             repo_name = name or zip_file.stem
-            formatter.print_info(f"Initializing repository from zip: {zip_file.name}")
-            repo_id = git_engine.init_from_zip(zip_file.read_bytes(), repo_name)
-        if empty:
-            repo_name = name or (target_path.name if target_path else "solo-git-repo")
-            formatter.print_info(f"Creating empty repository: {repo_name}")
-            repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
-        elif zip_file:
-            zip_path = Path(zip_file)
-            repo_name = name or zip_path.stem
-            formatter.print_info(f"Initializing from zip: {zip_path.name}")
-            repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
+            formatter.print_info(f"Initializing from zip: {zip_file.name}")
+            repo_info = git_sync.init_repo_from_zip(zip_file.read_bytes(), repo_name)
         elif git_url:
-            repo_name = name or Path(git_url).stem.replace('.git', '')
+            repo_name = name or Path(git_url.rstrip("/")).stem.replace(".git", "")
             formatter.print_info(f"Cloning from: {git_url}")
             repo_info = git_sync.init_repo_from_git(git_url, repo_name)
         else:
-            # Must be git_url based on validation above
-            assert git_url is not None
-            repo_name = name or Path(git_url).stem.replace('.git', '')
-            formatter.print_info(f"Cloning repository from: {git_url}")
-            repo_info = git_sync.init_repo_from_git(git_url, repo_name)
-            repo_name = name or Path(git_url.rstrip("/")).stem
-            formatter.print_info(f"Cloning repository from: {git_url}")
-            repo_id = git_engine.init_from_git(git_url, repo_name)
-
-        repo_obj = _require_repository(git_engine.get_repo(repo_id), repo_id)
+            repo_name = name or (target_path.name if target_path else "solo-git-repo")
+            formatter.print_info(f"Creating empty repository: {repo_name}")
+            repo_info = git_sync.create_empty_repo(
+                repo_name, str(target_path) if target_path else None
+            )
 
         formatter.print_success("Repository initialized!")
-        formatter.print_info(f"Repo ID: {repo_obj.id}")
-        formatter.print_info(f"Name: {repo_obj.name}")
-        formatter.print_info(f"Path: {repo_obj.path}")
-        formatter.print_info(f"Trunk: {getattr(repo_obj, 'trunk_branch', 'main')}")
-
         summary = formatter.table(headers=["Field", "Value"])
-        summary.add_row("ID", f"[cyan]{repo_obj.id}[/cyan]")
-        summary.add_row("Name", f"[bold]{repo_obj.name}[/bold]")
-        summary.add_row("Path", str(repo_obj.path))
-        summary.add_row("Trunk", f"[cyan]{getattr(repo_obj, 'trunk_branch', 'main')}[/cyan]")
+        summary.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
+        summary.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
+        summary.add_row("Path", repo_info.get("path", "-"))
+        summary.add_row(
+            "Trunk",
+            f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]",
+        )
         formatter.console.print(summary)
 
     except GitEngineError as exc:
@@ -637,10 +591,6 @@ def _default_tests(target: str) -> Sequence[TestConfig]:
     ]
 
 
-@test.command('run')
-@click.argument('pad_id')
-@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
-@click.option('--parallel/--sequential', default=True, help='Parallel execution')
 @test.command("run")
 @click.argument("pad_id")
 @click.option("--target", type=click.Choice(["fast", "full"]), default="fast", help="Test target")
@@ -661,16 +611,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     state_manager.update_test_run(run_id, status="running")
     run_started_at = time.time()
 
-    if target == 'fast':
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-        ]
-    else:
-        tests = [
-            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
-            TestConfig(
-                name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120
-            ),
     tests = list(_default_tests(target))
 
     info_panel = "\n".join(
@@ -685,13 +625,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     formatter.print_panel(info_panel, title="🧪 Test Execution")
 
     try:
-        info = f"""[bold]Workpad:[/bold] {workpad.title}
-[bold]Tests:[/bold] {len(tests)}
-[bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
-[bold]Mode:[/bold] {test_orchestrator.mode}
-[bold]Target:[/bold] {target}"""
-        formatter.print_panel(info, title="🧪 Test Execution")
-
         with formatter.create_progress() as progress:
             task_id = progress.add_task(f"Running {target} tests...", total=len(tests))
 
@@ -828,7 +761,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                 f"evogitctl test run {pad_id}",
                 f"evogitctl test run {pad_id} --target {target}",
             ],
-            docs_url="docs/TESTING.md#run-tests",
             docs_url="docs/TESTING_GUIDE.md",
             details=str(exc),
         )
@@ -1157,235 +1089,6 @@ def test_analyze(pad_id: str) -> None:
 # ============================================================================
 
 
-def execute_pair_loop(
-    ctx: click.Context,
-    prompt: str,
-    repo_id: Optional[str],
-    title: Optional[str],
-    no_test: bool,
-    no_promote: bool,
-    target: str,
-) -> None:
-    """
-    Execute the complete AI pair programming loop.
-
-    This is the core workflow of Solo Git:
-    1. Select/validate repository
-    2. Create ephemeral workpad
-    3. AI plans implementation
-    4. AI generates patch
-    5. Apply patch to workpad
-    6. Run tests (optional)
-    7. Auto-promote if green (optional)
-
-    Args:
-        ctx: Click context
-        prompt: Natural language task description
-        repo_id: Repository ID (auto-selected if None)
-        title: Workpad title (derived from prompt if None)
-        no_test: Skip test execution
-        no_promote: Disable automatic promotion
-        target: Test target (fast/full)
-    """
-    from sologit.orchestration.ai_orchestrator import AIOrchestrator
-    from sologit.engines.patch_engine import PatchEngine
-    from sologit.workflows.auto_merge import AutoMergeWorkflow
-    from sologit.workflows.promotion_gate import PromotionRules
-
-    import time
-
-    git_engine = get_git_engine()
-    config_manager = ctx.obj.get("config")
-    if ctx.obj and isinstance(ctx.obj, dict) and 'config' in ctx.obj:
-        config_manager = cast(ConfigManager, ctx.obj['config'])
-    else:
-        config_manager = ConfigManager()
-
-    formatter.print_header("AI Pair Programming Session")
-
-    # Step 1: Select repository
-    if not repo_id:
-        repos = git_engine.list_repos()
-        if len(repos) == 0:
-            abort_with_error(
-                "No repositories found",
-                "Initialize a repository first: evogitctl repo init --zip app.zip",
-            )
-        elif len(repos) == 1:
-            repo_id = repos[0].id
-            formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
-        else:
-            repo_table = formatter.table(headers=["ID", "Name", "Trunk"])
-            for repo in repos:
-                repo_table.add_row(f"[cyan]{repo.id}[/cyan]", repo.name, repo.trunk_branch)
-            formatter.print_info_panel(
-                "Multiple repositories detected. Re-run with --repo <ID> to specify the target.",
-                title="Repository Selection Required",
-            )
-            formatter.console.print(repo_table)
-            raise click.Abort()
-
-    # Validate repository exists
-    repo = git_engine.get_repo(repo_id)
-    if not repo:
-        abort_with_error(f"Repository {repo_id} not found")
-
-    # Step 2: Create workpad title if missing
-    if not title:
-        words = prompt.split()[:5]
-        title = "-".join(words).lower()
-        title = "".join(c if c.isalnum() or c == "-" else "-" for c in title)
-        title = "-".join(filter(None, title.split("-")))
-
-    overview = formatter.table(headers=["Field", "Value"])
-    overview.add_row("Repository", f"{repo.name} ({repo_id})")
-    overview.add_row("Prompt", prompt)
-    overview.add_row("Workpad Title", title)
-    overview.add_row("Tests", "Skipped" if no_test else target)
-    overview.add_row("Auto-Promote", "Disabled" if no_promote else "Enabled")
-    formatter.console.print(overview)
-
-    pad_id: Optional[str] = None  # Ensure pad_id is assigned before use; check for None if used after try block
-
-    try:
-        formatter.print_subheader("Workpad Setup")
-        formatter.print_info("Creating ephemeral workpad...")
-        assert repo_id is not None
-        pad_id = git_engine.create_workpad(repo_id, title)
-        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
-        formatter.print_success("Workpad created")
-
-        workpad_table = formatter.table(headers=["Field", "Value"])
-        workpad_table.add_row("Workpad ID", f"[cyan]{pad_id}[/cyan]")
-        workpad_table.add_row("Branch", workpad.branch_name)
-        workpad_table.add_row("Base", repo.trunk_branch)
-        formatter.console.print(workpad_table)
-
-        # Step 3: AI Planning
-        formatter.print_subheader("AI Planning")
-        formatter.print_info(f"Model: {config_manager.config.models.planning_model}")
-        start_time = time.time()
-
-        orchestrator = AIOrchestrator(config_manager, formatter=formatter)
-
-        repo_map = git_engine.get_repo_map(repo_id)
-        context = {
-            "repo_id": repo_id,
-            "repo_name": repo.name,
-            "file_tree": repo_map,
-            "trunk_branch": repo.trunk_branch,
-        }
-
-        plan_response = orchestrator.plan(prompt=prompt, repo_context=context)
-
-        planning_time = time.time() - start_time
-        plan_panel = f"""[bold]Model:[/bold] {plan_response.model_used}
-[bold]Duration:[/bold] {planning_time:.1f}s
-[bold]Cost:[/bold] ${plan_response.cost_usd:.4f}
-[bold]Complexity:[/bold] {plan_response.complexity.score:.2f}"""
-        formatter.print_info_panel(plan_panel, title="Plan Generation")
-
-        plan = plan_response.plan
-        plan_table = formatter.table(headers=["Aspect", "Details"])
-        plan_table.add_row("Description", plan.description or "-")
-        plan_table.add_row(
-            "Modify", ", ".join(plan.files_to_modify) if plan.files_to_modify else "None"
-        )
-        plan_table.add_row(
-            "Create", ", ".join(plan.files_to_create) if plan.files_to_create else "None"
-        )
-
-        modifications = [
-            change.path
-            for change in plan.file_changes
-            if change.action.lower() == "modify"
-        ]
-        creations = [
-            change.path
-            for change in plan.file_changes
-            if change.action.lower() == "create"
-        ]
-        deletions = [
-            change.path
-            for change in plan.file_changes
-            if change.action.lower() == "delete"
-        ]
-
-        plan_table.add_row("Modify", ', '.join(modifications) if modifications else "None")
-        plan_table.add_row("Create", ', '.join(creations) if creations else "None")
-        plan_table.add_row("Delete", ', '.join(deletions) if deletions else "None")
-        plan_table.add_row("Test Strategy", plan.test_strategy or "None")
-        formatter.console.print(plan_table)
-
-        # Step 4: Generate Patch
-        formatter.print_subheader("Code Generation")
-        formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
-        start_time = time.time()
-
-        patch_response = orchestrator.generate_patch(plan=plan, repo_context=context)
-        existing_files: Dict[str, str] = {}
-        for change in plan.file_changes:
-            if change.action.lower() != "modify":
-                continue
-            file_path = repo.path / change.path
-            if file_path.exists():
-                existing_files[change.path] = file_path.read_text(encoding="utf-8")
-
-        patch_response = orchestrator.generate_patch(
-            plan=plan,
-            file_contents=existing_files,
-        )
-
-        coding_time = time.time() - start_time
-        patch_panel = f"""[bold]Model:[/bold] {patch_response.model_used}
-[bold]Duration:[/bold] {coding_time:.1f}s
-[bold]Cost:[/bold] ${patch_response.cost_usd:.4f}"""
-        formatter.print_info_panel(patch_panel, title="Patch Generation")
-
-        patch = patch_response.patch
-
-        # Step 5: Apply Patch
-        formatter.print_subheader("Applying Patch")
-        patch_engine = get_patch_engine()
-
-        try:
-            checkpoint_id = patch_engine.apply_patch(pad_id, patch.diff)
-            formatter.print_success(
-                f"Patch applied successfully (checkpoint {checkpoint_id})"
-            )
-            diff_table = formatter.table(headers=["Metric", "Value"])
-            diff_table.add_row("Files Changed", str(len(patch.files_changed)))
-            diff_table.add_row("Insertions", f"+{patch.additions}")
-            diff_table.add_row("Deletions", f"-{patch.deletions}")
-            formatter.console.print(diff_table)
-
-        except Exception as e:
-            abort_with_error(
-                "Failed to apply patch", f"Workpad preserved for manual inspection: {pad_id}\n{e}"
-            )
-
-        # Step 6: Run Tests (optional)
-        if not no_test:
-            formatter.print_subheader("Test Execution")
-            formatter.print_info(f"Running {target} test suite")
-
-            if target == "fast":
-                tests = [
-                    TestConfig(
-                        name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60
-                    ),
-                ]
-            else:
-                tests = [
-                    TestConfig(
-                        name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60
-                    ),
-                    TestConfig(
-                        name="integration",
-                        cmd="python -m pytest tests/integration/ -q --tb=short",
-                        timeout=120,
-                    ),
-                ]
 @ci.command("status")
 @click.argument("repo_id")
 def ci_status(repo_id: str) -> None:
