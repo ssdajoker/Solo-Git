@@ -1,6 +1,10 @@
 use std::collections::HashSet;
+use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::process::Command;
 
 use chrono::Utc;
 use serde::de::DeserializeOwned;
@@ -31,12 +35,54 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
             .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
 
-    let tmp_path = path.with_extension("tmp");
     let contents = serde_json::to_string_pretty(value)
         .map_err(|e| format!("Failed to serialize value for {}: {}", path.display(), e))?;
-    fs::write(&tmp_path, contents)
-        .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("Failed to persist {}: {}", path.display(), e))
+
+    let parent_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temp_file = tempfile::NamedTempFile::new_in(parent_dir).map_err(|e| {
+        format!(
+            "Failed to create temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    temp_file.write_all(contents.as_bytes()).map_err(|e| {
+        format!(
+            "Failed to write temporary file for {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    temp_file
+        .persist(path)
+        .map_err(|e| format!("Failed to persist {}: {}", path.display(), e.error))?;
+    Ok(())
+}
+
+fn run_cli_command(args: Vec<String>) -> Result<String, String> {
+    let mut command = Command::new("evogitctl");
+    command.args(args.iter());
+
+    if let Ok(config_path) = env::var("SOLOGIT_CONFIG_PATH") {
+        command.env("SOLOGIT_CONFIG_PATH", config_path);
+    }
+
+    let output = command
+        .output()
+        .map_err(|e| format!("Failed to execute evogitctl: {}", e))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!(
+            "evogitctl {} failed: {}",
+            args.join(" "),
+            stderr.trim()
+        ))
+    }
 }
 
 fn load_global_state() -> Result<GlobalState, String> {
@@ -92,24 +138,6 @@ fn save_workpad(mut workpad: WorkpadState) -> Result<WorkpadState, String> {
     Ok(workpad)
 }
 
-fn slugify(value: &str) -> String {
-    let lowered = value.to_lowercase();
-    lowered
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c
-            } else if c.is_ascii_whitespace() || c == '-' || c == '_' {
-                '-'
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string()
-}
-
 fn parse_changed_files(diff: &str) -> Vec<String> {
     let mut files: HashSet<String> = HashSet::new();
     for line in diff.lines() {
@@ -144,61 +172,20 @@ pub(crate) fn create_workpad(repo_id: String, title: String) -> Result<WorkpadSt
         return Err("Workpad title cannot be empty".to_string());
     }
 
-    let mut repo = load_repository(&repo_id)?;
-    let now = Utc::now().to_rfc3339();
-    let workpad_id = format!("wp-{}", Uuid::new_v4().simple());
-    let slug = slugify(trimmed);
-    let branch_name = if slug.is_empty() {
-        format!(
-            "workpad/{}",
-            &workpad_id
-                .chars()
-                .filter(|c| *c != '-')
-                .take(8)
-                .collect::<String>()
-        )
-    } else {
-        format!("workpad/{}", slug)
-    };
-    let base_commit = repo
-        .current_commit
-        .clone()
-        .unwrap_or_else(|| repo.trunk_branch.clone());
+    run_cli_command(vec![
+        "workpad-integrated".to_string(),
+        "create".to_string(),
+        trimmed.to_string(),
+        "--repo".to_string(),
+        repo_id.clone(),
+    ])?;
 
-    let workpad = WorkpadState {
-        workpad_id: workpad_id.clone(),
-        repo_id: repo.repo_id.clone(),
-        title: trimmed.to_string(),
-        status: "draft".to_string(),
-        branch_name,
-        base_commit,
-        current_commit: repo.current_commit.clone(),
-        created_at: now.clone(),
-        updated_at: now.clone(),
-        promoted_at: None,
-        test_runs: Vec::new(),
-        ai_operations: Vec::new(),
-        patches_applied: 0,
-        files_changed: Vec::new(),
-    };
+    let global = load_global_state()?;
+    let workpad_id = global
+        .active_workpad
+        .ok_or_else(|| "CLI did not report an active workpad".to_string())?;
 
-    let path = get_state_dir()
-        .join("workpads")
-        .join(format!("{}.json", workpad.workpad_id));
-    write_json(&path, &workpad)?;
-
-    if !repo.workpads.contains(&workpad_id) {
-        repo.workpads.insert(0, workpad_id.clone());
-    }
-    repo = save_repository(repo)?;
-
-    let mut global = load_global_state()?;
-    global.active_repo = Some(repo.repo_id);
-    global.active_workpad = Some(workpad_id.clone());
-    global.total_operations += 1;
-    save_global_state(global)?;
-
-    Ok(workpad)
+    load_workpad(&workpad_id)
 }
 
 #[tauri::command]
@@ -208,60 +195,61 @@ pub(crate) fn run_tests(workpad_id: String, target: String) -> Result<TestRun, S
         return Err("Test target cannot be empty".to_string());
     }
 
-    let mut workpad = load_workpad(&workpad_id)?;
-    let run_id = format!("tr-{}", Uuid::new_v4().simple());
-    let started_at = Utc::now();
-    let completed_at = started_at + chrono::Duration::milliseconds(1500);
+    run_cli_command(vec![
+        "test".to_string(),
+        "run".to_string(),
+        workpad_id.clone(),
+        "--target".to_string(),
+        trimmed.to_string(),
+    ])?;
 
-    let test_run = TestRun {
-        run_id: run_id.clone(),
-        workpad_id: Some(workpad_id.clone()),
-        target: trimmed.to_string(),
-        status: "passed".to_string(),
-        started_at: started_at.to_rfc3339(),
-        completed_at: Some(completed_at.to_rfc3339()),
-        total_tests: 20,
-        passed: 20,
-        failed: 0,
-        skipped: 0,
-        duration_ms: 1500,
-    };
-
-    let path = get_state_dir()
-        .join("test_runs")
-        .join(format!("{}.json", test_run.run_id));
-    write_json(&path, &test_run)?;
-
-    workpad.test_runs.insert(0, run_id);
-    workpad.status = "passed".to_string();
-    let workpad = save_workpad(workpad)?;
-
-    let mut global = load_global_state()?;
-    global.total_operations += 1;
-    global.active_workpad = Some(workpad.workpad_id.clone());
-    save_global_state(global)?;
-
-    Ok(test_run)
+    let mut runs = list_test_runs(Some(workpad_id.clone()))?;
+    runs.into_iter()
+        .next()
+        .ok_or_else(|| "No test runs recorded".to_string())
 }
 
 #[tauri::command]
 pub(crate) fn promote_workpad(workpad_id: String) -> Result<PromotionRecord, String> {
-    let mut workpad = load_workpad(&workpad_id)?;
-    let mut repo = load_repository(&workpad.repo_id)?;
-    let now = Utc::now().to_rfc3339();
+    run_cli_command(vec![
+        "workpad-integrated".to_string(),
+        "promote".to_string(),
+        workpad_id.clone(),
+    ])?;
 
-    workpad.status = "promoted".to_string();
-    workpad.promoted_at = Some(now.clone());
-    let workpad = save_workpad(workpad)?;
+    // Attempt to locate the most recent promotion record for this workpad
+    let promotions_dir = get_state_dir().join("promotions");
+    let mut latest: Option<PromotionRecord> = None;
 
-    if let Some(commit) = workpad.current_commit.clone() {
-        repo.current_commit = Some(commit);
+    if promotions_dir.exists() {
+        for entry in fs::read_dir(&promotions_dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Some(record) = read_json::<PromotionRecord>(&path)? {
+                    if record.workpad_id == workpad_id {
+                        let is_newer = latest
+                            .as_ref()
+                            .map(|existing| record.created_at > existing.created_at)
+                            .unwrap_or(true);
+                        if is_newer {
+                            latest = Some(record);
+                        }
+                    }
+                }
+            }
+        }
     }
-    repo = save_repository(repo)?;
 
-    let record_id = format!("pr-{}", Uuid::new_v4().simple());
-    let promotion = PromotionRecord {
-        record_id: record_id.clone(),
+    if let Some(record) = latest {
+        return Ok(record);
+    }
+
+    // Fallback: synthesize a promotion record from current state
+    let workpad = load_workpad(&workpad_id)?;
+    let now = Utc::now().to_rfc3339();
+    let record = PromotionRecord {
+        record_id: format!("pr-{}", Uuid::new_v4().simple()),
         repo_id: workpad.repo_id.clone(),
         workpad_id: workpad.workpad_id.clone(),
         decision: "manual".to_string(),
@@ -273,21 +261,10 @@ pub(crate) fn promote_workpad(workpad_id: String) -> Result<PromotionRecord, Str
         test_run_id: workpad.test_runs.first().cloned(),
         ci_status: None,
         ci_message: None,
-        created_at: now.clone(),
+        created_at: now,
     };
 
-    let promotions_dir = get_state_dir().join("promotions");
-    let path = promotions_dir.join(format!("{}.json", record_id));
-    write_json(&path, &promotion)?;
-
-    let mut global = load_global_state()?;
-    if global.active_workpad.as_deref() == Some(&workpad.workpad_id) {
-        global.active_workpad = None;
-    }
-    global.total_operations += 1;
-    save_global_state(global)?;
-
-    Ok(promotion)
+    Ok(record)
 }
 
 #[tauri::command]
@@ -300,21 +277,30 @@ pub(crate) fn apply_patch(
         return Err("Patch diff cannot be empty".to_string());
     }
 
-    let mut workpad = load_workpad(&workpad_id)?;
-    workpad.patches_applied += 1;
+    let trimmed_message = message.trim();
+    let final_message = if trimmed_message.is_empty() {
+        "Apply patch from GUI"
+    } else {
+        trimmed_message
+    };
 
-    let mut files = workpad.files_changed.clone();
-    let mut new_files = parse_changed_files(&diff);
-    files.append(&mut new_files);
-    let mut unique: HashSet<String> = files.into_iter().collect();
-    let mut files_vec: Vec<String> = unique.drain().collect();
-    files_vec.sort();
-    workpad.files_changed = files_vec;
+    let temp_path = env::temp_dir().join(format!("sologit_patch_{}.diff", Uuid::new_v4().simple()));
+    fs::write(&temp_path, diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
 
-    workpad.status = "in_progress".to_string();
-    workpad.current_commit = Some(format!("{}", Uuid::new_v4().simple()));
+    let patch_arg = temp_path
+        .to_str()
+        .ok_or_else(|| "Failed to encode temporary patch path".to_string())?
+        .to_string();
 
-    let workpad = save_workpad(workpad)?;
+    let cli_args = vec![
+        "workpad-integrated".to_string(),
+        "apply-patch".to_string(),
+        patch_arg.clone(),
+        "--pad".to_string(),
+        workpad_id.clone(),
+        "--message".to_string(),
+        final_message.to_string(),
+    ];
 
     let notes_path = get_state_dir()
         .join("workpads")
@@ -324,17 +310,13 @@ pub(crate) fn apply_patch(
         .create(true)
         .append(true)
         .open(&notes_path)
-        .and_then(|mut file| {
-            use std::io::Write;
-            file.write_all(entry.as_bytes())
-        });
+        .and_then(|mut file| file.write_all(entry.as_bytes()));
+    let result = run_cli_command(cli_args);
 
-    let mut global = load_global_state()?;
-    global.total_operations += 1;
-    global.active_workpad = Some(workpad.workpad_id.clone());
-    save_global_state(global)?;
+    let _ = fs::remove_file(&temp_path);
+    result?;
 
-    Ok(workpad)
+    load_workpad(&workpad_id)
 }
 
 #[tauri::command]
@@ -397,23 +379,12 @@ pub(crate) fn trigger_ai_operation(
 
 #[tauri::command]
 pub(crate) fn delete_workpad(workpad_id: String) -> Result<(), String> {
-    let workpad = load_workpad(&workpad_id)?;
-    let path = get_state_dir()
-        .join("workpads")
-        .join(format!("{}.json", workpad_id));
-    fs::remove_file(&path).map_err(|e| format!("Failed to delete workpad: {}", e))?;
-
-    let mut repo = load_repository(&workpad.repo_id)?;
-    repo.workpads.retain(|id| id != &workpad_id);
-    let _ = save_repository(repo)?;
-
-    let mut global = load_global_state()?;
-    if global.active_workpad.as_deref() == Some(&workpad_id) {
-        global.active_workpad = None;
-    }
-    global.total_operations += 1;
-    save_global_state(global)?;
-
+    run_cli_command(vec![
+        "workpad-integrated".to_string(),
+        "delete".to_string(),
+        workpad_id,
+        "--force".to_string(),
+    ])?;
     Ok(())
 }
 
@@ -438,10 +409,7 @@ pub(crate) fn rollback_workpad(
             .create(true)
             .append(true)
             .open(&log_path)
-            .and_then(|mut file| {
-                use std::io::Write;
-                file.write_all(entry.as_bytes())
-            });
+            .and_then(|mut file| file.write_all(entry.as_bytes()));
     }
 
     let workpad = save_workpad(workpad)?;
@@ -485,176 +453,31 @@ pub(crate) fn create_repository(
         return Err("Repository name cannot be empty".to_string());
     }
 
-    let uuid_string = Uuid::new_v4().simple().to_string();
-    let repo_id = format!("repo-{}", &uuid_string.chars().take(12).collect::<String>());
-    let now = Utc::now().to_rfc3339();
+    let mut args = vec![
+        "repo".to_string(),
+        "init".to_string(),
+        "--empty".to_string(),
+        "--name".to_string(),
+        trimmed.to_string(),
+    ];
+    if let Some(custom) = path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
+        args.push("--path".to_string());
+        args.push(custom);
+    }
 
-    let repo_path = if let Some(custom) = path.and_then(|p| {
-        let trimmed = p.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    }) {
-        PathBuf::from(custom)
-    } else {
-        get_repos_dir().join(&repo_id)
-    };
+    run_cli_command(args)?;
 
-    fs::create_dir_all(&repo_path).map_err(|e| {
-        format!(
-            "Failed to create repository directory {}: {}",
-            repo_path.display(),
-            e
-        )
-    })?;
+    // CLI commands set the active repository to the one created.
+    let global = load_global_state()?;
+    let repo_id = global
+        .active_repo
+        .ok_or_else(|| "CLI did not report an active repository".to_string())?;
 
-    let repo = RepositoryState {
-        repo_id: repo_id.clone(),
-        name: trimmed.to_string(),
-        path: repo_path.to_string_lossy().to_string(),
-        trunk_branch: "main".to_string(),
-        current_commit: None,
-        created_at: now.clone(),
-        updated_at: now.clone(),
-        workpads: Vec::new(),
-        total_commits: 0,
-    };
-
-    let path = get_state_dir()
-        .join("repositories")
-        .join(format!("{}.json", repo_id));
-    write_json(&path, &repo)?;
-
-    let mut global = load_global_state()?;
-    global.active_repo = Some(repo.repo_id.clone());
-    global.active_workpad = None;
-    global.total_operations += 1;
-    save_global_state(global)?;
-
-    Ok(repo)
+    load_repository(&repo_id)
 }
 
 #[tauri::command]
 pub(crate) fn delete_repository(repo_id: String) -> Result<(), String> {
-    let repo = load_repository(&repo_id)?;
-    let repo_state_path = get_state_dir()
-        .join("repositories")
-        .join(format!("{}.json", repo_id));
-    fs::remove_file(&repo_state_path).map_err(|e| format!("Failed to remove repository: {}", e))?;
-
-    let workpads_dir = get_state_dir().join("workpads");
-    let mut removed_workpads = Vec::new();
-    if workpads_dir.exists() {
-        for entry in fs::read_dir(&workpads_dir)
-            .map_err(|e| format!("Failed to read workpads directory: {}", e))?
-        {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(workpad) = read_json::<WorkpadState>(&path)? {
-                    if workpad.repo_id == repo_id {
-                        fs::remove_file(&path).map_err(|e| {
-                            format!("Failed to remove workpad {}: {}", workpad.workpad_id, e)
-                        })?;
-                        removed_workpads.push(workpad.workpad_id);
-                    }
-                }
-            }
-        }
-    }
-
-    let tests_dir = get_state_dir().join("test_runs");
-    if tests_dir.exists() {
-        for entry in fs::read_dir(&tests_dir)
-            .map_err(|e| format!("Failed to read test runs directory: {}", e))?
-        {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(test_run) = read_json::<TestRun>(&path)? {
-                    if test_run
-                        .workpad_id
-                        .as_ref()
-                        .map(|id| removed_workpads.contains(id))
-                        .unwrap_or(false)
-                    {
-                        fs::remove_file(&path).map_err(|e| {
-                            format!("Failed to remove test run {}: {}", test_run.run_id, e)
-                        })?;
-                    }
-                }
-            }
-        }
-    }
-
-    let ai_dir = get_state_dir().join("ai_operations");
-    if ai_dir.exists() {
-        for entry in fs::read_dir(&ai_dir)
-            .map_err(|e| format!("Failed to read AI operations directory: {}", e))?
-        {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(op) = read_json::<AIOperation>(&path)? {
-                    if op
-                        .workpad_id
-                        .as_ref()
-                        .map(|id| removed_workpads.contains(id))
-                        .unwrap_or(false)
-                    {
-                        fs::remove_file(&path).map_err(|e| {
-                            format!("Failed to remove AI operation {}: {}", op.operation_id, e)
-                        })?;
-                    }
-                }
-            }
-        }
-    }
-
-    let promotions_dir = get_state_dir().join("promotions");
-    if promotions_dir.exists() {
-        for entry in fs::read_dir(&promotions_dir)
-            .map_err(|e| format!("Failed to read promotions directory: {}", e))?
-        {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(record) = read_json::<PromotionRecord>(&path)? {
-                    if record.repo_id == repo_id {
-                        fs::remove_file(&path).map_err(|e| {
-                            format!(
-                                "Failed to remove promotion record {}: {}",
-                                record.record_id, e
-                            )
-                        })?;
-                    }
-                }
-            }
-        }
-    }
-
-    let repos_root = get_repos_dir();
-    let repo_path = PathBuf::from(&repo.path);
-    if repo_path.starts_with(&repos_root) && repo_path.exists() {
-        let _ = fs::remove_dir_all(&repo_path);
-    }
-
-    let mut global = load_global_state()?;
-    if global.active_repo.as_deref() == Some(&repo_id) {
-        global.active_repo = None;
-    }
-    if global
-        .active_workpad
-        .as_ref()
-        .map(|id| removed_workpads.contains(id))
-        .unwrap_or(false)
-    {
-        global.active_workpad = None;
-    }
-    global.total_operations += 1;
-    save_global_state(global)?;
-
+    run_cli_command(vec!["repo".to_string(), "delete".to_string(), repo_id])?;
     Ok(())
 }

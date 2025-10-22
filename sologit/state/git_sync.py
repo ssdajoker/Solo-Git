@@ -110,7 +110,7 @@ class GitStateSync:
         self._sync_commits(repo_id)
         
         logger.info(f"Repository {repo_id} initialized and synced")
-        
+
         return {
             'repo_id': repo.id,
             'name': repo.name,
@@ -118,7 +118,31 @@ class GitStateSync:
             'trunk_branch': repo.trunk_branch,
             'source_url': git_url
         }
-    
+
+    def create_empty_repo(self, name: str, path: Optional[str] = None) -> Dict[str, Any]:
+        """Create an empty repository and synchronize state."""
+
+        logger.info(f"Creating empty repository: {name}")
+
+        repo_id = self.git_engine.create_empty_repo(name, Path(path) if path else None)
+        repo = self.git_engine.get_repo(repo_id)
+
+        self.state_manager.create_repository(
+            repo_id=repo.id,
+            name=repo.name,
+            path=str(repo.path)
+        )
+
+        self.state_manager.set_active_context(repo_id=repo_id)
+        self._sync_commits(repo_id)
+
+        return {
+            'repo_id': repo.id,
+            'name': repo.name,
+            'path': str(repo.path),
+            'trunk_branch': repo.trunk_branch,
+            'source_type': repo.source_type,
+        }
     def get_repo(self, repo_id: str) -> Optional[Dict[str, Any]]:
         """Get repository info from both state and git."""
         repo = self.git_engine.get_repo(repo_id)
@@ -301,9 +325,28 @@ class GitStateSync:
             status="deleted",
             updated_at=datetime.utcnow().isoformat()
         )
-        
+
         logger.info(f"Workpad {pad_id} deleted")
-    
+
+    def delete_repository(self, repo_id: str, remove_files: bool = True) -> None:
+        """Delete repository and remove associated state."""
+
+        logger.info(f"Deleting repository {repo_id}")
+
+        repo = self.git_engine.get_repo(repo_id)
+        if not repo:
+            raise GitEngineError(f"Repository {repo_id} not found")
+
+        self.git_engine.delete_repository(repo_id, remove_files=remove_files)
+        self.state_manager.delete_repository(repo_id)
+
+        context = self.state_manager.get_active_context()
+        if context.get('repo_id') == repo_id or (
+            context.get('workpad_id') and
+            not self.state_manager.get_workpad(context['workpad_id'])
+        ):
+            self.state_manager.set_active_context(repo_id=None, workpad_id=None)
+
     # Test Operations
     
     def create_test_run(self, workpad_id: Optional[str], target: str = "fast") -> Dict[str, Any]:
