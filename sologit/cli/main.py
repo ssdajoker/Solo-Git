@@ -342,36 +342,19 @@ def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
 
 
 @cli.command()
-def tui():
+@click.option('--repo', 'repo_path', type=click.Path(exists=True), help='Repository path')
+def tui(repo_path: Optional[str] = None):
     """
-    Launch the Heaven Interface TUI (Text User Interface).
+    Launch the Heaven Interface TUI.
 
-    This command is an alias for ``evogitctl heaven`` and launches the
-    production HeavenTUI experience with the full-screen interface for
-    repository management, test monitoring, and workpad control.
-
-    \b
-    Keyboard Shortcuts:
-      q - Quit
-      r - Refresh
-      c - Clear log
-      g - Show commit graph
-      w - Show workpads
-      ? - Help
+    This is an alias for ``evogitctl heaven`` and provides the full production
+    Heaven Interface experience for managing repositories, workpads, and tests
+    from the terminal.
     """
-    _launch_heaven_tui()
-    formatter.print_header("Heaven Interface TUI")
-    formatter.print_info("Launching classic Heaven Interface experience...")
-    try:
-        from sologit.ui.tui_app import run_tui
-        run_tui()
-    except ImportError as e:
-        abort_with_error(
-            "TUI dependencies not installed",
-            "Install with: pip install textual"
-        )
-    except Exception as e:
-        abort_with_error("TUI launch failed", str(e))
+    if repo_path is not None:
+        _launch_heaven_tui(repo_path=repo_path)
+    else:
+        _launch_heaven_tui()
 
 
 @cli.command()
@@ -419,19 +402,6 @@ def heaven(repo_path: Optional[str]):
     This command can also be accessed via the ``evogitctl tui`` alias.
     """
     _launch_heaven_tui(repo_path=repo_path)
-    formatter.print_header("Heaven Interface")
-    formatter.print_info("Launching production Heaven Interface...")
-    try:
-        from sologit.ui.heaven_tui import run_heaven_tui
-        run_heaven_tui(repo_path=repo_path)
-    except ImportError as e:
-        abort_with_error(
-            "Heaven TUI dependencies not installed",
-            "Install with: pip install textual"
-        )
-    except Exception as e:
-        logger.error(f"Heaven TUI error: {e}", exc_info=True)
-        abort_with_error("Heaven TUI launch failed", str(e))
 
 
 @cli.command()
