@@ -166,7 +166,6 @@ class AIOrchestrator:
 
         model_config = None
         estimated_cost = 0.0
-        actual_cost = 0.0
         complexity = None
 
         with self._progress("AI planning workflow", total=100) as progress_ctx:
