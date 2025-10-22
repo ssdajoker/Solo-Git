@@ -4,10 +4,13 @@ Configuration commands for Solo Git CLI.
 Provides commands to setup, view, and validate configuration.
 """
 
-import click
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+from typing import Any, Dict, List, NoReturn, Optional, cast
+
+import click
+from rich.console import Console
 
 from sologit.api.client import AbacusClient
 from sologit.config.manager import ConfigManager
@@ -23,7 +26,7 @@ logger = get_logger(__name__)
 formatter = RichFormatter()
 
 
-def set_formatter_console(console) -> None:
+def set_formatter_console(console: Console) -> None:
     """Configure the shared console instance."""
     formatter.set_console(console)
 
@@ -31,7 +34,7 @@ def set_formatter_console(console) -> None:
 def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
     """Ensure the Click context has an initialized object dictionary and return it."""
     ctx.ensure_object(dict)
-    return ctx.obj  # type: ignore[return-value]
+    return cast(Dict[str, Any], ctx.obj)
 
 
 def _get_config_manager(ctx: click.Context) -> ConfigManager:
@@ -44,7 +47,31 @@ def _get_config_manager(ctx: click.Context) -> ConfigManager:
     return config_manager
 
 
-def abort_with_error(message: str, details: str | None = None) -> None:
+def abort_with_error(
+    message: str,
+    details: str | None = None,
+    *,
+    title: str | None = None,
+    help_text: str | None = None,
+    tip: str | None = None,
+    suggestions: List[str] | None = None,
+    docs_url: str | None = None,
+) -> None:
+    """Display a formatted error panel with context and exit."""
+
+    formatter.print_error(
+        title or "Configuration Error",
+        message,
+        help_text=help_text or "Review the command options below and fix the highlighted issues.",
+        tip=tip or "Run 'evogitctl config --help' to see all configuration subcommands.",
+        suggestions=suggestions or [
+            "evogitctl config show",
+            "evogitctl config setup",
+        ],
+        docs_url=docs_url or "docs/SETUP.md#configuration",
+        details=details,
+    )
+def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
     """Display a formatted error and exit."""
     content = f"[bold]Error: {message}[/bold]"
     if details:
@@ -55,6 +82,8 @@ def abort_with_error(message: str, details: str | None = None) -> None:
 
 @click.group(name="config")
 def config_group():
+@click.group(name='config')
+def config_group() -> None:
     """Configuration management commands."""
     pass
 
@@ -64,6 +93,13 @@ def config_group():
 @click.option("--endpoint", help="Abacus.ai API endpoint", default="https://api.abacus.ai/v1")
 @click.option("--interactive/--no-interactive", default=True, help="Interactive setup mode")
 def setup_config(api_key, endpoint, interactive):
+@config_group.command(name='setup')
+@click.option('--api-key', help='Abacus.ai API key')
+@click.option('--endpoint', help='Abacus.ai API endpoint',
+              default='https://api.abacus.ai/v1')
+@click.option('--interactive/--no-interactive', default=True,
+              help='Interactive setup mode')
+def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: bool) -> None:
     """
     Setup Solo Git configuration.
 
@@ -99,12 +135,26 @@ def setup_config(api_key, endpoint, interactive):
 
     # Validate inputs
     if not api_key:
-        abort_with_error("API key is required")
+        abort_with_error(
+            "API key is required",
+            title="Configuration Incomplete",
+            help_text="Provide your Abacus.ai API key using --api-key or rerun this command in interactive mode to enter it securely.",
+            tip="You can export ABACUS_API_KEY in your shell and rerun 'evogitctl config setup --no-interactive'.",
+            suggestions=[
+                "evogitctl config setup --interactive",
+                "export ABACUS_API_KEY=...",
+            ],
+            docs_url="docs/SETUP.md#configuration",
+        )
+
 
     # Save configuration
     try:
-        config_manager.set_abacus_credentials(api_key, endpoint)
-        config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
+        if api_key is None:
+            abort_with_error("API key is required")
+        endpoint_value = endpoint or 'https://api.abacus.ai/v1'
+        config_manager.set_abacus_credentials(api_key, endpoint_value)
+        config_path = cast(Path, getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE))
         formatter.print_success_panel(
             f"Configuration saved to [bold]{config_path}[/bold]", title="Configuration Saved"
         )
@@ -121,13 +171,24 @@ def setup_config(api_key, endpoint, interactive):
         )
 
     except Exception as e:
-        abort_with_error("Error saving configuration", str(e))
+        abort_with_error(
+            "Error saving configuration",
+            str(e),
+            title="Configuration Write Failed",
+            help_text="Verify that the destination directory is writable and that the configuration file is not locked by another process.",
+            tip="Run again with sudo only if your config directory truly requires elevated permissions.",
+            suggestions=[
+                f"Check permissions on {config_path}",
+                "evogitctl config show",
+            ],
+            docs_url="docs/SETUP.md#configuration",
+        )
 
 
 @config_group.command(name="show")
 @click.option("--secrets/--no-secrets", default=False, help="Show API keys (masked by default)")
 @click.pass_context
-def show_config(ctx, secrets):
+def show_config(ctx: click.Context, secrets: bool) -> None:
     """Display current configuration."""
     config_manager = _get_config_manager(ctx)
 
@@ -151,7 +212,7 @@ def show_config(ctx, secrets):
     formatter.print_info_panel("Abacus.ai API Settings", title="API")
     formatter.console.print(api_table)
 
-    def render_tier(label: str, tier_config) -> None:
+    def render_tier(label: str, tier_config: Any) -> None:
         primary = tier_config.primary
         row_value = (
             f"{primary.name} [{primary.provider}]\n"
@@ -197,7 +258,7 @@ def show_config(ctx, secrets):
 
 @config_group.command(name="test")
 @click.pass_context
-def test_config(ctx):
+def test_config(ctx: click.Context) -> None:
     """Test API connection and validate configuration."""
     config_manager = _get_config_manager(ctx)
 
@@ -205,15 +266,36 @@ def test_config(ctx):
 
     # Validate configuration
     is_valid, errors = config_manager.validate()
+    error_messages: List[str] = errors
 
     if not is_valid:
         formatter.print_error_panel(
             "Configuration validation failed. Review the following issues:", title="Validation"
+        formatter.print_error(
+            "Configuration Validation Failed",
+            "Review the issues below and update your configuration file.",
+            help_text="Each row highlights a required configuration value that is missing or malformed.",
+            tip="Open the config file listed in the Paths section and correct the highlighted fields before rerunning this check.",
+            suggestions=[
+                "evogitctl config show --secrets",
+                "evogitctl config setup --no-interactive",
+            ],
+            docs_url="docs/SETUP.md#configuration",
         )
         error_table = formatter.table(headers=["Issues"])
-        for error in errors:
+        for error in error_messages:
             error_table.add_row(error)
-            formatter.print_error(error)
+            formatter.print_error(
+                "Configuration Validation Issue",
+                error,
+                help_text="Update the configuration file entry so it matches the expected format.",
+                tip="Open the config file shown below and correct the value before retrying 'evogitctl config test'.",
+                suggestions=[
+                    "evogitctl config show --secrets",
+                    "evogitctl config setup --no-interactive",
+                ],
+                docs_url="docs/SETUP.md#configuration",
+            )
         formatter.console.print(error_table)
         sys.exit(1)
 
@@ -238,17 +320,38 @@ def test_config(ctx):
             )
             formatter.print_success("API connection successful")
         else:
-            abort_with_error("API connection failed")
+            abort_with_error(
+                "API connection failed",
+                title="API Connectivity Issue",
+                help_text="Verify the endpoint URL and network connectivity. Solo Git could not reach Abacus.ai.",
+                tip="Check if a corporate proxy or firewall is blocking outbound requests to https://api.abacus.ai/v1.",
+                suggestions=[
+                    f"curl -I {config.abacus.endpoint}",
+                    "evogitctl config show",
+                ],
+                docs_url="docs/SETUP.md#configuration",
+            )
 
     except Exception as e:
-        abort_with_error("API connection failed", str(e))
+        abort_with_error(
+            "API connection failed",
+            str(e),
+            title="API Connectivity Issue",
+            help_text="Inspect the exception details below and ensure your network allows outbound HTTPS to Abacus.ai.",
+            tip="If you're behind a proxy, set HTTPS_PROXY before rerunning this command.",
+            suggestions=[
+                "export HTTPS_PROXY=...",
+                f"curl -I {config.abacus.endpoint}",
+            ],
+            docs_url="docs/SETUP.md#configuration",
+        )
 
     formatter.print_success_panel("All checks passed! Solo Git is ready to use.", title="Ready")
 
 
 @config_group.group(name="budget")
 @click.pass_context
-def budget_group(ctx):
+def budget_group(ctx: click.Context) -> None:
     """Budget monitoring commands."""
     context_obj = _ensure_context(ctx)
     if "config" not in context_obj:
@@ -257,7 +360,7 @@ def budget_group(ctx):
 
 @budget_group.command(name="status")
 @click.pass_context
-def budget_status(ctx):
+def budget_status(ctx: click.Context) -> None:
     """Show current AI budget status."""
     config_manager = _get_config_manager(ctx)
 
@@ -268,7 +371,7 @@ def budget_status(ctx):
         track_by_model=config.budget.track_by_model,
     )
     cost_guard = CostGuard(guard_config)
-    status = cost_guard.get_status()
+    status: Dict[str, Any] = cost_guard.get_status()
 
     formatter.print_header("Solo Git Budget Status")
     summary_table = formatter.table(headers=["Metric", "Value"])
@@ -299,6 +402,7 @@ def budget_status(ctx):
         formatter.print_info_panel(alerts_panel, title="Alerts")
 
     breakdown = status.get("usage_breakdown") or {}
+    breakdown: Dict[str, Any] = status.get('usage_breakdown') or {}
     if breakdown:
         breakdown_table = formatter.table(headers=["Metric", "Value"])
         breakdown_table.add_row(
@@ -315,6 +419,7 @@ def budget_status(ctx):
         formatter.console.print(breakdown_table)
 
     last_usage = status.get("last_usage")
+    last_usage = cast(Optional[Dict[str, Any]], status.get('last_usage'))
     if last_usage:
         last_panel = (
             f"Timestamp: {last_usage['timestamp']}\n"
@@ -328,6 +433,9 @@ def budget_status(ctx):
 @config_group.command(name="init")
 @click.option("--force", is_flag=True, help="Overwrite existing config file")
 def init_config(force):
+@config_group.command(name='init')
+@click.option('--force', is_flag=True, help='Overwrite existing config file')
+def init_config(force: bool) -> None:
     """Initialize a new configuration file with defaults."""
     config_path = ConfigManager.DEFAULT_CONFIG_FILE
 
@@ -354,6 +462,8 @@ def init_config(force):
 
 @config_group.command(name="env-template")
 def env_template():
+@config_group.command(name='env-template')
+def env_template() -> None:
     """Generate .env template file."""
     env_path = Path.cwd() / ".env.example"
 
@@ -370,6 +480,8 @@ def env_template():
 
 @config_group.command(name="path")
 def config_path():
+@config_group.command(name='path')
+def config_path() -> None:
     """Show configuration file path."""
     formatter.print_header("Configuration Path")
     formatter.print_info(str(ConfigManager.DEFAULT_CONFIG_FILE))

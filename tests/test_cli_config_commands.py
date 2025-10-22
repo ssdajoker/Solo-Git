@@ -118,7 +118,8 @@ def test_config_test_validation_fails():
         result = runner.invoke(sologit_cli, ['config', 'test'], catch_exceptions=False)
 
         assert result.exit_code != 0
-        assert "Configuration validation failed" in result.output
+        assert "Configuration Validation Failed" in result.output
+        assert "Review the issues below" in result.output
         assert "Invalid model name" in result.output
 
 def test_config_budget_status(mock_config_manager):
