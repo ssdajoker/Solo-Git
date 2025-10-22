@@ -246,7 +246,7 @@ def gui(ctx, dev: bool):
 
     formatter.print_info(f"Launching Heaven Interface GUI from {gui_path}...")
     try:
-        launch_cwd = gui_path.parent if gui_path.is_file() else gui_path
+        launch_cwd = gui_path.parent
         subprocess.Popen(
             [str(gui_path)],
             env=env,
