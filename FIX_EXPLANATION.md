@@ -154,7 +154,7 @@ TestResult(
     exit_code=0,     # ← Added
     stdout='',       # ← Added
     stderr='',       # ← Added
-    mode='', 
+    mode='subprocess', 
     log_path=Path('/log/unit.txt')
 )
 ```
