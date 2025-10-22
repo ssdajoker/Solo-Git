@@ -223,7 +223,7 @@ def gui(ctx, dev: bool):
             "Launching Heaven Interface GUI in development mode (tauri:dev)..."
         )
         try:
-            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=gui_dir, check=True, env=env)
+            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=str(gui_dir), check=True, env=env)
         except FileNotFoundError:
             abort_with_error(
                 "Failed to launch development GUI.",
