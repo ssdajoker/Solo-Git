@@ -1,4 +1,3 @@
-
 """
 Configuration commands for Solo Git CLI.
 
@@ -38,40 +37,36 @@ def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
 def _get_config_manager(ctx: click.Context) -> ConfigManager:
     """Retrieve a ConfigManager instance from the context or create one."""
     context_obj = _ensure_context(ctx)
-    config_manager = context_obj.get('config')
+    config_manager = context_obj.get("config")
     if config_manager is None:
         config_manager = ConfigManager()
-        context_obj['config'] = config_manager
+        context_obj["config"] = config_manager
     return config_manager
 
 
 def abort_with_error(message: str, details: str | None = None) -> None:
     """Display a formatted error and exit."""
-    plain_message = f"Error: {message}"
-    formatter.print_error(plain_message)
-
-    content = f"[bold]{plain_message}[/bold]"
+    content = f"[bold]Error: {message}[/bold]"
     if details:
         content += f"\n\n{details}"
     formatter.print_error_panel(content)
     sys.exit(1)
 
-@click.group(name='config')
+
+@click.group(name="config")
 def config_group():
     """Configuration management commands."""
     pass
 
 
-@config_group.command(name='setup')
-@click.option('--api-key', help='Abacus.ai API key')
-@click.option('--endpoint', help='Abacus.ai API endpoint', 
-              default='https://api.abacus.ai/v1')
-@click.option('--interactive/--no-interactive', default=True,
-              help='Interactive setup mode')
+@config_group.command(name="setup")
+@click.option("--api-key", help="Abacus.ai API key")
+@click.option("--endpoint", help="Abacus.ai API endpoint", default="https://api.abacus.ai/v1")
+@click.option("--interactive/--no-interactive", default=True, help="Interactive setup mode")
 def setup_config(api_key, endpoint, interactive):
     """
     Setup Solo Git configuration.
-    
+
     Guides you through configuring API credentials and basic settings.
     """
     formatter.print_header("Solo Git Configuration Setup")
@@ -92,13 +87,13 @@ def setup_config(api_key, endpoint, interactive):
         formatter.print_info_panel(
             "To use Solo Git you need Abacus.ai API credentials.\n"
             "Generate an API key from https://abacus.ai.",
-            title="Abacus.ai Credentials"
+            title="Abacus.ai Credentials",
         )
 
         api_key = click.prompt("Enter your Abacus.ai API key", hide_input=True)
 
         if click.confirm("Use default endpoint (https://api.abacus.ai/v1)?", default=True):
-            endpoint = 'https://api.abacus.ai/v1'
+            endpoint = "https://api.abacus.ai/v1"
         else:
             endpoint = click.prompt("Enter custom API endpoint")
 
@@ -111,24 +106,26 @@ def setup_config(api_key, endpoint, interactive):
         config_manager.set_abacus_credentials(api_key, endpoint)
         config_path = getattr(config_manager, "config_path", ConfigManager.DEFAULT_CONFIG_FILE)
         formatter.print_success_panel(
-            f"Configuration saved to [bold]{config_path}[/bold]",
-            title="Configuration Saved"
+            f"Configuration saved to [bold]{config_path}[/bold]", title="Configuration Saved"
         )
 
         formatter.print_subheader("Next Steps")
-        formatter.print_bullet_list([
-            "Test the configuration: evogitctl config test",
-            "View configuration: evogitctl config show",
-            "Initialize a repo: evogitctl repo init --zip app.zip",
-        ], icon=theme.icons.arrow_right, style=theme.colors.blue)
+        formatter.print_bullet_list(
+            [
+                "Test the configuration: evogitctl config test",
+                "View configuration: evogitctl config show",
+                "Initialize a repo: evogitctl repo init --zip app.zip",
+            ],
+            icon=theme.icons.arrow_right,
+            style=theme.colors.blue,
+        )
 
     except Exception as e:
         abort_with_error("Error saving configuration", str(e))
 
 
-@config_group.command(name='show')
-@click.option('--secrets/--no-secrets', default=False,
-              help='Show API keys (masked by default)')
+@config_group.command(name="show")
+@click.option("--secrets/--no-secrets", default=False, help="Show API keys (masked by default)")
 @click.pass_context
 def show_config(ctx, secrets):
     """Display current configuration."""
@@ -141,7 +138,11 @@ def show_config(ctx, secrets):
     api_table = formatter.table(headers=["Field", "Value"])
     api_table.add_row("Endpoint", config.abacus.endpoint)
     if config.abacus.api_key:
-        api_value = config.abacus.api_key if secrets else config.abacus.api_key[:8] + "..." + config.abacus.api_key[-4:]
+        api_value = (
+            config.abacus.api_key
+            if secrets
+            else config.abacus.api_key[:8] + "..." + config.abacus.api_key[-4:]
+        )
         if not secrets:
             api_value += " (use --secrets to show)"
         api_table.add_row("API Key", api_value)
@@ -194,7 +195,7 @@ def show_config(ctx, secrets):
     formatter.console.print(paths_table)
 
 
-@config_group.command(name='test')
+@config_group.command(name="test")
 @click.pass_context
 def test_config(ctx):
     """Test API connection and validate configuration."""
@@ -207,8 +208,7 @@ def test_config(ctx):
 
     if not is_valid:
         formatter.print_error_panel(
-            "Configuration validation failed. Review the following issues:",
-            title="Validation"
+            "Configuration validation failed. Review the following issues:", title="Validation"
         )
         error_table = formatter.table(headers=["Issues"])
         for error in errors:
@@ -234,8 +234,7 @@ def test_config(ctx):
 
         if result:
             formatter.print_success_panel(
-                f"Endpoint: {config.abacus.endpoint}",
-                title="API Connection Successful"
+                f"Endpoint: {config.abacus.endpoint}", title="API Connection Successful"
             )
             formatter.print_success("API connection successful")
         else:
@@ -244,22 +243,19 @@ def test_config(ctx):
     except Exception as e:
         abort_with_error("API connection failed", str(e))
 
-    formatter.print_success_panel(
-        "All checks passed! Solo Git is ready to use.",
-        title="Ready"
-    )
+    formatter.print_success_panel("All checks passed! Solo Git is ready to use.", title="Ready")
 
 
-@config_group.group(name='budget')
+@config_group.group(name="budget")
 @click.pass_context
 def budget_group(ctx):
     """Budget monitoring commands."""
     context_obj = _ensure_context(ctx)
-    if 'config' not in context_obj:
-        context_obj['config'] = ConfigManager()
+    if "config" not in context_obj:
+        context_obj["config"] = ConfigManager()
 
 
-@budget_group.command(name='status')
+@budget_group.command(name="status")
 @click.pass_context
 def budget_status(ctx):
     """Show current AI budget status."""
@@ -280,9 +276,12 @@ def budget_status(ctx):
     summary_table.add_row("Used Today", f"${status['current_cost']:.2f}")
     summary_table.add_row("Remaining", f"${status['remaining']:.2f}")
     summary_table.add_row("Usage", f"{status['percentage_used']:.1f}%")
-    budget_icon = theme.icons.success if status['within_budget'] else theme.icons.warning
-    budget_color = theme.colors.success if status['within_budget'] else theme.colors.warning
-    summary_table.add_row("Within Budget", f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]")
+    budget_icon = theme.icons.success if status["within_budget"] else theme.icons.warning
+    budget_color = theme.colors.success if status["within_budget"] else theme.colors.warning
+    summary_table.add_row(
+        "Within Budget",
+        f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]",
+    )
     formatter.console.print(summary_table)
 
     # Provide simple textual summary for log parsing/tests
@@ -291,31 +290,31 @@ def budget_status(ctx):
     formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
     formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
 
-    if status.get('alerts'):
+    if status.get("alerts"):
         alerts_panel = "\n".join(
             f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
-            for alert in status['alerts']
+            for alert in status["alerts"]
         )
         formatter.print_warning("Budget alerts detected.")
         formatter.print_info_panel(alerts_panel, title="Alerts")
 
-    breakdown = status.get('usage_breakdown') or {}
+    breakdown = status.get("usage_breakdown") or {}
     if breakdown:
         breakdown_table = formatter.table(headers=["Metric", "Value"])
         breakdown_table.add_row(
             "Total Tokens",
-            f"{breakdown.get('total_tokens', 0)} in {breakdown.get('calls_count', 0)} calls"
+            f"{breakdown.get('total_tokens', 0)} in {breakdown.get('calls_count', 0)} calls",
         )
-        if breakdown.get('by_model'):
-            model_lines = [f"{model}: ${cost:.4f}" for model, cost in breakdown['by_model'].items()]
+        if breakdown.get("by_model"):
+            model_lines = [f"{model}: ${cost:.4f}" for model, cost in breakdown["by_model"].items()]
             breakdown_table.add_row("By Model", "\n".join(model_lines))
-        if breakdown.get('by_task'):
-            task_lines = [f"{task}: ${cost:.4f}" for task, cost in breakdown['by_task'].items()]
+        if breakdown.get("by_task"):
+            task_lines = [f"{task}: ${cost:.4f}" for task, cost in breakdown["by_task"].items()]
             breakdown_table.add_row("By Task", "\n".join(task_lines))
         formatter.print_info_panel("Usage breakdown", title="Detailed Usage")
         formatter.console.print(breakdown_table)
 
-    last_usage = status.get('last_usage')
+    last_usage = status.get("last_usage")
     if last_usage:
         last_panel = (
             f"Timestamp: {last_usage['timestamp']}\n"
@@ -326,54 +325,51 @@ def budget_status(ctx):
         formatter.print_info_panel(last_panel, title="Last Usage")
 
 
-@config_group.command(name='init')
-@click.option('--force', is_flag=True, help='Overwrite existing config file')
+@config_group.command(name="init")
+@click.option("--force", is_flag=True, help="Overwrite existing config file")
 def init_config(force):
     """Initialize a new configuration file with defaults."""
     config_path = ConfigManager.DEFAULT_CONFIG_FILE
-    
+
     formatter.print_header("Initialize Configuration")
 
     if config_path.exists() and not force:
         abort_with_error(
             "Configuration file already exists",
-            f"Path: {config_path}\nUse --force to overwrite, or edit it manually."
+            f"Path: {config_path}\nUse --force to overwrite, or edit it manually.",
         )
 
     # Create config directory
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write template
-    with open(config_path, 'w') as f:
+    with open(config_path, "w") as f:
         f.write(DEFAULT_CONFIG_TEMPLATE)
 
     formatter.print_success_panel(
-        f"Created configuration file at [bold]{config_path}[/bold]",
-        title="Config Initialized"
+        f"Created configuration file at [bold]{config_path}[/bold]", title="Config Initialized"
     )
     formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
 
 
-@config_group.command(name='env-template')
+@config_group.command(name="env-template")
 def env_template():
     """Generate .env template file."""
-    env_path = Path.cwd() / '.env.example'
-    
+    env_path = Path.cwd() / ".env.example"
+
     formatter.print_header("Generate .env Template")
 
-    with open(env_path, 'w') as f:
+    with open(env_path, "w") as f:
         f.write(ENV_TEMPLATE)
 
     formatter.print_success_panel(
-        f"Created .env.example at [bold]{env_path}[/bold]",
-        title="Environment Template"
+        f"Created .env.example at [bold]{env_path}[/bold]", title="Environment Template"
     )
     formatter.print_info("Copy to .env and fill in your values: cp .env.example .env")
 
 
-@config_group.command(name='path')
+@config_group.command(name="path")
 def config_path():
     """Show configuration file path."""
     formatter.print_header("Configuration Path")
     formatter.print_info(str(ConfigManager.DEFAULT_CONFIG_FILE))
-
