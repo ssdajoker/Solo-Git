@@ -54,7 +54,6 @@ class StatusBar(Static):
         redo_text = "↷" if can_redo() else "⊘"
         
         shortcuts = get_status_bar_summary()
-
         return (
             f"📦 {self.repo_name}  "
             f"│  🔧 {self.workpad_name}  "
