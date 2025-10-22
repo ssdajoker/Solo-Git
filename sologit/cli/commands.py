@@ -674,8 +674,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 
             status_text = f"{status_icon} {result.status.value}"
             duration_s = result.duration_ms / 1000
-            notes_segments = [segment for segment in [result.error, result.stderr] if segment]
-            notes = " ".join(segment.strip().replace("\n", " ") for segment in notes_segments)
+            notes = " ".join(segment.strip().replace("\n", " ") for segment in [result.error, result.stderr] if segment)
             if len(notes) > 80:
                 notes = notes[:77] + "..."
             log_display = result.log_path.name if result.log_path else "-"
