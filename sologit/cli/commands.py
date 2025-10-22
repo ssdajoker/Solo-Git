@@ -1118,7 +1118,7 @@ def execute_pair_loop(ctx, prompt: str, repo_id: Optional[str], title: Optional[
                 continue
             file_path = repo.path / change.path
             if file_path.exists():
-                existing_files[change.path] = file_path.read_text()
+                existing_files[change.path] = file_path.read_text(encoding="utf-8")
 
         patch_response = orchestrator.generate_patch(
             plan=plan,
