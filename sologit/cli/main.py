@@ -241,7 +241,7 @@ def hello():
 
 @cli.command()
 @click.option("--dev", is_flag=True, help="Launch in development mode")
-def shortcuts():
+def shortcuts(dev: bool = False) -> None:
     """Display keyboard shortcuts for the Heaven Interface TUI."""
 
     formatter.print_header("Heaven Interface Keyboard Shortcuts")
