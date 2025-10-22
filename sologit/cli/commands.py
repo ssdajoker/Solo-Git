@@ -201,7 +201,7 @@ def get_test_orchestrator() -> TestOrchestrator:
     if _test_orchestrator is None:
         _test_orchestrator = TestOrchestrator(get_git_engine(), formatter=formatter)
         config = get_config_manager().config.tests
-        log_dir = Path(config.log_dir).expanduser()
+        log_dir = Path(config.log_dir).expanduser() if config.log_dir is not None else None
         _test_orchestrator = TestOrchestrator(
             get_git_engine(),
             sandbox_image=config.sandbox_image,
