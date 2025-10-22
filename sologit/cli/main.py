@@ -245,6 +245,7 @@ def shortcuts():
 
     formatter.console.print(table)
     formatter.print_info(
+        "Press '?' inside the TUI to view keyboard shortcuts at any time."
         "Press '?' inside the TUI to view this list at any time."
     )
 
