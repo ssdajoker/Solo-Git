@@ -1,11 +1,13 @@
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use tempfile::Builder;
 use uuid::Uuid;
 
 use crate::{
@@ -37,6 +39,45 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     fs::write(&tmp_path, contents)
         .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
     fs::rename(&tmp_path, path).map_err(|e| format!("Failed to persist {}: {}", path.display(), e))
+}
+
+fn store_patch_diff(workpad_id: &str, diff: &str) -> Result<String, String> {
+    let patches_dir = get_state_dir().join("patches");
+    fs::create_dir_all(&patches_dir).map_err(|e| {
+        format!(
+            "Failed to create patch history directory {}: {}",
+            patches_dir.display(),
+            e
+        )
+    })?;
+
+    let mut temp_file = Builder::new()
+        .prefix("sologit_patch_")
+        .suffix(".diff")
+        .tempfile_in(&patches_dir)
+        .map_err(|e| {
+            format!(
+                "Failed to create temporary patch file in {}: {}",
+                patches_dir.display(),
+                e
+            )
+        })?;
+
+    temp_file
+        .write_all(diff.as_bytes())
+        .map_err(|e| format!("Failed to write patch diff: {}", e))?;
+
+    let patch_path = patches_dir.join(format!("{}-{}.diff", workpad_id, Uuid::new_v4().simple()));
+
+    temp_file.persist_noclobber(&patch_path).map_err(|e| {
+        format!(
+            "Failed to persist patch file {}: {}",
+            patch_path.display(),
+            e
+        )
+    })?;
+
+    Ok(patch_path.to_string_lossy().to_string())
 }
 
 fn load_global_state() -> Result<GlobalState, String> {
@@ -311,6 +352,8 @@ pub(crate) fn apply_patch(
     files_vec.sort();
     workpad.files_changed = files_vec;
 
+    let patch_path = store_patch_diff(&workpad.workpad_id, &diff)?;
+
     workpad.status = "in_progress".to_string();
     workpad.current_commit = Some(format!("{}", Uuid::new_v4().simple()));
 
@@ -319,15 +362,18 @@ pub(crate) fn apply_patch(
     let notes_path = get_state_dir()
         .join("workpads")
         .join(format!("{}-notes.log", workpad.workpad_id));
-    let entry = format!("{} :: {}\n\n{}\n\n", Utc::now().to_rfc3339(), message, diff);
+    let entry = format!(
+        "{} :: {}\n\n{}\n\nSaved patch file: {}\n\n",
+        Utc::now().to_rfc3339(),
+        message,
+        diff,
+        patch_path
+    );
     let _ = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&notes_path)
-        .and_then(|mut file| {
-            use std::io::Write;
-            file.write_all(entry.as_bytes())
-        });
+        .and_then(|mut file| file.write_all(entry.as_bytes()));
 
     let mut global = load_global_state()?;
     global.total_operations += 1;
