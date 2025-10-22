@@ -4,6 +4,7 @@
 import asyncio
 import click
 from pathlib import Path
+from typing import Callable, Dict, List, NoReturn, Optional, Tuple, TypeVar
 from typing import List, Optional
 import time
 from pathlib import Path
@@ -32,6 +33,9 @@ from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 from sologit.workflows.ci_orchestrator import CIOrchestrator
 from sologit.workflows.rollback_handler import RollbackHandler
+
+from sologit.core.repository import Repository
+from sologit.core.workpad import Workpad
 
 logger = get_logger(__name__)
 
@@ -90,6 +94,20 @@ _patch_engine: Optional[PatchEngine] = None
 _test_orchestrator: Optional[TestOrchestrator] = None
 _config_manager: Optional[ConfigManager] = None
 _git_state_sync: Optional[GitStateSync] = None
+
+
+def _require_repository(repo: Optional[Repository], repo_id: str) -> Repository:
+    """Ensure a repository object is available."""
+    if repo is None:
+        abort_with_error(f"Repository {repo_id} not found")
+    return repo
+
+
+def _require_workpad(workpad: Optional[Workpad], pad_id: str) -> Workpad:
+    """Ensure a workpad object is available."""
+    if workpad is None:
+        abort_with_error(f"Workpad {pad_id} not found")
+    return workpad
 
 
 def get_config_manager() -> ConfigManager:
@@ -275,6 +293,7 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
     git_sync = get_git_sync()
 
     try:
+        if zip_file is not None:
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
@@ -288,6 +307,68 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
             repo_name = name or zip_path.stem
             repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
         else:
+            assert git_url is not None
+            if not name:
+                name = Path(git_url).stem.replace('.git', '')
+            formatter.print_info(f"Cloning repository from: {git_url}")
+
+        with formatter.progress("Setting up repository") as progress:
+            total_steps = 3
+            overall_task = progress.add_task("Repository initialization", total=total_steps)
+
+            def run_stage(description: str, operation: Callable[[], StageResult]) -> StageResult:
+                stage_task = progress.add_task(description, total=None)
+                progress.update(overall_task, description=description)
+                success = False
+                start = time.perf_counter()
+                try:
+                    result = operation()
+                    success = True
+                    return result
+                finally:
+                    progress.remove_task(stage_task)
+                    if success:
+                        progress.advance(overall_task, 1)
+                        duration = time.perf_counter() - start
+                        logger.debug("Stage '%s' completed in %.2fs", description, duration)
+
+            if zip_file:
+                zip_data = run_stage("Loading archive from disk", lambda: zip_path.read_bytes())
+
+                if not name:
+                    name = zip_path.stem
+
+                repo_id = run_stage(
+                    "Importing files & creating initial commit",
+                    lambda: git_engine.init_from_zip(zip_data, name),
+                )
+            else:  # git_url
+                run_stage("Preparing clone parameters", lambda: None)
+
+                assert git_url is not None
+                repo_id = run_stage(
+                    "Cloning remote repository",
+                    lambda: git_engine.init_from_git(git_url, name),
+                )
+
+            final_stage_label = (
+                "Verifying initial commit & metadata"
+                if zip_file
+                else "Recording repository metadata"
+            )
+            repo = _require_repository(
+                run_stage(
+                    final_stage_label,
+                    lambda: git_engine.get_repo(repo_id),
+                ),
+                repo_id,
+            )
+
+            progress.update(
+                overall_task,
+                description="Repository ready",
+                completed=total_steps,
+            )
             if git_url is None:
                 abort_with_error("Internal error: git_url is unexpectedly None")
             if not name:
@@ -450,9 +531,10 @@ def pad_create(title: str, repo_id: Optional[str]) -> None:
 
     try:
         formatter.print_info(f"Creating workpad: {title}")
+        assert repo_id is not None
         pad_id = git_engine.create_workpad(repo_id, title)
 
-        workpad = git_engine.get_workpad(pad_id)
+        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
         formatter.print_success("Workpad created!")
         formatter.print_info(f"Pad ID: {workpad.id}")
         formatter.print_info(f"Title: {workpad.title}")
@@ -519,10 +601,7 @@ def pad_list(repo_id: Optional[str]) -> None:
 def pad_info(pad_id: str) -> None:
     """Show workpad information."""
     git_engine = get_git_engine()
-    workpad = git_engine.get_workpad(pad_id)
-
-    if not workpad:
-        abort_with_error(f"Workpad {pad_id} not found")
+    workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
 
     formatter.print_header(f"Workpad Details: {workpad.title}")
 
@@ -562,6 +641,7 @@ def pad_promote(pad_id: str) -> None:
     """Promote workpad to trunk (fast-forward merge)."""
     git_engine = get_git_engine()
 
+    workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
     workpad = git_engine.get_workpad(pad_id)
     if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
@@ -599,6 +679,7 @@ def pad_diff(pad_id: str) -> None:
     """Show diff between workpad and trunk."""
     git_engine = get_git_engine()
 
+    workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
     workpad = git_engine.get_workpad(pad_id)
     if workpad is None:
         abort_with_error(f"Workpad {pad_id} not found")
@@ -947,9 +1028,7 @@ def ci_smoke(repo_id: str, commit: Optional[str]) -> None:
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
 
-    repo = git_engine.get_repo(repo_id)
-    if not repo:
-        abort_with_error(f"Repository {repo_id} not found")
+    repo = _require_repository(git_engine.get_repo(repo_id), repo_id)
     
     # Get commit hash
     if not commit:
@@ -1175,8 +1254,9 @@ def execute_pair_loop(
     try:
         formatter.print_subheader("Workpad Setup")
         formatter.print_info("Creating ephemeral workpad...")
+        assert repo_id is not None
         pad_id = git_engine.create_workpad(repo_id, title)
-        workpad = git_engine.get_workpad(pad_id)
+        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
         formatter.print_success("Workpad created")
 
         workpad_table = formatter.table(headers=["Field", "Value"])
@@ -1215,14 +1295,26 @@ def execute_pair_loop(
         plan = plan_response.plan
         plan_table = formatter.table(headers=["Aspect", "Details"])
         plan_table.add_row("Description", plan.description or "-")
-        plan_table.add_row(
-            "Modify",
-            ', '.join(plan.files_to_modify) if plan.files_to_modify else "None"
-        )
-        plan_table.add_row(
-            "Create",
-            ', '.join(plan.files_to_create) if plan.files_to_create else "None"
-        )
+
+        modifications = [
+            change.path
+            for change in plan.file_changes
+            if change.action.lower() == "modify"
+        ]
+        creations = [
+            change.path
+            for change in plan.file_changes
+            if change.action.lower() == "create"
+        ]
+        deletions = [
+            change.path
+            for change in plan.file_changes
+            if change.action.lower() == "delete"
+        ]
+
+        plan_table.add_row("Modify", ', '.join(modifications) if modifications else "None")
+        plan_table.add_row("Create", ', '.join(creations) if creations else "None")
+        plan_table.add_row("Delete", ', '.join(deletions) if deletions else "None")
         plan_table.add_row("Test Strategy", plan.test_strategy or "None")
         formatter.console.print(plan_table)
 
@@ -1231,9 +1323,17 @@ def execute_pair_loop(
         formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
         start_time = time.time()
 
+        existing_files: Dict[str, str] = {}
+        for change in plan.file_changes:
+            if change.action.lower() != "modify":
+                continue
+            file_path = repo.path / change.path
+            if file_path.exists():
+                existing_files[change.path] = file_path.read_text(encoding="utf-8")
+
         patch_response = orchestrator.generate_patch(
             plan=plan,
-            repo_context=context
+            file_contents=existing_files,
         )
 
         coding_time = time.time() - start_time
@@ -1243,20 +1343,20 @@ def execute_pair_loop(
         formatter.print_info_panel(patch_panel, title="Patch Generation")
 
         patch = patch_response.patch
-        if patch.description:
-            formatter.print_info(f"Patch notes: {patch.description}")
 
         # Step 5: Apply Patch
         formatter.print_subheader("Applying Patch")
         patch_engine = get_patch_engine()
 
         try:
-            result = patch_engine.apply_patch(pad_id, patch.diff)
-            formatter.print_success("Patch applied successfully")
+            checkpoint_id = patch_engine.apply_patch(pad_id, patch.diff)
+            formatter.print_success(
+                f"Patch applied successfully (checkpoint {checkpoint_id})"
+            )
             diff_table = formatter.table(headers=["Metric", "Value"])
-            diff_table.add_row("Files Changed", str(result.files_changed))
-            diff_table.add_row("Insertions", f"+{result.insertions}")
-            diff_table.add_row("Deletions", f"-{result.deletions}")
+            diff_table.add_row("Files Changed", str(len(patch.files_changed)))
+            diff_table.add_row("Insertions", f"+{patch.additions}")
+            diff_table.add_row("Deletions", f"-{patch.deletions}")
             formatter.console.print(diff_table)
 
         except Exception as e:
