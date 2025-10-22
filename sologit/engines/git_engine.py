@@ -605,15 +605,6 @@ class GitEngine:
     def get_workpad(self, pad_id: str) -> Optional[Workpad]:
         """Get workpad by ID."""
         return self.workpad_db.get(pad_id)
-
-    def get_current_commit(self, repo_id: str) -> str:
-        """Return the current HEAD commit hash for a repository."""
-        repository = self.repo_db.get(repo_id)
-        if not repository:
-            raise RepositoryNotFoundError(f"Repository {repo_id} not found")
-
-        repo = Repo(repository.path)
-        return repo.head.commit.hexsha
     
     def list_repos(self) -> List[Repository]:
         """List all repositories."""
