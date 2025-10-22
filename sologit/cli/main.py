@@ -215,6 +215,20 @@ def version(ctx):
 
 
 @cli.command()
+@click.option(
+    "--no-history",
+    is_flag=True,
+    help="Run an ephemeral shell session without recording command history.",
+)
+@click.pass_context
+def shell(ctx, no_history: bool) -> None:
+    """Launch the interactive Solo Git shell with autocomplete and history."""
+
+    exit_code = _run_interactive_shell(record_history=not no_history)
+    ctx.exit(exit_code)
+
+
+@cli.command()
 def hello():
     """
     Test command to verify Solo Git is working.
@@ -683,8 +697,16 @@ def main():
     sys.exit(exit_code)
 
 
-def _run_interactive_shell() -> int:
-    """Launch interactive shell with history and autocomplete."""
+def _run_interactive_shell(*, record_history: bool = True) -> int:
+    """Launch interactive shell with history and autocomplete.
+
+    Args:
+        record_history: When ``True`` (default), persist executed commands to the
+            structured history store and the plain-text CLI history file used by
+            prompt-toolkit. Passing ``False`` provides an ephemeral session
+            without touching the on-disk history, which is useful for
+            demonstrations or when running inside disposable environments.
+    """
     if not _AUTOCOMPLETE_AVAILABLE:
         abort_with_error(
             "Interactive shell dependencies not installed",
@@ -734,7 +756,7 @@ def _run_interactive_shell() -> int:
 
     session.app.key_bindings = merge_key_bindings([session.app.key_bindings, bindings])
 
-    history = get_command_history()
+    history = get_command_history() if record_history else None
 
     while True:
         try:
@@ -770,14 +792,20 @@ def _run_interactive_shell() -> int:
             )
             continue
 
-        entry_id = history.record_cli_command(
-            command,
-            arguments={"argv": args},
-            record_text=False,
-        )
+        entry_id = None
+        if record_history and history is not None:
+            entry_id = history.record_cli_command(
+                command,
+                arguments={"argv": args},
+                record_text=False,
+            )
 
         exit_code = _execute_cli_command(
-            args, record_cli_history=False, command_entry_id=entry_id, command_text=command
+            args,
+            record_cli_history=record_history,
+            command_entry_id=entry_id,
+            command_text=command,
+            record_command=False,
         )
         if exit_code != 0:
             formatter.print_warning(f"Command exited with code {exit_code}")
@@ -789,14 +817,29 @@ def _execute_cli_command(
     record_cli_history: bool = True,
     command_entry_id: Optional[str] = None,
     command_text: Optional[str] = None,
+    record_command: bool = True,
 ) -> int:
-    """Execute CLI command with history integration."""
+    """Execute CLI command with history integration.
+
+    Args:
+        argv: Command-line arguments to execute.
+        record_cli_history: When ``True``, append the command to the plain-text
+            CLI history file in addition to the structured history store.
+        command_entry_id: Optional existing history entry identifier. When
+            provided the execution metadata is attached to that entry.
+        command_text: Original command text. If omitted it will be reconstructed
+            from ``argv``.
+        record_command: Controls whether a new history entry should be created
+            when ``command_entry_id`` is ``None``. Interactive sessions use this
+            to avoid duplicating entries they already created before invoking the
+            Click command tree.
+    """
     history = get_command_history()
 
     command_str = command_text or " ".join(shlex.quote(arg) for arg in argv)
     entry_id = command_entry_id
 
-    if command_str and entry_id is None:
+    if command_str and entry_id is None and record_command:
         entry_id = history.record_cli_command(
             command_str,
             arguments={"argv": argv},
