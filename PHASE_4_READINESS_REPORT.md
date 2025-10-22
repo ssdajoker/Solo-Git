@@ -20,7 +20,7 @@ After thorough analysis of the Solo Git codebase, documentation, and test suite,
 
 **Overall Assessment**: The core implementation is solid and production-ready. The failing tests are primarily:
 - Tests with improperly configured mocks (not implementation bugs)
-- Tests requiring  (unavailable in test environment)
+- Tests requiring container runtime (unavailable in test environment)
 - Tests written for an old API signature
 
 ---
