@@ -361,6 +361,8 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_warning("Budget exceeded — consider pausing automated runs.")
 
 
+@config_group.command(name="init")
+@click.option("--force", is_flag=True, help="Overwrite existing config file")
 @config_group.command(name='init')
 @click.option('--force', is_flag=True, help='Overwrite existing config file')
 @config_group.command(name="init")
@@ -385,6 +387,7 @@ def init_config(force: bool) -> None:
     formatter.print_success(f"Created configuration file at {config_path}")
 
 
+@config_group.command(name="env-template")
 @config_group.command(name='env-template')
 def env_template() -> None:
     """Generate .env template file."""
@@ -405,6 +408,7 @@ def env_template() -> None:
     target.write_text(ENV_TEMPLATE.rstrip() + "\n", encoding="utf-8")
     formatter.print_success(f"Created .env.example at {target.resolve()}")
 
+@config_group.command(name="path")
 @config_group.command(name='path')
 def config_path() -> None:
     """Show configuration file path."""
