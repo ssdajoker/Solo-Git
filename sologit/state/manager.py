@@ -281,7 +281,6 @@ class JSONStateBackend(StateBackend):
                 path.unlink()
             except Exception as exc:
                 logger.error(f"Failed to delete workpad {workpad_id}: {exc}")
-    
     def read_test_run(self, run_id: str) -> Optional[TestRun]:
         path = self.tests_dir / f"{run_id}.json"
         data = self._read_json(path)
