@@ -31,6 +31,7 @@ from sologit.ui.history import (
     get_cli_history_path,
     append_cli_history,
 )
+from sologit.ui.shortcuts import SHORTCUT_CATEGORIES
 
 try:
     from sologit.ui.autocomplete import create_enhanced_prompt
@@ -201,6 +202,26 @@ def hello():
 
 
 @cli.command()
+def shortcuts():
+    """Show keyboard shortcuts reference."""
+
+    formatter.print_header("Heaven Interface Keyboard Shortcuts")
+    table = formatter.table(headers=["Key", "Action", "Context"])
+
+    for index, category in enumerate(SHORTCUT_CATEGORIES):
+        table.add_row(f"[bold]{category.name}[/]", "", "")
+        for shortcut in category.shortcuts:
+            table.add_row(shortcut.key, shortcut.action, shortcut.context)
+        if index < len(SHORTCUT_CATEGORIES) - 1:
+            table.add_row("", "", "")
+
+    formatter.console.print(table)
+    formatter.print_info(
+        "See docs/KEYBOARD_SHORTCUTS.md or press '?' inside the TUI for the full reference."
+    )
+
+
+@cli.command()
 @click.option('--dev', is_flag=True, help='Launch in development mode')
 @click.pass_context
 def gui(ctx, dev: bool):
@@ -296,12 +317,15 @@ def tui():
 
     \b
     Keyboard Shortcuts:
-      q - Quit
-      r - Refresh
-      c - Clear log
-      g - Show commit graph
-      w - Show workpads
-      ? - Help
+      Ctrl+P          Command palette
+      Ctrl+T          Run focused tests
+      Ctrl+Z / Ctrl+Shift+Z
+                      Undo / Redo last command
+      Tab / Shift+Tab Switch panels
+      ?               Help overlay
+      Ctrl+Q          Quit TUI
+
+    Run ``evogitctl shortcuts`` or see ``docs/KEYBOARD_SHORTCUTS.md`` for the full list.
     """
     _launch_heaven_tui()
     formatter.print_header("Heaven Interface TUI")
@@ -347,12 +371,16 @@ def heaven(repo_path: Optional[str]):
     
     \b
     Essential Shortcuts:
-      Ctrl+P - Command palette
-      Ctrl+T - Run tests
-      Ctrl+Z/Y - Undo/Redo
-      ? - Help (full shortcuts)
-      R - Refresh
-      Ctrl+Q - Quit
+      Ctrl+P          Command palette
+      Ctrl+T          Run focused tests
+      Ctrl+Shift+T    Run full suite
+      Ctrl+Z / Ctrl+Shift+Z
+                      Undo / Redo last command
+      Ctrl+1/2/3      Focus graph/workpads/tests
+      ?               Help overlay (full shortcuts)
+      Ctrl+Q          Quit interface
+
+    View the complete reference via ``evogitctl shortcuts`` or ``docs/KEYBOARD_SHORTCUTS.md``.
 
     \b
     Layout (Heaven Interface Design System):

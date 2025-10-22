@@ -20,6 +20,7 @@ from textual import events
 from sologit.ui.command_palette import show_command_palette, Command, get_command_registry
 from sologit.ui.file_tree import FileTreeWidget
 from sologit.ui.test_runner import TestRunnerWidget, TestsCompleted, TestStatus
+from sologit.ui.shortcuts import format_help_markup, get_status_bar_summary
 from sologit.ui.history import get_command_history, undo, redo, can_undo, can_redo
 from sologit.state.git_sync import GitStateSync
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
@@ -52,12 +53,14 @@ class StatusBar(Static):
         undo_text = "↶" if can_undo() else "⊘"
         redo_text = "↷" if can_redo() else "⊘"
         
+        shortcuts = get_status_bar_summary()
+
         return (
             f"📦 {self.repo_name}  "
             f"│  🔧 {self.workpad_name}  "
             f"│  {self.test_status} Tests  "
             f"│  {undo_text} Undo  {redo_text} Redo  "
-            f"│  Ctrl+P: Commands  ?:  Help"
+            f"│  {shortcuts}"
         )
     
     def update_context(self, repo_name: str, workpad_name: str = None, test_status: str = "○"):
@@ -295,52 +298,8 @@ class HelpScreen(Screen):
     
     def compose(self) -> ComposeResult:
         """Compose help screen."""
-        help_text = """
-[bold cyan]Heaven Interface - Keyboard Shortcuts[/]
-
-[bold yellow]Navigation[/]
-  Ctrl+P          Open command palette
-  Tab / Shift+Tab Switch between panels
-  ← → ↑ ↓         Navigate within panels
-  
-[bold yellow]Workpad Operations[/]
-  Ctrl+N          Create new workpad
-  Ctrl+W          Close workpad
-  Ctrl+D          Show diff
-  Ctrl+S          Commit changes
-  
-[bold yellow]Testing[/]
-  Ctrl+T          Run tests (fast)
-  Ctrl+Shift+T    Run all tests
-  Ctrl+L          Clear test output
-  
-[bold yellow]AI Features[/]
-  Ctrl+G          Generate code
-  Ctrl+R          Review code
-  Ctrl+M          Generate commit message
-  
-[bold yellow]History[/]
-  Ctrl+Z          Undo last command
-  Ctrl+Shift+Z    Redo command
-  Ctrl+H          Show command history
-  
-[bold yellow]View[/]
-  Ctrl+B          Toggle file browser
-  Ctrl+1          Focus commit graph
-  Ctrl+2          Focus workpad panel
-  Ctrl+3          Focus test output
-  Ctrl+F          Search files
-  
-[bold yellow]General[/]
-  ?               Show this help
-  Ctrl+Q          Quit application
-  Ctrl+C          Cancel operation
-
-[bold green]Press Escape or Q to close this help[/]
-        """
-        
         with Container(id="help-container"):
-            yield Static(help_text)
+            yield Static(format_help_markup())
     
     def action_dismiss(self) -> None:
         """Dismiss the help screen."""

@@ -42,6 +42,17 @@ def test_repo_list_no_repos(mock_git_engine):
     assert "evogitctl repo init" in result.output
 
 
+def test_shortcuts_command():
+    """Ensure the shortcuts reference renders without error."""
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['shortcuts'])
+
+    assert result.exit_code == 0
+    assert "Heaven Interface Keyboard Shortcuts" in result.output
+    assert "Ctrl+P" in result.output
+
+
 def test_repo_list_with_repos(mock_git_engine):
     """Test `repo list` with multiple repositories."""
     mock_repo1 = MagicMock()
