@@ -38,7 +38,14 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
         .map_err(|e| format!("Failed to serialize value for {}: {}", path.display(), e))?;
     fs::write(&tmp_path, contents)
         .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("Failed to persist {}: {}", path.display(), e))
+    match fs::rename(&tmp_path, path) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // Attempt to clean up the temporary file, ignore any error from remove
+            let _ = fs::remove_file(&tmp_path);
+            Err(format!("Failed to persist {}: {}", path.display(), e))
+        }
+    }
 }
 
 fn run_cli_command(args: Vec<String>) -> Result<String, String> {
