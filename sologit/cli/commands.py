@@ -664,7 +664,10 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 
     except Exception as exc:
         formatter.print_error(f"Test execution failed: {exc}")
-        raise click.Abort()
+        abort_with_error(
+            "Unexpected test execution error",
+            f"Try running tests again: evogitctl test run {pad_id}\nError details: {exc}"
+        )
 
 
 

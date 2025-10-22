@@ -225,8 +225,7 @@ def shortcuts():
     formatter.console.print(table)
     formatter.print_info(
         "See docs/KEYBOARD_SHORTCUTS.md or press '?' inside the TUI for the full reference."
-    """Display keyboard shortcuts for the Heaven Interface TUI."""
-    formatter.print_header("Heaven Interface TUI - Keyboard Shortcuts")
+    )
 
     shortcuts_data = [
         ("Navigation", "Ctrl+P", "Open command palette"),
@@ -261,7 +260,6 @@ def shortcuts():
 
     formatter.console.print(table)
     formatter.print_info(
-        "Press '?' inside the TUI to view keyboard shortcuts at any time."
         "Press '?' inside the TUI to view this list at any time."
     )
 
