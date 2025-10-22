@@ -2,6 +2,9 @@
 """Command implementations for Solo Git CLI."""
 
 import asyncio
+import click
+from pathlib import Path
+from typing import List, Optional
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, NoReturn, Optional, Sequence, Tuple, TypeVar, Union, cast
@@ -12,6 +15,11 @@ from rich.console import Console
 from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
+from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
+from sologit.workflows.ci_orchestrator import CIOrchestrator
+from sologit.workflows.rollback_handler import RollbackHandler
+from sologit.state.manager import StateManager
+from sologit.state.git_sync import GitStateSync
 from sologit.engines.test_orchestrator import (
     TestConfig,
     TestOrchestrator,
@@ -26,8 +34,6 @@ from sologit.workflows.ci_orchestrator import CIOrchestrator
 from sologit.workflows.rollback_handler import RollbackHandler
 
 logger = get_logger(__name__)
-
-StageResult = TypeVar("StageResult")
 
 # Initialize Rich formatter
 formatter = RichFormatter()
@@ -83,6 +89,7 @@ _git_engine: Optional[GitEngine] = None
 _patch_engine: Optional[PatchEngine] = None
 _test_orchestrator: Optional[TestOrchestrator] = None
 _config_manager: Optional[ConfigManager] = None
+_git_state_sync: Optional[GitStateSync] = None
 
 
 def get_config_manager() -> ConfigManager:
@@ -205,6 +212,15 @@ def get_test_orchestrator() -> TestOrchestrator:
     return _test_orchestrator
 
 
+def get_git_sync() -> GitStateSync:
+    """Get or create GitStateSync instance."""
+
+    global _git_state_sync
+    if _git_state_sync is None:
+        _git_state_sync = GitStateSync()
+    return _git_state_sync
+
+
 @click.group()
 def repo() -> None:
     """Repository management commands."""
@@ -214,7 +230,16 @@ def repo() -> None:
 @repo.command('init')
 @click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
 @click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
+@click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
+@click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
 @click.option('--name', type=str, help='Repository name (optional)')
+def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
+    """Initialize a new repository from zip file or Git URL."""
+    formatter.print_header("Repository Initialization")
+
+    sources = [bool(zip_file), bool(git_url), empty]
+    if sum(1 for flag in sources if flag) != 1:
+        abort_with_error("Must specify exactly one of --zip, --git, or --empty")
 def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]) -> None:
     """Initialize a new repository from zip file or Git URL."""
     formatter.print_header("Repository Initialization")
@@ -247,86 +272,40 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
             docs_url="docs/SETUP.md#initialize-a-repository",
         )
 
-    git_engine = get_git_engine()
+    git_sync = get_git_sync()
 
     try:
+        if empty:
+            repo_name = name or (target_path.name if target_path else "solo-git-repo")
+            formatter.print_info(f"Creating empty repository: {repo_name}")
+            repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
+        elif zip_file:
         if zip_file:
             if zip_file is None:
                 abort_with_error("Internal error: zip_file is unexpectedly None")
             zip_path = Path(zip_file)
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
+            repo_name = name or zip_path.stem
+            repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
         else:
             if git_url is None:
                 abort_with_error("Internal error: git_url is unexpectedly None")
             if not name:
                 name = Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning repository from: {git_url}")
-
-        with formatter.progress("Setting up repository") as progress:
-            total_steps = 3
-            overall_task = progress.add_task("Repository initialization", total=total_steps)
-
-            def run_stage(description: str, operation: Callable[[], StageResult]) -> StageResult:
-                stage_task = progress.add_task(description, total=None)
-                progress.update(overall_task, description=description)
-                success = False
-                start = time.perf_counter()
-                try:
-                    result = operation()
-                    success = True
-                    return result
-                finally:
-                    progress.remove_task(stage_task)
-                    if success:
-                        progress.advance(overall_task, 1)
-                        duration = time.perf_counter() - start
-                        logger.debug("Stage '%s' completed in %.2fs", description, duration)
-
-            if zip_file:
-                zip_data = run_stage("Loading archive from disk", lambda: zip_path.read_bytes())
-
-                if not name:
-                    name = zip_path.stem
-
-                repo_id = run_stage(
-                    "Importing files & creating initial commit",
-                    lambda: git_engine.init_from_zip(zip_data, name),
-                )
-            else:  # git_url
-                run_stage("Preparing clone parameters", lambda: None)
-
-                repo_id = run_stage(
-                    "Cloning remote repository",
-                    lambda: git_engine.init_from_git(git_url, name),
-                )
-
-            final_stage_label = (
-                "Verifying initial commit & metadata"
-                if zip_file
-                else "Recording repository metadata"
-            )
-            repo = run_stage(
-                final_stage_label,
-                lambda: git_engine.get_repo(repo_id),
-            )
-
-            progress.update(
-                overall_task,
-                description="Repository ready",
-                completed=total_steps,
-            )
+            repo_info = git_sync.init_repo_from_git(git_url, name)
 
         formatter.print_success("Repository initialized!")
-        formatter.print_info(f"Repo ID: {repo.id}")
-        formatter.print_info(f"Name: {repo.name}")
-        formatter.print_info(f"Path: {repo.path}")
-        formatter.print_info(f"Trunk: {repo.trunk_branch}")
+        formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
+        formatter.print_info(f"Name: {repo_info['name']}")
+        formatter.print_info(f"Path: {repo_info['path']}")
+        formatter.print_info(f"Trunk: {repo_info.get('trunk_branch', 'main')}")
 
         summary_table = formatter.table(headers=["Field", "Value"])
-        summary_table.add_row("ID", f"[cyan]{repo.id}[/cyan]")
-        summary_table.add_row("Name", f"[bold]{repo.name}[/bold]")
-        summary_table.add_row("Path", f"{repo.path}")
-        summary_table.add_row("Trunk", f"[cyan]{repo.trunk_branch}[/cyan]")
+        summary_table.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
+        summary_table.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
+        summary_table.add_row("Path", str(repo_info['path']))
+        summary_table.add_row("Trunk", f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]")
 
         formatter.console.print(summary_table)
 
@@ -370,6 +349,28 @@ def repo_list() -> None:
         )
     
     formatter.console.print(table)
+
+
+@repo.command('delete')
+@click.argument('repo_id')
+@click.option('--keep-files', is_flag=True, help='Retain repository directory on disk')
+def repo_delete(repo_id: str, keep_files: bool):
+    """Delete a repository and clean up associated state."""
+
+    git_sync = get_git_sync()
+
+    try:
+        repo = git_sync.git_engine.get_repo(repo_id)
+        if not repo:
+            abort_with_error(f"Repository {repo_id} not found")
+
+        formatter.print_info(f"Deleting repository {repo.name} ({repo_id})")
+        git_sync.delete_repository(repo_id, remove_files=not keep_files)
+        formatter.print_success("Repository deleted")
+        if keep_files:
+            formatter.print_info("Repository files retained on disk")
+    except GitEngineError as exc:
+        abort_with_error(str(exc), "Failed to delete repository")
     formatter.console.print()
 
 
