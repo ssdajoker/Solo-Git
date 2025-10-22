@@ -97,6 +97,13 @@ def get_test_orchestrator() -> TestOrchestrator:
     global _test_orchestrator
     if _test_orchestrator is None:
         _test_orchestrator = TestOrchestrator(get_git_engine(), formatter=formatter)
+        config = get_config_manager().config.tests
+        log_dir = Path(config.log_dir).expanduser() if config.log_dir else None
+        _test_orchestrator = TestOrchestrator(
+            get_git_engine(),
+            log_dir=log_dir,
+            formatter=formatter,
+        )
     return _test_orchestrator
 
 
@@ -173,26 +180,58 @@ def repo_init(zip_file: Optional[Path], git_url: Optional[str], name: Optional[s
         )
 
     if all(selected_sources):
+@repo.command('init')
+@click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
+@click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
+@click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
+@click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
+@click.option('--name', type=str, help='Repository name (optional)')
+def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
+    """Initialize a new repository from zip file, Git URL, or empty."""
+    formatter.print_header("Repository Initialization")
+
+    sources = {
+        'zip': zip_file,
+        'git': git_url,
+        'empty': empty
+    }
+
+    provided_sources = [name for name, value in sources.items() if value]
+
+    if len(provided_sources) != 1:
         abort_with_error(
-            "Conflicting Options Provided",
-            "Only one source can be used at a time. Pass either --zip or --git, not both.",
+            "Invalid Source Specification",
+            f"Please specify exactly one of --zip, --git, or --empty. Provided: {', '.join(provided_sources) or 'None'}",
             title="Repository Initialization Blocked",
-            help_text="Remove one of the flags and rerun the command.",
-            tip="Use --zip when you have a packaged archive and --git for hosted repositories.",
+            help_text="Choose one initialization method.",
             suggestions=[
                 "evogitctl repo init --zip app.zip",
-                "evogitctl repo init --git https://github.com/org/project.git",
-            ],
-            docs_url="docs/SETUP.md#initialize-a-repository",
+                "evogitctl repo init --git https://github.com/user/repo.git",
+                "evogitctl repo init --empty --path ./new-repo",
+            ]
         )
 
     git_engine = get_git_engine()
 
     try:
+        repo_info = None
         if zip_file is not None:
             repo_name = name or zip_file.stem
             formatter.print_info(f"Initializing repository from zip: {zip_file.name}")
             repo_id = git_engine.init_from_zip(zip_file.read_bytes(), repo_name)
+        if empty:
+            repo_name = name or (target_path.name if target_path else "solo-git-repo")
+            formatter.print_info(f"Creating empty repository: {repo_name}")
+            repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
+        elif zip_file:
+            zip_path = Path(zip_file)
+            repo_name = name or zip_path.stem
+            formatter.print_info(f"Initializing from zip: {zip_path.name}")
+            repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
+        elif git_url:
+            repo_name = name or Path(git_url).stem.replace('.git', '')
+            formatter.print_info(f"Cloning from: {git_url}")
+            repo_info = git_sync.init_repo_from_git(git_url, repo_name)
         else:
             assert git_url is not None
             repo_name = name or Path(git_url.rstrip("/")).stem
@@ -588,6 +627,13 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     formatter.print_panel(info_panel, title="🧪 Test Execution")
 
     try:
+        info = f"""[bold]Workpad:[/bold] {workpad.title}
+[bold]Tests:[/bold] {len(tests)}
+[bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
+[bold]Mode:[/bold] {test_orchestrator.mode}
+[bold]Target:[/bold] {target}"""
+        formatter.print_panel(info, title="🧪 Test Execution")
+
         with formatter.create_progress() as progress:
             task_id = progress.add_task(f"Running {target} tests...", total=len(tests))
 
@@ -724,6 +770,118 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                 f"evogitctl test run {pad_id} --target {target}",
             ],
             docs_url="docs/TESTING.md#run-tests",
+            docs_url="docs/TESTING_GUIDE.md",
+            details=str(exc),
+        )
+        raise click.Abort()
+
+
+# ============================================================================
+# Phase 3: Auto-Merge and CI Integration Commands
+# ============================================================================
+
+
+@pad.command("auto-merge")
+@click.argument("pad_id")
+@click.option("--target", type=click.Choice(["fast", "full"]), default="fast", help="Test target")
+@click.option("--no-auto-promote", is_flag=True, help="Disable automatic promotion")
+@click.option(
+    "--test",
+    "test_overrides",
+    multiple=True,
+    help="Override tests as NAME=CMD[:TIMEOUT] (repeat for multiple tests)",
+)
+@click.pass_context
+def pad_auto_merge(
+    ctx: click.Context,
+    pad_id: str,
+    target: str,
+    no_auto_promote: bool,
+    test_overrides: Tuple[str, ...],
+) -> None:
+    """
+    Run tests and auto-promote if they pass (Phase 3).
+
+    This is the complete auto-merge workflow:
+    1. Run tests
+    2. Analyze results
+    3. Evaluate promotion gate
+    4. Auto-promote if approved
+    """
+    from sologit.workflows.auto_merge import AutoMergeWorkflow
+    from sologit.workflows.promotion_gate import PromotionRules
+
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    state_manager = StateManager()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    config_manager: ConfigManager = ctx.obj.get("config") if ctx and ctx.obj else ConfigManager()
+    config_manager: ConfigManager
+    if ctx.obj and isinstance(ctx.obj, dict) and 'config' in ctx.obj:
+        config_manager = cast(ConfigManager, ctx.obj['config'])
+    else:
+        config_manager = ConfigManager()
+    config_tests = config_manager.config.tests
+    default_timeout = config_tests.timeout_seconds
+
+    if test_overrides:
+        tests = [_parse_test_override(value, default_timeout) for value in test_overrides]
+    else:
+        suite_entries = config_tests.fast_tests if target == "fast" else config_tests.full_tests
+        tests = _tests_from_config_entries(suite_entries, default_timeout)
+
+        if not tests:
+            if target == "fast":
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                ]
+            else:
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                    TestConfig(
+                        name="integration",
+                        cmd="python -m pytest tests/integration/ -q",
+                        timeout=120,
+                    ),
+                ]
+
+    # Configure promotion rules (can be loaded from config in future)
+    rules = PromotionRules(
+        require_tests=True, require_all_tests_pass=True, require_fast_forward=True
+    )
+
+    smoke_tests = _tests_from_config_entries(config_tests.smoke_tests, default_timeout)
+    ci_orchestrator = CIOrchestrator(git_engine, test_orchestrator)
+    rollback_handler = RollbackHandler(git_engine)
+
+    workflow = AutoMergeWorkflow(
+        git_engine,
+        test_orchestrator,
+        rules,
+        state_manager=state_manager,
+        ci_orchestrator=ci_orchestrator,
+        rollback_handler=rollback_handler,
+        ci_smoke_tests=smoke_tests,
+        ci_config=config_manager.config.ci,
+        rollback_on_ci_red=config_manager.config.rollback_on_ci_red,
+    )
+
+    try:
+        formatter.print_header("Auto-Merge Workflow")
+        overview = formatter.table(headers=["Field", "Value"])
+        overview.add_row("Workpad", f"[bold]{workpad.title}[/bold] ({workpad.id[:8]})")
+        overview.add_row("Target", target)
+        overview.add_row("Auto-promote", "Enabled" if not no_auto_promote else "Disabled")
+        overview.add_row("Tests", str(len(tests)))
+        formatter.console.print(overview)
+
+        # Execute workflow
+        result = workflow.execute(
+            pad_id, tests, parallel=True, auto_promote=not no_auto_promote, target=target
         )
 
 

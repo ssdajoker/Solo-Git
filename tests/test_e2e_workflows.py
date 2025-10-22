@@ -26,7 +26,7 @@ from sologit.analysis.test_analyzer import TestAnalyzer, TestAnalysis
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
 from sologit.orchestration.planning_engine import FileChange
 from sologit.config.manager import ConfigManager
-from sologit.workflows.ci_orchestrator import CIOrchestrator, CIStatus
+from sologit.workflows.ci_orchestrator import CIOrchestrator, CIStatus, CIResult
 from sologit.workflows.rollback_handler import RollbackHandler
 from sologit.workflows.promotion_gate import (
     PromotionDecisionType,
@@ -96,7 +96,6 @@ def test_runner(git_sync: GitStateSync, tmp_path_factory) -> TestOrchestrator:
     log_dir = tmp_path_factory.mktemp("logs")
     return TestOrchestrator(
         git_sync.git_engine,
-        execution_mode="subprocess",
         log_dir=log_dir,
     )
 
@@ -620,3 +619,161 @@ def test_state_manager_records_cli_operations(
     test_runs = list(git_sync.get_test_runs(pad_id))
     assert len(test_runs) == 1
     assert test_runs[0]["status"] in {"passed", "failed"}
+
+
+def test_happy_path_create_file_and_promote(
+    git_sync: GitStateSync,
+    sample_project_zip: bytes,
+    test_runner: TestOrchestrator,
+):
+    """A simple happy path: create a file, test, and promote."""
+    repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Happy Path Repo")
+    repo_id = repo_info["repo_id"]
+    pad_info = git_sync.create_workpad(repo_id, "Add new file")
+    pad_id = pad_info["workpad_id"]
+    repo_path = Path(repo_info["path"])
+
+    new_file_patch = _generate_create_patch("new_file.txt", "This is a new file.")
+    git_sync.apply_patch(pad_id, new_file_patch, "Add new_file.txt")
+
+    _, results = _run_pytest_and_record(git_sync, test_runner, pad_id)
+    assert all(result.status == TestStatus.PASSED for result in results)
+
+    git_sync.promote_workpad(pad_id)
+
+    new_file_path = repo_path / "new_file.txt"
+    assert new_file_path.exists()
+    assert new_file_path.read_text() == "This is a new file.\n"
+
+
+def test_failure_workflow_prevents_promotion(
+    git_sync: GitStateSync,
+    sample_project_zip: bytes,
+    test_runner: TestOrchestrator,
+):
+    """Verify that a workpad with failing tests cannot be promoted."""
+    repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Failure Workflow Repo")
+    repo_id = repo_info["repo_id"]
+    pad_info = git_sync.create_workpad(repo_id, "Introduce breaking change")
+    pad_id = pad_info["workpad_id"]
+    repo_path = Path(repo_info["path"])
+
+    # Introduce a change that will cause tests to fail
+    breaking_patch = _generate_modify_patch(
+        repo_path,
+        "hello.py",
+        lambda original: original.replace(
+            'return f"Hello, {name}!"',
+            'raise ValueError("This is a deliberate failure")'
+        ),
+    )
+    git_sync.apply_patch(pad_id, breaking_patch, "Break the greeting")
+
+    _, results = _run_pytest_and_record(git_sync, test_runner, pad_id)
+    assert any(result.status == TestStatus.FAILED for result in results)
+
+    # Verify that the workpad cannot be promoted
+    gate = PromotionGate(git_sync.git_engine)
+    analysis = _analysis_from_results(results)
+    decision = gate.evaluate(pad_id, analysis)
+    assert decision.decision == PromotionDecisionType.REJECT
+
+    workpad_state = git_sync.state_manager.get_workpad(pad_id)
+    assert workpad_state.status == "active"  # Should not be promoted
+
+
+def test_rollback_e2e(
+    git_sync: GitStateSync,
+    sample_project_zip: bytes,
+    test_runner: TestOrchestrator,
+):
+    """Verify that a rollback successfully reverts a promoted change."""
+    repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Rollback Repo")
+    repo_id = repo_info["repo_id"]
+    repo_path = Path(repo_info["path"])
+    initial_commit = Repo(repo_path).head.commit.hexsha
+
+    pad_info = git_sync.create_workpad(repo_id, "Add a temporary file")
+    pad_id = pad_info["workpad_id"]
+
+    temp_file_patch = _generate_create_patch("temp_file.txt", "This will be rolled back.")
+    git_sync.apply_patch(pad_id, temp_file_patch, "Add temp_file.txt")
+
+    _, results = _run_pytest_and_record(git_sync, test_runner, pad_id)
+    assert all(result.status == TestStatus.PASSED for result in results)
+
+    promotion_commit = git_sync.promote_workpad(pad_id)
+    assert Repo(repo_path).head.commit.hexsha == promotion_commit
+
+    # Simulate a CI failure
+    ci_result = CIResult(
+        repo_id=repo_id,
+        commit_hash=promotion_commit,
+        status=CIStatus.FAILURE,
+        duration_ms=1000,
+        test_results=[],
+        message="Simulated CI test failure",
+    )
+
+    # Perform the rollback
+    rollback_handler = RollbackHandler(git_sync.git_engine)
+    rollback_result = rollback_handler.handle_failed_ci(ci_result)
+    assert rollback_result.success
+
+    # Verify that the repo has been rolled back
+    assert Repo(repo_path).head.commit.hexsha == initial_commit
+    assert not (repo_path / "temp_file.txt").exists()
+
+
+def test_parallel_workpads_rebase_and_promote(
+    git_sync: GitStateSync,
+    sample_project_zip: bytes,
+    test_runner: TestOrchestrator,
+):
+    """Verify that two parallel workpads can be promoted sequentially after a rebase."""
+    repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Parallel Repo")
+    repo_id = repo_info["repo_id"]
+    repo_path = Path(repo_info["path"])
+
+    pad1_info = git_sync.create_workpad(repo_id, "Add feature X")
+    pad1_id = pad1_info["workpad_id"]
+    pad2_info = git_sync.create_workpad(repo_id, "Add feature Y")
+    pad2_id = pad2_info["workpad_id"]
+
+    feature_x_patch = _generate_create_patch("feature_x.txt", "Feature X")
+    git_sync.apply_patch(pad1_id, feature_x_patch, "Add feature X")
+
+    feature_y_patch = _generate_create_patch("feature_y.txt", "Feature Y")
+    git_sync.apply_patch(pad2_id, feature_y_patch, "Add feature Y")
+
+    # Promote the first workpad
+    _, results1 = _run_pytest_and_record(git_sync, test_runner, pad1_id)
+    assert all(result.status == TestStatus.PASSED for result in results1)
+    git_sync.promote_workpad(pad1_id)
+
+    # Rebase and promote the second workpad
+    repo = Repo(repo_path)
+    repo.git.checkout(pad2_info["branch_name"])
+    repo.git.rebase(repo_info["trunk_branch"])
+
+    _, results2 = _run_pytest_and_record(git_sync, test_runner, pad2_id)
+    assert all(result.status == TestStatus.PASSED for result in results2)
+    git_sync.promote_workpad(pad2_id)
+
+    # Verify both files exist
+    assert (repo_path / "feature_x.txt").exists()
+    assert (repo_path / "feature_y.txt").exists()
+
+
+def test_promote_empty_workpad_fails(
+    git_sync: GitStateSync,
+    sample_project_zip: bytes,
+):
+    """Verify that an empty workpad cannot be promoted."""
+    repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Empty Workpad Repo")
+    repo_id = repo_info["repo_id"]
+    pad_info = git_sync.create_workpad(repo_id, "Empty Workpad")
+    pad_id = pad_info["workpad_id"]
+
+    ahead_behind = git_sync.git_engine.get_commits_ahead_behind(pad_id)
+    assert ahead_behind["ahead"] == 0

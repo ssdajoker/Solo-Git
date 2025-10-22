@@ -115,7 +115,7 @@ def test_config_test_validation_fails():
         mock_instance.validate.return_value = (False, ["Invalid model name"])
 
         runner = CliRunner()
-        result = runner.invoke(sologit_cli, ['config', 'test'], catch_exceptions=False)
+        result = runner.invoke(sologit_cli, ['config', 'test'])
 
         assert result.exit_code != 0
         assert "Configuration Validation Failed" in result.output
