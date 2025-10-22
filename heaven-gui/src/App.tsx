@@ -56,7 +56,7 @@ function App() {
     return () => clearInterval(interval)
   }, [loadState])
 
-  const addNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
     const notification: Notification = {
       id: Date.now().toString(),
       type,
@@ -64,7 +64,20 @@ function App() {
       duration: 5000,
     }
     setNotifications(prev => [...prev, notification])
-  }
+  }, [])
+
+  useEffect(() => {
+    const verifyCli = async () => {
+      try {
+        const version = await invoke<string>('verify_cli_install')
+        addNotification(`CLI available: ${version}`, 'success')
+      } catch (e) {
+        addNotification(`CLI verification failed: ${e}`, 'error')
+      }
+    }
+
+    void verifyCli()
+  }, [addNotification])
 
   const dismissNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id))
