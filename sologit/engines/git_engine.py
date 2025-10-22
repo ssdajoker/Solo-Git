@@ -432,7 +432,6 @@ class GitEngine:
                 logger.debug(f"Removed repository files at {repo_path}")
             except Exception as exc:
                 logger.warning(f"Failed to remove repository files: {exc}")
-    
     def can_promote(self, pad_id: str) -> bool:
         """
         Check if workpad can be promoted (fast-forward).
