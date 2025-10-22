@@ -5,8 +5,44 @@
  */
 
 import { useState } from 'react'
-import { StatusBarProps } from '../shared/types'
+import { StatusBarProps, BuildStatus } from '../shared/types'
 import { cn } from '../shared/utils'
+
+// Helper function to get build status icon
+const getBuildStatusIcon = (status: BuildStatus): string => {
+  switch (status) {
+    case 'success':
+      return '✓'
+    case 'failed':
+      return '✗'
+    case 'running':
+      return '◉'
+    case 'pending':
+      return '○'
+    case 'cancelled':
+      return '⊗'
+    default:
+      return '?'
+  }
+}
+
+// Helper function to get build status color
+const getBuildStatusColor = (status: BuildStatus): string => {
+  switch (status) {
+    case 'success':
+      return 'text-heaven-accent-green'
+    case 'failed':
+      return 'text-heaven-accent-red'
+    case 'running':
+      return 'text-heaven-accent-orange'
+    case 'pending':
+      return 'text-heaven-text-tertiary'
+    case 'cancelled':
+      return 'text-heaven-text-secondary'
+    default:
+      return 'text-heaven-text-secondary'
+  }
+}
 
 export function StatusBar({ 
   globalState, 
@@ -70,15 +106,8 @@ export function StatusBar({
             className="flex items-center gap-2 hover:bg-heaven-bg-hover px-2 py-1 rounded transition-colors duration-150"
             aria-label="Build status"
           >
-            <span className={cn(
-              'text-lg',
-              buildInfo.status === 'success' && 'text-heaven-accent-green',
-              buildInfo.status === 'failed' && 'text-heaven-accent-red',
-              buildInfo.status === 'running' && 'text-heaven-accent-orange'
-            )}>
-              {buildInfo.status === 'success' && '✓'}
-              {buildInfo.status === 'failed' && '✗'}
-              {buildInfo.status === 'running' && '◉'}
+            <span className={cn('text-lg', getBuildStatusColor(buildInfo.status))}>
+              {getBuildStatusIcon(buildInfo.status)}
             </span>
             <span className="text-heaven-text-tertiary">
               Build #{buildInfo.number}
@@ -184,12 +213,7 @@ export function StatusBar({
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className={cn(
-                'text-xs font-medium',
-                buildInfo.status === 'success' && 'text-heaven-accent-green',
-                buildInfo.status === 'failed' && 'text-heaven-accent-red',
-                buildInfo.status === 'running' && 'text-heaven-accent-orange'
-              )}>
+              <span className={cn('text-xs font-medium', getBuildStatusColor(buildInfo.status))}>
                 {buildInfo.status.toUpperCase()}
               </span>
             </div>

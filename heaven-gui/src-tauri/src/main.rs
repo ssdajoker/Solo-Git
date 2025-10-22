@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 mod commands;
 
@@ -201,6 +202,20 @@ fn list_repositories() -> Result<Vec<RepositoryState>, String> {
     // Sort by created_at descending
     repos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(repos)
+}
+
+#[tauri::command]
+fn verify_cli_install() -> Result<String, String> {
+    let output = Command::new("evogitctl")
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("Failed to execute evogitctl: {}", e))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
 }
 
 #[tauri::command]
@@ -618,6 +633,7 @@ fn main() {
             read_test_run,
             list_ai_operations,
             read_ai_operation,
+            verify_cli_install,
             // File operations
             read_file,
             list_repository_files,

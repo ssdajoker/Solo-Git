@@ -49,10 +49,23 @@ export default function CommitGraph({ repoId }: CommitGraphProps) {
 
   const getStatusIcon = (status: string | null) => {
     if (!status) return '○'
-    if (status === 'passed') return '✓'
-    if (status === 'failed') return '✗'
-    if (status === 'running') return '◉'
-    return '○'
+    switch (status) {
+      case 'passed':
+        return '✓'
+      case 'failed':
+        return '✗'
+      case 'running':
+        return '◉'
+      case 'pending':
+        return '○'
+      case 'skipped':
+        return '⊘'
+      case 'cancelled':
+        return '⊗'
+      default:
+        // Handle any unexpected status values gracefully
+        return '?'
+    }
   }
 
   const getStatusClass = (status: string | null) => {
