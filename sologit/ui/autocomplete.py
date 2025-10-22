@@ -66,7 +66,7 @@ class SoloGitCompleter(Completer):
         def option_tokens(command: click.Command) -> Iterable[str]:
             for param in getattr(command, "params", []):
                 if isinstance(param, click.Option):
-                    for opt in (*param.opts, *param.secondary_opts):
+                    for opt in (*param.opts, *getattr(param, 'secondary_opts', ())):
                         yield opt
 
         def visit(command: click.Command, path: Tuple[str, ...]) -> None:
