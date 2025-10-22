@@ -885,7 +885,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         workpad.test_status = summary["status"]
 
         total_duration_ms = sum(result.duration_ms for result in results)
-        failed_total = summary['failed'] + summary.get('timeout', 0) + summary.get('error', 0)
+        failed_total = summary.get('failed', 0) + summary.get('timeout', 0) + summary.get('error', 0)
         state_status = "passed" if summary['status'] == 'green' else "failed"
         state_manager.update_test_run(
             run_id,
