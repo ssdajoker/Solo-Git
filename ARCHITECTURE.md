@@ -178,7 +178,7 @@ class PatchEngine:
 ```
 
 #### Test Orchestrator (`test_orchestrator.py`)
-- Test execution in isolated sandboxes
+- Test execution via subprocesses
 - Parallel test running
 - Result aggregation and reporting
 - Failure diagnosis
@@ -190,7 +190,7 @@ class TestOrchestrator:
         target: TestTarget, 
         workpad: Workpad
     ) -> TestResult:
-        """Execute tests in sandbox"""
+        """Execute tests using subprocesses"""
         
     def run_parallel(self, tests: List[Test]) -> List[TestResult]:
         """Run multiple tests concurrently"""
@@ -767,10 +767,10 @@ promotion_gate:
    ▼
 6. Test Orchestrator
    │
-   ├─> Create Sandbox
+   ├─> Prepare workspace
    ├─> Run Tests (parallel)
    ├─> Aggregate Results
-   └─> Clean up Sandbox
+   └─> Persist Logs
    │
    ▼
 7. Promotion Gate

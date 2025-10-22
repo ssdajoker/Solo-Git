@@ -9,9 +9,6 @@ requests>=2.31.0
 # Git operations (Phase 1)
 gitpython>=3.1.40
 
-# Docker operations (Phase 1)
-docker>=7.0.0
-
 # Heaven Interface - CLI/TUI (Phase 4)
 rich>=13.7.0
 textual>=0.47.0

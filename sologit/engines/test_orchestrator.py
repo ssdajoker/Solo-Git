@@ -1,4 +1,4 @@
-"""Test orchestration with Docker and subprocess execution."""
+"""Test orchestration using direct subprocess execution."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 import re
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -16,9 +16,6 @@ try:  # pragma: no cover - platform-specific dependency
     import resource  # type: ignore
 except ImportError:  # pragma: no cover - Windows compatibility
     resource = None
-
-import docker
-from docker.errors import DockerException
 
 from sologit.engines.git_engine import GitEngine, WorkpadNotFoundError
 from sologit.utils.logger import get_logger
@@ -35,14 +32,6 @@ class TestStatus(Enum):
     TIMEOUT = "timeout"
     ERROR = "error"
     SKIPPED = "skipped"
-
-
-class TestExecutionMode(Enum):
-    """Supported execution modes."""
-    __test__ = False
-    AUTO = "auto"
-    DOCKER = "docker"
-    SUBPROCESS = "subprocess"
 
 
 @dataclass
@@ -71,8 +60,8 @@ class TestResult:
     stderr: str = ""
     error: Optional[str] = None
     log_path: Optional[Path] = None
-    metrics: Dict[str, Any] = None
-    mode: str = TestExecutionMode.DOCKER.value
+    metrics: Dict[str, Any] = field(default_factory=dict)
+    mode: str = "subprocess"
 
 
 class TestOrchestratorError(Exception):
@@ -81,47 +70,22 @@ class TestOrchestratorError(Exception):
 
 
 class TestOrchestrator:
-    """Test execution orchestrator with Docker fallback support."""
+    """Coordinate test execution using subprocesses."""
 
     def __init__(
         self,
         git_engine: GitEngine,
-        sandbox_image: str = "python:3.11-slim",
-        execution_mode: str = TestExecutionMode.SUBPROCESS.value,
         log_dir: Optional[Path] = None,
         formatter: Optional[RichFormatter] = None,
     ) -> None:
         """Initialize Test Orchestrator."""
 
         self.git_engine = git_engine
-        self.sandbox_image = sandbox_image
-        self.requested_mode = TestExecutionMode(execution_mode)
         self.log_dir = Path(log_dir or (Path.home() / ".sologit" / "data" / "test_runs"))
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.formatter = formatter or RichFormatter()
-
-        self.docker_client = None
-        self.mode = TestExecutionMode.SUBPROCESS
-
-        if self.requested_mode != TestExecutionMode.SUBPROCESS:
-            try:
-                self.docker_client = docker.from_env()
-                self.mode = TestExecutionMode.DOCKER
-                logger.info(
-                    "TestOrchestrator initialized with Docker image=%s", sandbox_image
-                )
-            except DockerException as exc:
-                if self.requested_mode == TestExecutionMode.DOCKER:
-                    logger.error("Failed to connect to Docker: %s", exc)
-                    raise TestOrchestratorError(f"Docker not available: {exc}")
-
-                logger.warning(
-                    "Docker not available (%s). Falling back to subprocess execution.",
-                    exc,
-                )
-                self.mode = TestExecutionMode.SUBPROCESS
-        else:
-            logger.info("TestOrchestrator initialized in subprocess mode")
+        self.mode = "subprocess"
+        logger.info("TestOrchestrator initialized in subprocess mode")
 
     @contextmanager
     def _progress(self, description: str, total: Optional[int] = None):
@@ -215,7 +179,7 @@ class TestOrchestrator:
             len(tests),
             pad_id,
             parallel,
-            self.mode.value,
+            self.mode,
         )
 
         workpad = self.git_engine.get_workpad(pad_id)
@@ -456,122 +420,7 @@ class TestOrchestrator:
     ) -> TestResult:
         """Run a single test using the configured execution mode."""
 
-        if self.mode == TestExecutionMode.DOCKER:
-            return await self._run_test_in_docker(repo_path, test, on_output=on_output)
-
         return await self._run_test_subprocess(repo_path, test, on_output=on_output)
-
-    async def _run_test_in_docker(
-        self,
-        repo_path: Path,
-        test: TestConfig,
-        *,
-        on_output: Optional[Callable[[str, str, str], None]] = None,
-    ) -> TestResult:
-        start_time = time.time()
-        stdout_lines: List[str] = []
-        stderr_lines: List[str] = []
-        metrics: Dict[str, Any] = {"mode": self.mode.value}
-
-        try:
-            container = self.docker_client.containers.create(
-                self.sandbox_image,
-                command=["/bin/sh", "-c", test.cmd],
-                working_dir="/workspace",
-                volumes={str(repo_path): {"bind": "/workspace", "mode": "ro"}},
-                network_mode="none",
-                mem_limit="2g",
-                cpu_quota=100000,
-                detach=True,
-                remove=False,
-            )
-
-            logger.debug(
-                "Created container %s for test %s",
-                container.id[:12],
-                test.name,
-            )
-
-            container.start()
-
-            log_task = asyncio.create_task(
-                asyncio.to_thread(
-                    self._stream_container_logs,
-                    container,
-                    test.name,
-                    stdout_lines,
-                    stderr_lines,
-                    on_output,
-                )
-            )
-
-            wait_task = asyncio.create_task(asyncio.to_thread(container.wait))
-
-            try:
-                wait_result = await asyncio.wait_for(wait_task, timeout=test.timeout)
-                exit_code = wait_result.get("StatusCode", -1)
-                status = TestStatus.PASSED if exit_code == 0 else TestStatus.FAILED
-            except asyncio.TimeoutError:
-                logger.warning("Docker test timeout: %s", test.name)
-                await asyncio.to_thread(container.stop, timeout=5)
-                exit_code = -1
-                status = TestStatus.TIMEOUT
-            finally:
-                try:
-                    stats = await asyncio.to_thread(container.stats, stream=False)
-                    metrics.update(self._extract_docker_metrics(stats))
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.debug("Failed to collect Docker stats: %s", exc)
-
-                await log_task
-
-                try:
-                    await asyncio.to_thread(container.remove, force=True)
-                except Exception:  # pragma: no cover - cleanup best effort
-                    pass
-
-            duration_ms = int((time.time() - start_time) * 1000)
-            metrics["duration_ms"] = duration_ms
-            metrics["exit_code"] = exit_code
-
-            stdout = "\n".join(stdout_lines)
-            stderr = "\n".join(stderr_lines)
-            log_path = self._persist_logs(test.name, stdout, stderr, metrics)
-
-            return TestResult(
-                name=test.name,
-                status=status,
-                duration_ms=duration_ms,
-                exit_code=exit_code,
-                stdout=stdout,
-                stderr=stderr,
-                log_path=log_path,
-                metrics=metrics,
-                mode=self.mode.value,
-            )
-
-        except Exception as exc:
-            logger.error("Error running Docker test %s: %s", test.name, exc)
-            duration_ms = int((time.time() - start_time) * 1000)
-            metrics["duration_ms"] = duration_ms
-            metrics["exit_code"] = -1
-
-            stdout = "\n".join(stdout_lines)
-            stderr = "\n".join(stderr_lines)
-            log_path = self._persist_logs(test.name, stdout, stderr, metrics)
-
-            return TestResult(
-                name=test.name,
-                status=TestStatus.ERROR,
-                duration_ms=duration_ms,
-                exit_code=-1,
-                stdout=stdout,
-                stderr=stderr,
-                error=str(exc),
-                log_path=log_path,
-                metrics=metrics,
-                mode=self.mode.value,
-            )
 
     async def _run_test_subprocess(
         self,
@@ -583,7 +432,7 @@ class TestOrchestrator:
         start_time = time.time()
         stdout_lines: List[str] = []
         stderr_lines: List[str] = []
-        metrics: Dict[str, Any] = {"mode": self.mode.value}
+        metrics: Dict[str, Any] = {"mode": self.mode}
 
         usage_start = self._get_resource_usage()
 
@@ -647,7 +496,7 @@ class TestOrchestrator:
                 stderr=stderr,
                 log_path=log_path,
                 metrics=metrics,
-                mode=self.mode.value,
+                mode=self.mode,
             )
 
         except Exception as exc:
@@ -670,7 +519,7 @@ class TestOrchestrator:
                 error=str(exc),
                 log_path=log_path,
                 metrics=metrics,
-                mode=self.mode.value,
+                mode=self.mode,
             )
 
     def _build_dependency_graph(self, tests: List[TestConfig]) -> Dict[str, List[str]]:
@@ -737,7 +586,7 @@ class TestOrchestrator:
             f"{res.name} ({res.status.value})" for res in blocked_results
         )
         message = f"Skipped due to dependency failure: {reason}"
-        metrics = {"mode": self.mode.value, "duration_ms": 0, "exit_code": -1}
+        metrics = {"mode": self.mode, "duration_ms": 0, "exit_code": -1}
         log_path = self._persist_logs(test.name, "", message, metrics)
         logger.info("Skipping test %s due to failed dependencies", test.name)
         return TestResult(
@@ -750,38 +599,8 @@ class TestOrchestrator:
             error=message,
             log_path=log_path,
             metrics=metrics,
-            mode=self.mode.value,
+            mode=self.mode,
         )
-
-    def _stream_container_logs(
-        self,
-        container,
-        test_name: str,
-        stdout_lines: List[str],
-        stderr_lines: List[str],
-        on_output: Optional[Callable[[str, str, str], None]],
-    ) -> None:
-        try:
-            for stdout_chunk, stderr_chunk in container.attach(
-                stream=True,
-                stdout=True,
-                stderr=True,
-                demux=True,
-            ):
-                if stdout_chunk:
-                    text = stdout_chunk.decode("utf-8", errors="replace").rstrip()
-                    if text:
-                        stdout_lines.append(text)
-                        if on_output:
-                            on_output(test_name, "stdout", text)
-                if stderr_chunk:
-                    text = stderr_chunk.decode("utf-8", errors="replace").rstrip()
-                    if text:
-                        stderr_lines.append(text)
-                        if on_output:
-                            on_output(test_name, "stderr", text)
-        except Exception as exc:  # pragma: no cover - best effort logging
-            logger.debug("Log stream ended for %s: %s", test_name, exc)
 
     def _persist_logs(
         self,
@@ -797,7 +616,7 @@ class TestOrchestrator:
             with open(log_path, "w", encoding="utf-8") as handle:
                 handle.write("# Solo Git Test Run\n")
                 handle.write(f"name: {test_name}\n")
-                handle.write(f"mode: {self.mode.value}\n")
+                handle.write(f"mode: {self.mode}\n")
                 handle.write(f"metrics: {metrics}\n")
                 handle.write("\n[stdout]\n")
                 handle.write(stdout)
@@ -827,29 +646,6 @@ class TestOrchestrator:
             "io_read_ops": max(0, end_usage.ru_inblock - start_usage.ru_inblock),
             "io_write_ops": max(0, end_usage.ru_oublock - start_usage.ru_oublock),
         }
-
-    def _extract_docker_metrics(self, stats: Dict[str, Any]) -> Dict[str, Any]:
-        metrics: Dict[str, Any] = {}
-        try:
-            cpu_stats = stats.get("cpu_stats", {})
-            precpu_stats = stats.get("precpu_stats", {})
-            cpu_delta = (
-                cpu_stats.get("cpu_usage", {}).get("total_usage", 0)
-                - precpu_stats.get("cpu_usage", {}).get("total_usage", 0)
-            )
-            system_delta = (
-                cpu_stats.get("system_cpu_usage", 0)
-                - precpu_stats.get("system_cpu_usage", 0)
-            )
-            if cpu_delta > 0 and system_delta > 0:
-                metrics["cpu_percent"] = (cpu_delta / system_delta) * 100.0
-
-            memory_stats = stats.get("memory_stats", {})
-            metrics["memory_usage"] = memory_stats.get("usage")
-            metrics["memory_limit"] = memory_stats.get("limit")
-        except Exception as exc:  # pragma: no cover - defensive parsing
-            logger.debug("Failed to parse Docker metrics: %s", exc)
-        return metrics
 
     def all_tests_passed(self, results: List[TestResult]) -> bool:
         """Check if all tests passed."""

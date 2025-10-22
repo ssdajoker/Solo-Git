@@ -26,7 +26,7 @@ if str(REPO_ROOT) not in os.sys.path:
     os.sys.path.insert(0, str(REPO_ROOT))
 
 from sologit.engines.git_engine import GitEngine
-from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator, TestExecutionMode
+from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
 from sologit.orchestration.planning_engine import CodePlan, FileChange
 from sologit.orchestration.code_generator import GeneratedPatch
@@ -175,7 +175,6 @@ def benchmark_test_execution(engine: GitEngine, repo_id: str) -> Dict[str, Any]:
 
     orchestrator = TestOrchestrator(
         git_engine=engine,
-        execution_mode=TestExecutionMode.SUBPROCESS.value,
     )
 
     pad_id = engine.create_workpad(repo_id, "Test Runner Pad")
