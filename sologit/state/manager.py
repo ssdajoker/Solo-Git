@@ -307,7 +307,6 @@ class JSONStateBackend(StateBackend):
                 path.unlink()
             except Exception as exc:
                 logger.error(f"Failed to delete test run {run_id}: {exc}")
-    
     def read_ai_operation(self, operation_id: str) -> Optional[AIOperation]:
         path = self.ai_ops_dir / f"{operation_id}.json"
         data = self._read_json(path)
