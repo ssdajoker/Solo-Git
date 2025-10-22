@@ -97,13 +97,13 @@ def _tests_from_config_entries(
         timeout_value = entry.get('timeout', default_timeout)
         timeout = int(timeout_value) if timeout_value is not None else default_timeout
         depends_on_raw = entry.get('depends_on', []) or []
-        if isinstance(depends_on_raw, Iterable) and not isinstance(depends_on_raw, (str, bytes)):
-            depends_on_list = list(depends_on_raw)
-        else:
+        if isinstance(depends_on_raw, list):
+            depends_on_list = depends_on_raw
+        elif not depends_on_raw:
             depends_on_list = []
-            if depends_on_raw:
-                logger.warning("Ignoring non-iterable depends_on value for test '%s'", name)
-
+        else:
+            logger.warning("Ignoring non-list depends_on value for test '%s'", name)
+            depends_on_list = []
         tests.append(
             TestConfig(
                 name=name,
