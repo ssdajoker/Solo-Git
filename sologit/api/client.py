@@ -15,6 +15,7 @@ For OpenAI-compatible RouteLLM access, you need a ChatLLM subscription.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Dict, Any, Generator, List, Optional, Tuple
 
@@ -138,15 +139,21 @@ class AbacusClient:
     ):
         url = f"{self.endpoint}{path}"
         logger.debug("POST %s", url)
-        try:
-            response = self.session.post(
-                url,
-                json=payload,
-                stream=stream,
-                timeout=timeout,
-            )
-        except requests.RequestException as exc:
-            raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
+        for attempt in range(3):
+            try:
+                response = self.session.post(
+                    url,
+                    json=payload,
+                    stream=stream,
+                    timeout=timeout,
+                )
+                if response.status_code < 400:
+                    break
+                if response.status_code != 503:
+                    raise self._build_http_error(path, response)
+            except requests.RequestException as exc:
+                raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
+            time.sleep(1)
 
         if response.status_code >= 400:
             raise self._build_http_error(path, response)

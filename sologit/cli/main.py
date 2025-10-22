@@ -93,12 +93,30 @@ def _resolve_gui_executable() -> Optional[Path]:
     return None
 
 
-def abort_with_error(message: str, details: Optional[str] = None) -> None:
-    """Display a formatted error and abort the command."""
-    content = f"[bold]{message}[/bold]"
-    if details:
-        content += f"\n\n{details}"
-    formatter.print_error_panel(content)
+def abort_with_error(
+    message: str,
+    details: Optional[str] = None,
+    *,
+    title: Optional[str] = None,
+    help_text: Optional[str] = None,
+    tip: Optional[str] = None,
+    suggestions: Optional[List[str]] = None,
+    docs_url: Optional[str] = None,
+) -> None:
+    """Display a contextual error panel and abort the command."""
+
+    formatter.print_error(
+        title or "Command Error",
+        message,
+        help_text=help_text or "Review the command usage below and adjust the provided arguments.",
+        tip=tip or "Run the command with --help to see supported options and flags.",
+        suggestions=suggestions or [
+            "evogitctl --help",
+            "evogitctl history --recent",
+        ],
+        docs_url=docs_url or "docs/SETUP.md",
+        details=details,
+    )
     raise click.Abort()
 
 
@@ -210,11 +228,11 @@ def hello():
 
 @cli.command()
 def shortcuts():
-    """Show keyboard shortcuts reference."""
+    """Display keyboard shortcuts for the Heaven Interface TUI."""
 
     formatter.print_header("Heaven Interface Keyboard Shortcuts")
-    table = formatter.table(headers=["Key", "Action", "Context"])
 
+    table = formatter.table(headers=["Key", "Action", "Context"])
     for index, category in enumerate(SHORTCUT_CATEGORIES):
         table.add_row(f"[bold]{category.name}[/]", "", "")
         for shortcut in category.shortcuts:
@@ -226,7 +244,6 @@ def shortcuts():
     formatter.print_info(
         "See docs/KEYBOARD_SHORTCUTS.md or press '?' inside the TUI for the full reference."
     )
-
 
 @cli.command()
 @click.option('--dev', is_flag=True, help='Launch in development mode')
@@ -583,7 +600,18 @@ def main():
         exit_code = 130
     except Exception as e:
         logger.exception("Unhandled exception")
-        formatter.print_error_panel(str(e), title="Unhandled Error")
+        formatter.print_error(
+            "Unhandled Error",
+            "An unexpected error occurred while running evogitctl.",
+            help_text="See the error details below and rerun the command with --verbose for a full traceback.",
+            tip="Capture the exact command and error message when reporting an issue to the Solo Git team.",
+            suggestions=[
+                "Retry the previous command",
+                "evogitctl history --recent",
+            ],
+            docs_url="docs/SETUP.md#troubleshooting",
+            details=str(e),
+        )
         exit_code = 1
 
     sys.exit(exit_code)
@@ -664,7 +692,18 @@ def _run_interactive_shell() -> int:
         try:
             args = shlex.split(command)
         except ValueError as exc:
-            formatter.print_error_panel(str(exc), title="Invalid command")
+            formatter.print_error(
+                "Invalid Command",
+                "The input could not be parsed. Ensure arguments are properly quoted.",
+                help_text="Wrap arguments containing spaces in quotes and escape any special shell characters.",
+                tip="Press Tab to trigger autocomplete suggestions for available commands.",
+                suggestions=[
+                    "Example: evogitctl repo init --zip app.zip",
+                    "Example: evogitctl pad create \"Add auth flow\"",
+                ],
+                docs_url="docs/KEYBOARD_SHORTCUTS.md",
+                details=str(exc),
+            )
             continue
 
         entry_id = history.record_cli_command(
