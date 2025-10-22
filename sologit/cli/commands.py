@@ -70,6 +70,8 @@ def abort_with_error(
     tip: Optional[str] = None,
     suggestions: Optional[Iterable[str]] = None,
     docs_url: Optional[str] = None,
+) -> None:
+    """Render a contextual error panel and abort the active command."""
 ) -> NoReturn:
     """Display a formatted error with rich context and abort the command."""
 
@@ -289,6 +291,13 @@ def repo() -> None:
     """Repository management commands."""
 
 
+@repo.command('init')
+@click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
+@click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
+@click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
+@click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
+@click.option('--name', type=str, help='Repository name (optional)')
+def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
 @repo.command("init")
 @click.option("--zip", "zip_file", type=click.Path(exists=True, path_type=Path), help="Initialize from zip file")
 @click.option("--git", "git_url", type=str, help="Initialize from Git URL")
@@ -346,6 +355,13 @@ def repo_init(
             repo_name = name or base
             formatter.print_info(f"Cloning from: {git_url}")
             repo_info = git_sync.init_repo_from_git(git_url, repo_name)
+        else:
+            assert git_url is not None
+            repo_name = name or Path(git_url.rstrip("/")).stem
+            formatter.print_info(f"Cloning repository from: {git_url}")
+            repo_id = git_engine.init_from_git(git_url, repo_name)
+
+        repo_obj = _require_repository(git_engine.get_repo(repo_id), repo_id)
 
         formatter.print_success("Repository initialized!")
         formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
@@ -704,6 +720,18 @@ def test() -> None:
     """Test execution commands."""
 
 
+def _default_tests(target: str) -> Sequence[TestConfig]:
+    """Return a default set of tests for the given target."""
+
+    if target == "fast":
+        return [TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60)]
+
+    return [
+        TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+        TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+    ]
+
+
 @test.command("run")
 @click.argument("pad_id")
 @click.option("--target", type=click.Choice(["fast", "full"]), default="fast", show_default=True)
@@ -857,8 +885,6 @@ def test_run(pad_id: str, target: str) -> None:
         total = summary.get("total", len(results))
         timeout = summary.get("timeout", 0)
 
-        if summary['status'] == 'green':
-            formatter.print_success("All tests passed! Ready to promote.")
         if failed == 0 and timeout == 0:
             formatter.print_success("All tests passed!")
             final_status = "passed"
@@ -923,6 +949,14 @@ def test_run(pad_id: str, target: str) -> None:
             "Test execution failed",
             str(exc),
             title="Test Execution Failed",
+            help_text="Retry the command once the underlying issue is resolved.",
+            tip="Run with --sequential to simplify orchestration when debugging failures.",
+            suggestions=[
+                f"evogitctl test run {pad_id}",
+                f"evogitctl test run {pad_id} --target {target}",
+            ],
+            docs_url="docs/TESTING_GUIDE.md",
+            details=str(exc),
             help_text=f"Workpad: {pad_id}",
             suggestions=[f"evogitctl test run {pad_id}"],
         )
@@ -1070,6 +1104,19 @@ def pad_auto_merge(
         ci_config=config_manager.config.ci,
         rollback_on_ci_red=config_manager.config.rollback_on_ci_red
     )
+
+    formatter.print_header("Auto-Merge Workflow")
+    overview = formatter.table(headers=["Field", "Value"])
+    overview.add_row("Workpad", f"[bold]{workpad.title}[/bold] ({workpad.id[:8]})")
+    overview.add_row("Target", target)
+    overview.add_row("Auto-promote", "Enabled" if not no_auto_promote else "Disabled")
+    overview.add_row("Tests", str(len(tests)))
+    formatter.console.print(overview)
+
+    # Execute workflow
+    result = workflow.execute(
+            pad_id, tests, parallel=True, auto_promote=not no_auto_promote, target=target
+        )
 
     try:
         formatter.print_header("Auto-Merge Workflow")

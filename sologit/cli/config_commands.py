@@ -282,6 +282,7 @@ def test_config(ctx: click.Context) -> None:
     is_valid, issues = config_manager.validate()
 
     if not is_valid:
+        issue_text = "\n".join(f"- {issue}" for issue in issues)
         abort_with_error(
             "Configuration Validation Failed",
             "\n".join(issues),
@@ -443,6 +444,7 @@ def budget_status(ctx: click.Context) -> None:
 
 
 @config_group.command(name="init")
+@click.option("--force", is_flag=True, help="Overwrite existing configuration file")
 @click.option("--force", is_flag=True, help="Overwrite existing config file if present")
 def init_config(force: bool) -> None:
     """Create a default configuration file."""
