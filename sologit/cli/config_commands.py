@@ -87,7 +87,7 @@ def _format_currency(amount: Optional[float]) -> str:
 
     if amount is None:
         return "$0.00"
-    return f"${amount:0.2f}"
+    return f"${amount:.2f}"
 
 
 @click.group(name="config")
