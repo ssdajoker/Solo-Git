@@ -295,7 +295,10 @@ def tui(repo_path: Optional[str] = None):
     Heaven Interface experience for managing repositories, workpads, and tests
     from the terminal.
     """
-    _launch_heaven_tui(repo_path=repo_path)
+    if repo_path is not None:
+        _launch_heaven_tui(repo_path=repo_path)
+    else:
+        _launch_heaven_tui()
 
 
 @cli.command()
