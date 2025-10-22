@@ -400,7 +400,7 @@ Some lines appeared uncovered due to import issues. Solution: Verified actual co
 
 ### 2. **Integration Testing**
 - Add more end-to-end integration tests
-- Test real  scenarios (when available)
+- Test real container scenarios (when available)
 - Test actual Git operations
 
 ### 3. **Performance Testing**
