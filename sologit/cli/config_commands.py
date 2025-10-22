@@ -265,15 +265,20 @@ def budget_status(ctx: click.Context) -> None:
     config_manager = _get_config_manager(ctx)
     config = config_manager.get_config()
 
-    if not isinstance(config.budget, BudgetConfig):
-        abort_with_error(
-            "Invalid budget configuration",
-            "The 'budget' section of your configuration is missing or malformed.",
-            help_text="Please check your configuration file and ensure the 'budget' section is correctly specified.",
-            tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
-        )
+    budget_config = config.budget if isinstance(config.budget, BudgetConfig) else None
+    if budget_config is None:
+        # Try to create a default BudgetConfig if possible
+        try:
+            budget_config = BudgetConfig()
+        except Exception:
+            abort_with_error(
+                "Invalid budget configuration",
+                "The 'budget' section of your configuration is missing or malformed, and defaults could not be loaded.",
+                help_text="Please check your configuration file and ensure the 'budget' section is correctly specified.",
+                tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
+            )
 
-    guard = CostGuard(config.budget)
+    guard = CostGuard(budget_config)
     status = guard.get_status()
 
     formatter.print_header("Solo Git Budget Status")
