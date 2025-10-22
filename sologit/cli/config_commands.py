@@ -49,16 +49,15 @@ def _get_config_manager(ctx: click.Context) -> ConfigManager:
 
 def abort_with_error(
     message: str,
-    details: str | None = None,
+    details: Optional[str] = None,
     *,
-    title: str | None = None,
-    help_text: str | None = None,
-    tip: str | None = None,
-    suggestions: List[str] | None = None,
-    docs_url: str | None = None,
-) -> None:
+    title: Optional[str] = None,
+    help_text: Optional[str] = None,
+    tip: Optional[str] = None,
+    suggestions: Optional[List[str]] = None,
+    docs_url: Optional[str] = None,
+) -> NoReturn:
     """Display a formatted error panel with context and exit."""
-
     formatter.print_error(
         title or "Configuration Error",
         message,
@@ -71,28 +70,15 @@ def abort_with_error(
         docs_url=docs_url or "docs/SETUP.md#configuration",
         details=details,
     )
-def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
-    """Display a formatted error and exit."""
-    content = f"[bold]Error: {message}[/bold]"
-    if details:
-        content += f"\n\n{details}"
-    formatter.print_error_panel(content)
     sys.exit(1)
 
 
-@click.group(name="config")
-def config_group():
 @click.group(name='config')
 def config_group() -> None:
     """Configuration management commands."""
     pass
 
 
-@config_group.command(name="setup")
-@click.option("--api-key", help="Abacus.ai API key")
-@click.option("--endpoint", help="Abacus.ai API endpoint", default="https://api.abacus.ai/v1")
-@click.option("--interactive/--no-interactive", default=True, help="Interactive setup mode")
-def setup_config(api_key, endpoint, interactive):
 @config_group.command(name='setup')
 @click.option('--api-key', help='Abacus.ai API key')
 @click.option('--endpoint', help='Abacus.ai API endpoint',
@@ -269,8 +255,6 @@ def test_config(ctx: click.Context) -> None:
     error_messages: List[str] = errors
 
     if not is_valid:
-        formatter.print_error_panel(
-            "Configuration validation failed. Review the following issues:", title="Validation"
         formatter.print_error(
             "Configuration Validation Failed",
             "Review the issues below and update your configuration file.",
@@ -285,17 +269,6 @@ def test_config(ctx: click.Context) -> None:
         error_table = formatter.table(headers=["Issues"])
         for error in error_messages:
             error_table.add_row(error)
-            formatter.print_error(
-                "Configuration Validation Issue",
-                error,
-                help_text="Update the configuration file entry so it matches the expected format.",
-                tip="Open the config file shown below and correct the value before retrying 'evogitctl config test'.",
-                suggestions=[
-                    "evogitctl config show --secrets",
-                    "evogitctl config setup --no-interactive",
-                ],
-                docs_url="docs/SETUP.md#configuration",
-            )
         formatter.console.print(error_table)
         sys.exit(1)
 
@@ -401,7 +374,6 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_warning("Budget alerts detected.")
         formatter.print_info_panel(alerts_panel, title="Alerts")
 
-    breakdown = status.get("usage_breakdown") or {}
     breakdown: Dict[str, Any] = status.get('usage_breakdown') or {}
     if breakdown:
         breakdown_table = formatter.table(headers=["Metric", "Value"])
@@ -418,7 +390,6 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_info_panel("Usage breakdown", title="Detailed Usage")
         formatter.console.print(breakdown_table)
 
-    last_usage = status.get("last_usage")
     last_usage = cast(Optional[Dict[str, Any]], status.get('last_usage'))
     if last_usage:
         last_panel = (
@@ -430,9 +401,6 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_info_panel(last_panel, title="Last Usage")
 
 
-@config_group.command(name="init")
-@click.option("--force", is_flag=True, help="Overwrite existing config file")
-def init_config(force):
 @config_group.command(name='init')
 @click.option('--force', is_flag=True, help='Overwrite existing config file')
 def init_config(force: bool) -> None:
@@ -460,8 +428,6 @@ def init_config(force: bool) -> None:
     formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
 
 
-@config_group.command(name="env-template")
-def env_template():
 @config_group.command(name='env-template')
 def env_template() -> None:
     """Generate .env template file."""
@@ -478,8 +444,6 @@ def env_template() -> None:
     formatter.print_info("Copy to .env and fill in your values: cp .env.example .env")
 
 
-@config_group.command(name="path")
-def config_path():
 @config_group.command(name='path')
 def config_path() -> None:
     """Show configuration file path."""
