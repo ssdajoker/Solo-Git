@@ -5,6 +5,7 @@ Coordinates planning, code generation, and review operations
 with intelligent model selection and cost management.
 """
 
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
@@ -106,12 +107,40 @@ class AIOrchestrator:
             yield None
             return
 
-        with self.formatter.create_progress() as progress:
-            task_id = progress.add_task(description, total=total)
+        with self.formatter.progress(description) as progress:
+            task_id = progress.add_task(f"{description} progress", total=total)
             try:
                 yield (progress, task_id)
             finally:
                 progress.stop_task(task_id)
+
+    @contextmanager
+    def _progress_stage(
+        self,
+        progress,
+        task_id: Optional[int],
+        description: str,
+        advance: float,
+    ):
+        """Context manager that renders a spinner for a single stage."""
+        if not progress or task_id is None:
+            yield
+            return
+
+        spinner_task = progress.add_task(description, total=None)
+        progress.update(task_id, description=description)
+        success = False
+        start = time.perf_counter()
+        try:
+            yield
+            success = True
+        finally:
+            progress.remove_task(spinner_task)
+            if success and advance:
+                progress.advance(task_id, advance)
+            if success:
+                duration = time.perf_counter() - start
+                logger.debug("Stage '%s' completed in %.2fs", description, duration)
 
     def plan(
         self,
@@ -137,53 +166,49 @@ class AIOrchestrator:
 
         model_config = None
         estimated_cost = 0.0
+        actual_cost = 0.0
         complexity = None
 
         with self._progress("AI planning workflow", total=100) as progress_ctx:
             progress, task_id = progress_ctx or (None, None)
 
             try:
-                if progress:
-                    progress.update(task_id, description="Analyzing task complexity", advance=5)
+                with self._progress_stage(progress, task_id, "Analyzing task complexity", 20):
+                    complexity = self.model_router.analyze_complexity(prompt, repo_context)
+                    logger.debug("Complexity analysis: %s", complexity)
 
-                complexity = self.model_router.analyze_complexity(prompt, repo_context)
-                logger.debug("Complexity analysis: %s", complexity)
-
-                if progress:
-                    progress.update(task_id, description="Selecting optimal model", advance=10)
-
-                if force_model:
-                    model_config = self._find_model_by_name(force_model)
-                    if not model_config:
-                        raise ValueError(f"Model {force_model} not found in configuration")
-                else:
-                    remaining_budget = self.cost_guard.get_remaining_budget()
-                    model_config = self.model_router.select_model(
-                        prompt=prompt,
-                        context=repo_context,
-                        budget_remaining=remaining_budget,
-                    )
+                with self._progress_stage(progress, task_id, "Selecting optimal model", 20):
+                    if force_model:
+                        model_config = self._find_model_by_name(force_model)
+                        if not model_config:
+                            raise ValueError(f"Model {force_model} not found in configuration")
+                    else:
+                        remaining_budget = self.cost_guard.get_remaining_budget()
+                        model_config = self.model_router.select_model(
+                            prompt=prompt,
+                            context=repo_context,
+                            budget_remaining=remaining_budget,
+                        )
 
                 logger.info("Selected model: %s", model_config)
 
-                if progress:
-                    progress.update(task_id, description="Estimating budget", advance=10)
+                with self._progress_stage(progress, task_id, "Estimating budget", 10):
+                    estimated_tokens = len(prompt.split()) * 4
+                    estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens * 2
 
-                estimated_tokens = len(prompt.split()) * 4
-                estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens * 2
+                    if not self.cost_guard.check_budget(estimated_cost):
+                        raise Exception(
+                            f"Budget exceeded. Remaining: ${self.cost_guard.get_remaining_budget():.2f}"
+                        )
 
-                if not self.cost_guard.check_budget(estimated_cost):
-                    raise Exception(
-                        f"Budget exceeded. Remaining: ${self.cost_guard.get_remaining_budget():.2f}"
-                    )
-
-                if progress:
-                    progress.update(task_id, description="Contacting planning model", advance=10)
-
-                deployment = self._get_deployment_credentials('planning')
-                wait_task = progress.add_task("Waiting for plan response", total=None) if progress else None
-
-                try:
+                plan: CodePlan
+                with self._progress_stage(
+                    progress,
+                    task_id,
+                    f"Generating plan with {model_config.name}",
+                    40,
+                ):
+                    deployment = self._get_deployment_credentials('planning')
                     plan = self.planning_engine.generate_plan(
                         prompt=prompt,
                         repo_context=repo_context,
@@ -192,41 +217,38 @@ class AIOrchestrator:
                         deployment_id=deployment['deployment_id'] if deployment else None,
                         deployment_token=deployment['deployment_token'] if deployment else None,
                     )
-                finally:
-                    if progress and wait_task is not None:
-                        progress.remove_task(wait_task)
-                        progress.update(task_id, description="Synthesizing plan insights", advance=50)
 
                 response = self.planning_engine.last_response
-                if response:
-                    prompt_tokens = response.prompt_tokens or estimated_tokens
-                    completion_tokens = response.completion_tokens or max(
-                        response.total_tokens - prompt_tokens, 0
-                    )
-                    total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
-                    actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                    self.cost_guard.record_usage(
-                        model=response.model or model_config.name,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        cost_per_1k=model_config.cost_per_1k_tokens,
-                        task_type=TaskType.PLANNING.value,
-                    )
-                else:
-                    prompt_tokens = estimated_tokens
-                    completion_tokens = estimated_tokens
-                    total_tokens = prompt_tokens + completion_tokens
-                    actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                    self.cost_guard.record_usage(
-                        model=model_config.name,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        cost_per_1k=model_config.cost_per_1k_tokens,
-                        task_type=TaskType.PLANNING.value,
-                    )
+                with self._progress_stage(progress, task_id, "Recording cost metrics", 10):
+                    if response:
+                        prompt_tokens = response.prompt_tokens or estimated_tokens
+                        completion_tokens = response.completion_tokens or max(
+                            response.total_tokens - prompt_tokens, 0
+                        )
+                        total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
+                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                        self.cost_guard.record_usage(
+                            model=response.model or model_config.name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            cost_per_1k=model_config.cost_per_1k_tokens,
+                            task_type=TaskType.PLANNING.value,
+                        )
+                    else:
+                        prompt_tokens = estimated_tokens
+                        completion_tokens = estimated_tokens
+                        total_tokens = prompt_tokens + completion_tokens
+                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                        self.cost_guard.record_usage(
+                            model=model_config.name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            cost_per_1k=model_config.cost_per_1k_tokens,
+                            task_type=TaskType.PLANNING.value,
+                        )
 
-                if progress:
-                    progress.update(task_id, description="Finalizing plan report", completed=100)
+                if progress and task_id is not None:
+                    progress.update(task_id, description="Plan ready", completed=100)
 
                 return PlanResponse(
                     plan=plan,
@@ -309,50 +331,48 @@ class AIOrchestrator:
 
         model_config = None
         estimated_cost = 0.0
+        actual_cost = 0.0
 
         with self._progress("AI code generation", total=100) as progress_ctx:
             progress, task_id = progress_ctx or (None, None)
 
             try:
-                if progress:
-                    progress.update(task_id, description="Selecting coding model", advance=10)
-
-                if force_model:
-                    model_config = self._find_model_by_name(force_model)
-                    if not model_config:
-                        raise ValueError(f"Model {force_model} not found")
-                else:
-                    if plan.estimated_complexity == 'low':
-                        tier = ModelTier.FAST
-                    elif plan.estimated_complexity == 'high':
-                        tier = ModelTier.PLANNING
+                with self._progress_stage(progress, task_id, "Selecting coding model", 20):
+                    if force_model:
+                        model_config = self._find_model_by_name(force_model)
+                        if not model_config:
+                            raise ValueError(f"Model {force_model} not found")
                     else:
-                        tier = ModelTier.CODING
+                        if plan.estimated_complexity == 'low':
+                            tier = ModelTier.FAST
+                        elif plan.estimated_complexity == 'high':
+                            tier = ModelTier.PLANNING
+                        else:
+                            tier = ModelTier.CODING
 
-                    remaining_budget = self.cost_guard.get_remaining_budget()
-                    model_config = self.model_router._get_model_for_tier(tier, remaining_budget)
+                        remaining_budget = self.cost_guard.get_remaining_budget()
+                        model_config = self.model_router._get_model_for_tier(tier, remaining_budget)
 
                 logger.info("Selected model for coding: %s", model_config)
 
-                if progress:
-                    progress.update(task_id, description="Estimating token usage", advance=10)
+                with self._progress_stage(progress, task_id, "Estimating token usage", 15):
+                    total_file_size = sum(len(content) for content in (file_contents or {}).values())
+                    estimated_tokens = (len(plan.description) + total_file_size) // 4
+                    estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens * 1.5
 
-                total_file_size = sum(len(content) for content in (file_contents or {}).values())
-                estimated_tokens = (len(plan.description) + total_file_size) // 4
-                estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens * 1.5
+                    if not self.cost_guard.check_budget(estimated_cost):
+                        raise Exception(
+                            f"Budget exceeded. Remaining: ${self.cost_guard.get_remaining_budget():.2f}"
+                        )
 
-                if not self.cost_guard.check_budget(estimated_cost):
-                    raise Exception(
-                        f"Budget exceeded. Remaining: ${self.cost_guard.get_remaining_budget():.2f}"
-                    )
-
-                if progress:
-                    progress.update(task_id, description="Generating code suggestions", advance=20)
-
-                deployment = self._get_deployment_credentials('coding')
-                wait_task = progress.add_task("Waiting for code generation", total=None) if progress else None
-
-                try:
+                patch: GeneratedPatch
+                with self._progress_stage(
+                    progress,
+                    task_id,
+                    f"Generating code with {model_config.name}",
+                    45,
+                ):
+                    deployment = self._get_deployment_credentials('coding')
                     patch = self.code_generator.generate_patch(
                         plan=plan,
                         file_contents=file_contents,
@@ -361,41 +381,38 @@ class AIOrchestrator:
                         deployment_id=deployment['deployment_id'] if deployment else None,
                         deployment_token=deployment['deployment_token'] if deployment else None
                     )
-                finally:
-                    if progress and wait_task is not None:
-                        progress.remove_task(wait_task)
-                        progress.update(task_id, description="Summarizing generated patch", advance=40)
 
                 response = self.code_generator.last_response
-                if response:
-                    prompt_tokens = response.prompt_tokens or estimated_tokens
-                    completion_tokens = response.completion_tokens or max(
-                        response.total_tokens - prompt_tokens, 0
-                    )
-                    total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
-                    actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                    self.cost_guard.record_usage(
-                        model=response.model or model_config.name,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        cost_per_1k=model_config.cost_per_1k_tokens,
-                        task_type=TaskType.CODING.value
-                    )
-                else:
-                    prompt_tokens = estimated_tokens
-                    completion_tokens = int(estimated_tokens * 0.5)
-                    total_tokens = prompt_tokens + completion_tokens
-                    actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                    self.cost_guard.record_usage(
-                        model=model_config.name,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        cost_per_1k=model_config.cost_per_1k_tokens,
-                        task_type=TaskType.CODING.value
-                    )
+                with self._progress_stage(progress, task_id, "Recording cost metrics", 15):
+                    if response:
+                        prompt_tokens = response.prompt_tokens or estimated_tokens
+                        completion_tokens = response.completion_tokens or max(
+                            response.total_tokens - prompt_tokens, 0
+                        )
+                        total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
+                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                        self.cost_guard.record_usage(
+                            model=response.model or model_config.name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            cost_per_1k=model_config.cost_per_1k_tokens,
+                            task_type=TaskType.CODING.value
+                        )
+                    else:
+                        prompt_tokens = estimated_tokens
+                        completion_tokens = int(estimated_tokens * 0.5)
+                        total_tokens = prompt_tokens + completion_tokens
+                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                        self.cost_guard.record_usage(
+                            model=model_config.name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            cost_per_1k=model_config.cost_per_1k_tokens,
+                            task_type=TaskType.CODING.value
+                        )
 
-                if progress:
-                    progress.update(task_id, description="Finalizing patch details", completed=100)
+                if progress and task_id is not None:
+                    progress.update(task_id, description="Patch ready", completed=100)
 
                 return PatchResponse(
                     patch=patch,

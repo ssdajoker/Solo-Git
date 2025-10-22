@@ -130,12 +130,40 @@ class TestOrchestrator:
             yield None
             return
 
-        with self.formatter.create_progress() as progress:
-            task_id = progress.add_task(description, total=total)
+        with self.formatter.progress(description) as progress:
+            task_id = progress.add_task(f"{description} progress", total=total)
             try:
                 yield (progress, task_id)
             finally:
                 progress.stop_task(task_id)
+
+    @contextmanager
+    def _progress_stage(
+        self,
+        progress,
+        task_id: Optional[int],
+        description: str,
+        advance: int = 1,
+    ):
+        """Show a spinner for a single orchestration stage."""
+        if not progress or task_id is None:
+            yield
+            return
+
+        stage_task = progress.add_task(description, total=None)
+        progress.update(task_id, description=description)
+        success = False
+        start = time.perf_counter()
+        try:
+            yield
+            success = True
+        finally:
+            progress.remove_task(stage_task)
+            if success and advance:
+                progress.advance(task_id, advance)
+            if success:
+                duration = time.perf_counter() - start
+                logger.debug("Stage '%s' completed in %.2fs", description, duration)
 
     def _start_test_progress(
         self,
@@ -194,9 +222,8 @@ class TestOrchestrator:
         if not workpad:
             raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
 
-        repository = self.git_engine.get_repo(workpad.repo_id)
         total_tests = len(tests)
-        overall_total = max(total_tests + 1, 1)
+        overall_total = max(total_tests + 2, 2)
 
         with self._progress(
             f"Running test suite ({'parallel' if parallel else 'sequential'})",
@@ -206,7 +233,12 @@ class TestOrchestrator:
             execution_task = None
             active_tasks: Dict[str, int] = {}
 
+            repository = None
+            with self._progress_stage(progress, overall_task, "Preparing test workspace", 1):
+                repository = self.git_engine.get_repo(workpad.repo_id)
+
             if progress and total_tests:
+                progress.update(overall_task, description="Executing tests")
                 execution_task = progress.add_task("Executing tests", total=total_tests)
 
             if parallel:
@@ -232,18 +264,16 @@ class TestOrchestrator:
                     active_tasks=active_tasks,
                 )
 
-            aggregation_task = None
-            if progress:
-                aggregation_task = progress.add_task("Aggregating results", total=None)
+            with self._progress_stage(progress, overall_task, "Aggregating results", 1):
+                passed = sum(1 for r in results if r.status == TestStatus.PASSED)
+                failed = len(results) - passed
 
-            passed = sum(1 for r in results if r.status == TestStatus.PASSED)
-            failed = len(results) - passed
-
-            if progress:
-                if aggregation_task is not None:
-                    progress.remove_task(aggregation_task)
-                if overall_task is not None:
-                    progress.advance(overall_task, 1)
+            if progress and overall_task is not None:
+                progress.update(
+                    overall_task,
+                    description="Test suite complete",
+                    completed=overall_total,
+                )
 
         logger.info("Tests complete: %s passed, %s failed", passed, failed)
 
