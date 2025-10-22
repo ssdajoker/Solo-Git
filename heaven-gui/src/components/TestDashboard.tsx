@@ -6,10 +6,13 @@ import './TestDashboard.css'
 
 type NotificationType = 'success' | 'error' | 'warning' | 'info'
 
+// TestRun status type aligned with backend schema
+export type TestRunStatus = 'passed' | 'failed' | 'running' | 'pending' | 'skipped' | 'cancelled'
+
 interface TestRun {
   test_run_id: string
   workpad_id: string
-  status: 'passed' | 'failed' | 'running'
+  status: TestRunStatus
   total_tests: number
   passed_tests: number
   failed_tests: number
@@ -90,6 +93,27 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
     const avgDuration = testRuns.reduce((sum, r) => sum + r.duration_ms, 0) / totalRuns
     
     return { totalRuns, passRate, avgDuration }
+  }
+
+  // Helper to get status icon for any status value
+  const getStatusIcon = (status: TestRunStatus): string => {
+    switch (status) {
+      case 'passed':
+        return '✓'
+      case 'failed':
+        return '✗'
+      case 'running':
+        return '◉'
+      case 'pending':
+        return '○'
+      case 'skipped':
+        return '⊘'
+      case 'cancelled':
+        return '⊗'
+      default:
+        // Handle any unexpected status values gracefully
+        return '?'
+    }
   }
 
   const prepareChartData = () => {
@@ -226,7 +250,7 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
                 {testRuns.slice(0, 5).map((run) => (
                   <div key={run.test_run_id} className="run-item">
                     <span className={`run-status run-status-${run.status}`}>
-                      {run.status === 'passed' ? '✓' : run.status === 'failed' ? '✗' : '◉'}
+                      {getStatusIcon(run.status)}
                     </span>
                     <div className="run-info">
                       <span className="run-tests">

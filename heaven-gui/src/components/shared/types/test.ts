@@ -5,7 +5,7 @@
 
 import { GlobalState } from './common'
 
-export type TestStatus = 'passed' | 'failed' | 'skipped' | 'running'
+export type TestStatus = 'passed' | 'failed' | 'skipped' | 'running' | 'pending'
 
 export interface TestResult {
   id: string
@@ -29,6 +29,8 @@ export interface TestSuite {
   duration: number
 }
 
+export type TestRunStatus = 'running' | 'passed' | 'failed' | 'cancelled' | 'pending'
+
 export interface TestRun {
   id: string
   timestamp: string
@@ -39,13 +41,15 @@ export interface TestRun {
   totalSkipped: number
   totalTests: number
   duration: number
-  status: 'running' | 'passed' | 'failed' | 'cancelled'
+  status: TestRunStatus
 }
+
+export type BuildStatus = 'success' | 'failed' | 'running' | 'cancelled' | 'pending'
 
 export interface BuildInfo {
   id: string
   number: number
-  status: 'success' | 'failed' | 'running' | 'cancelled'
+  status: BuildStatus
   timestamp: string
   duration?: number
   platform?: string
