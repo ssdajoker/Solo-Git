@@ -245,6 +245,42 @@ def shortcuts():
         "See docs/KEYBOARD_SHORTCUTS.md or press '?' inside the TUI for the full reference."
     )
 
+    shortcuts_data = [
+        ("Navigation", "Ctrl+P", "Open command palette"),
+        ("Navigation", "Tab / Shift+Tab", "Switch between panels"),
+        ("Navigation", "← → ↑ ↓", "Navigate within panels"),
+        ("Workpads", "Ctrl+N", "Create new workpad"),
+        ("Workpads", "Ctrl+W", "Close workpad"),
+        ("Workpads", "Ctrl+D", "Show diff"),
+        ("Workpads", "Ctrl+S", "Commit changes"),
+        ("Testing", "Ctrl+T", "Run focused tests"),
+        ("Testing", "Ctrl+Shift+T", "Run all tests"),
+        ("Testing", "Ctrl+L", "Clear test output"),
+        ("AI", "Ctrl+G", "Generate code"),
+        ("AI", "Ctrl+R", "Review code"),
+        ("AI", "Ctrl+M", "Generate commit message"),
+        ("History", "Ctrl+Z", "Undo last command"),
+        ("History", "Ctrl+Shift+Z", "Redo command"),
+        ("History", "Ctrl+H", "Show command history"),
+        ("View", "Ctrl+B", "Toggle file browser"),
+        ("View", "Ctrl+1", "Focus commit graph"),
+        ("View", "Ctrl+2", "Focus workpad panel"),
+        ("View", "Ctrl+3", "Focus test output"),
+        ("View", "Ctrl+F", "Search files"),
+        ("General", "?", "Show help"),
+        ("General", "Ctrl+Q", "Quit application"),
+        ("General", "Ctrl+C", "Cancel current operation"),
+    ]
+
+    table = formatter.table(headers=["Category", "Shortcut", "Action"])
+    for category, shortcut, action in shortcuts_data:
+        table.add_row(category, shortcut, action)
+
+    formatter.console.print(table)
+    formatter.print_info(
+        "Press '?' inside the TUI to view this list at any time."
+    )
+
 @cli.command()
 @click.option('--dev', is_flag=True, help='Launch in development mode')
 @click.pass_context

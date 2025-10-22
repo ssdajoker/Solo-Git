@@ -434,12 +434,25 @@ def test_test_run_pad_not_found(mock_git_engine, mock_test_orchestrator):
     assert "Workpad nonexistent not found" in result.output
 
 
+def test_test_run_unexpected_exception(mock_git_engine, mock_test_orchestrator):
+    """Test `test run` handles unexpected exceptions correctly with proper variable reference."""
 def test_test_run_exception_handler(mock_git_engine, mock_test_orchestrator):
     """Test `test run` exception handler provides workpad context."""
     mock_pad = MagicMock()
     mock_pad.title = "test-pad"
     mock_git_engine.get_workpad.return_value = mock_pad
     
+    # Simulate an unexpected exception during test execution
+    mock_test_orchestrator.run_tests.side_effect = RuntimeError("Unexpected test orchestrator error")
+    
+    runner = CliRunner()
+    result = runner.invoke(cli, ['test', 'run', 'test-pad-123'])
+    
+    assert result.exit_code != 0
+    assert "Test execution failed" in result.output
+    assert "Unexpected test orchestrator error" in result.output
+    # Verify the error message uses pad_id correctly (not workpad_id which would cause NameError)
+    assert "evogitctl test run test-pad-123" in result.output
     # Make run_tests raise an exception
     mock_test_orchestrator.run_tests.side_effect = Exception("Unexpected test failure")
     
