@@ -100,7 +100,7 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
       return []
     }
 
-    const recentRuns = testRuns.slice(0, 10).reverse()
+    const recentRuns = testRuns.slice(-10).reverse()
 
     return recentRuns.map((run, index) => ({
       name: `Run ${index + 1}`,
