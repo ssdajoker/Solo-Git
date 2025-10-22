@@ -9,6 +9,7 @@ import os
 import platform
 import random
 import shutil
+import shlex
 import statistics
 import subprocess
 import tempfile
@@ -211,8 +212,13 @@ def _simulate_sandboxed_tests(repo_path: Path, tests: List[TestConfig]) -> float
         shutil.copytree(repo_path, sandbox_repo)
         start = time.perf_counter()
         for test in tests:
+            try:
+                cmd_args = shlex.split(test.cmd)
+            except ValueError as exc:  # pragma: no cover - defensive programming
+                raise ValueError(f"Invalid command for test '{test.name}': {exc}") from exc
+
             subprocess.run(
-                ["/bin/sh", "-c", test.cmd],
+                cmd_args,
                 cwd=str(sandbox_repo),
                 check=True,
                 capture_output=True,
