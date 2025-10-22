@@ -88,8 +88,12 @@ class EnhancedCLI:
 
     # Repository Commands
 
-    def repo_init(self, zip_file: Optional[str] = None, git_url: Optional[str] = None,
-                  name: Optional[str] = None) -> None:
+    def repo_init(
+        self,
+        zip_file: Optional[str] = None,
+        git_url: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> None:
         """Initialize a new repository with progress feedback."""
 
         repo = None
@@ -101,7 +105,14 @@ class EnhancedCLI:
                 progress = progress_ctx
                 overall_task = progress.add_task("Repository setup", total=100)
 
-                def run_stage(description: str, advance: int, operation: Callable[[], StageResult]) -> StageResult:
+                def run_stage(
+                    description: str,
+                    advance: int,
+                    operation: Callable[[], StageResult],
+                ) -> StageResult:
+                    if progress is None or overall_task is None:
+                        return operation()
+
                     stage_task = progress.add_task(description, total=None)
                     progress.update(overall_task, description=description)
                     success = False
@@ -131,6 +142,8 @@ class EnhancedCLI:
                         lambda: self.git_engine.init_from_zip(zip_data, name),
                     )
                 else:
+                    if not git_url:
+                        raise GitEngineError("A Git URL must be provided when --zip is not used.")
                     if not name:
                         name = Path(git_url).stem.replace('.git', '')
 
@@ -145,47 +158,6 @@ class EnhancedCLI:
                     15,
                     lambda: self.git_engine.get_repo(repo_id),
                 )
-                
-                # Set as active
-                self.state_manager.set_active_context(repo_id=repo.id)
-                
-                # Get initial commits
-                try:
-                    import git
-                    git_repo = git.Repo(repo.path)
-                    for i, commit in enumerate(list(git_repo.iter_commits())[:20]):
-                        commit_node = CommitNode(
-                            sha=commit.hexsha,
-                            short_sha=commit.hexsha[:8],
-                            message=commit.message,
-                            author=commit.author.name,
-                            timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
-                            parent_sha=commit.parents[0].hexsha if commit.parents else None,
-                            is_trunk=True
-                        )
-                        self.state_manager.add_commit(repo.id, commit_node)
-                except Exception as e:
-                    logger.warning(f"Could not load commit history: {e}")
-                
-                progress.update(task, advance=30, description="[green]Complete!")
-            
-            except GitEngineError as e:
-                progress.stop()
-                existing = self.state_manager.list_repositories()
-                repo_suggestions = [
-                    f"{repo.repo_id} • {repo.name}" for repo in existing
-                ]
-                self.formatter.print_error(
-                    "Repository Initialization Failed",
-                    "Solo Git could not complete the initialization process.",
-                    help_text="Confirm the source path or Git URL is accessible and that you have the necessary credentials.",
-                    tip="Run the command again with --verbose to surface the underlying git output for troubleshooting.",
-                    suggestions=["evogitctl repo list"] + repo_suggestions[:4],
-                    docs_url="docs/SETUP.md#initialize-a-repository",
-                    details=str(e),
-                )
-                raise click.Abort()
-        
 
                 run_stage(
                     "Recording repository in state store",
@@ -207,8 +179,23 @@ class EnhancedCLI:
 
         except GitEngineError as exc:
             if progress is not None and overall_task is not None:
-                progress.update(overall_task, description="[red]Initialization failed")
-            self.formatter.print_error(f"Failed to initialize repository: {exc}")
+                progress.update(
+                    overall_task,
+                    description="[red]Initialization failed",
+                )
+            existing = self.state_manager.list_repositories()
+            repo_suggestions = [
+                f"{tracked.repo_id} • {tracked.name}" for tracked in existing
+            ]
+            self.formatter.print_error(
+                "Repository Initialization Failed",
+                "Solo Git could not complete the initialization process.",
+                help_text="Confirm the source path or Git URL is accessible and that you have the necessary credentials.",
+                tip="Run the command again with --verbose to surface the underlying git output for troubleshooting.",
+                suggestions=["evogitctl repo list"] + repo_suggestions[:4],
+                docs_url="docs/SETUP.md#initialize-a-repository",
+                details=str(exc),
+            )
             raise click.Abort()
 
         # Print success summary
@@ -344,7 +331,8 @@ class EnhancedCLI:
                     )
                     raise click.Abort()
         
-        with self.formatter.create_progress() as progress:
+        with self.formatter.progress("Creating workpad") as progress_ctx:
+            progress = progress_ctx
             task = progress.add_task("[cyan]Creating workpad...", total=100)
             
             try:
