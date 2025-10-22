@@ -400,8 +400,52 @@ pub(crate) fn apply_patch(
         workpad.files_changed = changed_files;
     }
     workpad.status = "active".to_string();
-    workpad.current_commit = Some(format!("patch-{}", Uuid::new_v4().simple()));
 
+    // Apply the patch using git, commit, and get the resulting commit hash
+    let repo_path = get_repo_path_for_workpad(&workpad); // You may need to implement this helper if not present
+    // Apply the patch
+    let apply_status = Command::new("git")
+        .arg("apply")
+        .arg(&patch_path)
+        .current_dir(&repo_path)
+        .status()
+        .map_err(|e| format!("Failed to run git apply: {}", e))?;
+    if !apply_status.success() {
+        return Err("Failed to apply patch using git".to_string());
+    }
+    // Add all changes
+    let add_status = Command::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .status()
+        .map_err(|e| format!("Failed to run git add: {}", e))?;
+    if !add_status.success() {
+        return Err("Failed to add changes after patch".to_string());
+    }
+    // Commit the changes
+    let commit_status = Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg(final_message)
+        .current_dir(&repo_path)
+        .status()
+        .map_err(|e| format!("Failed to run git commit: {}", e))?;
+    if !commit_status.success() {
+        return Err("Failed to commit changes after patch".to_string());
+    }
+    // Get the new commit hash
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(&repo_path)
+        .output()
+        .map_err(|e| format!("Failed to get commit hash: {}", e))?;
+    if !output.status.success() {
+        return Err("Failed to get commit hash after patch".to_string());
+    }
+    let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    workpad.current_commit = Some(commit_hash);
     let workpad = save_workpad(workpad)?;
 
     let mut global = load_global_state()?;
