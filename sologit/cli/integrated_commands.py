@@ -595,7 +595,7 @@ def ai_review(ctx, workpad_id: Optional[str]):
         summary.add_row("Additions", f"+{additions} lines")
         summary.add_row("Deletions", f"-{deletions} lines")
         status_color = theme.colors.success if review['approved'] else theme.colors.warning
-        status_icon = "✅" if review['approved'] else "⚠️"
+        status_icon = theme.get_status_icon('success' if review['approved'] else 'warning')
         summary.add_row("Status", f"[{status_color}]{status_icon} {'Approved' if review['approved'] else 'Needs attention'}[/{status_color}]")
         formatter.print_info_panel("AI review completed", title="Review Results")
         formatter.console.print(summary)
