@@ -224,6 +224,61 @@ def test_repo_init_git_engine_error(mock_git_sync, tmp_path):
     assert "Failed to init" in result.output
 
 
+def test_repo_delete_success(mock_git_sync):
+    """Ensure `repo delete` removes files by default."""
+
+    mock_repo = SimpleNamespace(name="demo-repo")
+    mock_git_sync.git_engine.get_repo.return_value = mock_repo
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['repo', 'delete', 'demo'])
+
+    assert result.exit_code == 0, result.output
+    mock_git_sync.delete_repository.assert_called_once_with('demo', remove_files=True)
+    assert "Repository deleted" in result.output
+
+
+def test_repo_delete_keep_files(mock_git_sync):
+    """Ensure `repo delete --keep-files` retains repository files."""
+
+    mock_repo = SimpleNamespace(name="demo-repo")
+    mock_git_sync.git_engine.get_repo.return_value = mock_repo
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['repo', 'delete', 'demo', '--keep-files'])
+
+    assert result.exit_code == 0, result.output
+    mock_git_sync.delete_repository.assert_called_once_with('demo', remove_files=False)
+    assert "Repository files retained on disk" in result.output
+
+
+def test_repo_delete_not_found(mock_git_sync):
+    """Deleting a missing repository should abort with guidance."""
+
+    mock_git_sync.git_engine.get_repo.return_value = None
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['repo', 'delete', 'missing'])
+
+    assert result.exit_code != 0
+    assert "Repository missing not found" in result.output
+
+
+def test_repo_delete_engine_error(mock_git_sync):
+    """Surface GitEngineError exceptions during repository deletion."""
+
+    mock_repo = SimpleNamespace(name="demo-repo")
+    mock_git_sync.git_engine.get_repo.return_value = mock_repo
+    mock_git_sync.delete_repository.side_effect = GitEngineError("cannot delete")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['repo', 'delete', 'demo'])
+
+    assert result.exit_code != 0
+    assert "Failed to delete repository" in result.output
+    assert "cannot delete" in result.output
+
+
 def test_pad_create_success(mock_git_engine):
     """Test `pad create` successfully."""
     mock_repo = MagicMock()
@@ -335,6 +390,18 @@ def test_pad_info_found(mock_git_engine):
     assert "Checkpoints: 2" in result.output
     assert "Last Test: passed" in result.output
 
+
+def test_pad_info_not_found(mock_git_engine):
+    """Ensure `pad info` fails gracefully for unknown workpads."""
+
+    mock_git_engine.get_workpad.return_value = None
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['pad', 'info', 'ghost-pad'])
+
+    assert result.exit_code != 0
+    assert "Workpad ghost-pad not found" in result.output
+
 def test_pad_diff_found(mock_git_engine):
     """Test `pad diff` for an existing workpad."""
     mock_pad = MagicMock()
@@ -389,6 +456,22 @@ def test_pad_promote_not_fast_forward(mock_git_engine):
     assert result.exit_code != 0
     assert "Cannot promote: not fast-forward-able" in result.output
     assert "Trunk has diverged" in result.output
+
+
+def test_pad_promote_engine_error(mock_git_engine):
+    """Git engine errors during promotion should abort the command."""
+
+    mock_pad = MagicMock()
+    mock_git_engine.get_workpad.return_value = mock_pad
+    mock_git_engine.can_promote.return_value = True
+    mock_git_engine.promote_workpad.side_effect = GitEngineError("merge conflict")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['pad', 'promote', 'pad1'])
+
+    assert result.exit_code != 0
+    assert "Promotion failed" in result.output
+    assert "merge conflict" in result.output
 
 
 def test_test_run_success(mock_git_engine, mock_test_orchestrator, mock_state_manager):
@@ -507,32 +590,43 @@ def test_test_run_pad_not_found(mock_git_engine, mock_test_orchestrator, mock_st
     mock_state_manager.create_test_run.assert_not_called()
 
 
-def test_test_run_unexpected_exception(mock_git_engine, mock_test_orchestrator):
-    """Test `test run` handles unexpected exceptions correctly with proper variable reference."""
-def test_test_run_exception_handler(mock_git_engine, mock_test_orchestrator):
-    """Test `test run` exception handler provides workpad context."""
+def test_test_run_unexpected_exception(mock_git_engine, mock_test_orchestrator, mock_state_manager):
+    """Ensure unexpected exceptions update state and surface helpful messaging."""
+
     mock_pad = MagicMock()
     mock_pad.title = "test-pad"
     mock_git_engine.get_workpad.return_value = mock_pad
-    
-    # Simulate an unexpected exception during test execution
+
     mock_test_orchestrator.run_tests.side_effect = RuntimeError("Unexpected test orchestrator error")
-    
+
     runner = CliRunner()
     result = runner.invoke(cli, ['test', 'run', 'test-pad-123'])
-    
+
     assert result.exit_code != 0
     assert "Test execution failed" in result.output
+    assert "Workpad: test-pad-123" in result.output
     assert "Unexpected test orchestrator error" in result.output
-    # Verify the error message uses pad_id correctly (not workpad_id which would cause NameError)
-    assert "evogitctl test run test-pad-123" in result.output
-    # Make run_tests raise an exception
+    assert mock_state_manager.update_test_run.call_count == 2
+    final_kwargs = mock_state_manager.update_test_run.call_args_list[-1].kwargs
+    assert final_kwargs['status'] == 'failed'
+    assert final_kwargs['tests'][0].status == 'error'
+    assert final_kwargs['tests'][0].error == 'Unexpected test orchestrator error'
+
+
+def test_test_run_exception_handler(mock_git_engine, mock_test_orchestrator, mock_state_manager):
+    """The CLI should reference the pad ID when guiding follow-up commands."""
+
+    mock_pad = MagicMock()
+    mock_pad.title = "test-pad"
+    mock_git_engine.get_workpad.return_value = mock_pad
+
     mock_test_orchestrator.run_tests.side_effect = Exception("Unexpected test failure")
-    
+
     runner = CliRunner()
     result = runner.invoke(cli, ['test', 'run', 'pad123'])
-    
+
     assert result.exit_code != 0
     assert "Test execution failed" in result.output
-    assert "Workpad: pad123" in result.output  # Verify pad_id is shown
+    assert "Workpad: pad123" in result.output
     assert "Unexpected test failure" in result.output
+    assert "evogitctl test run pad123" in result.output
