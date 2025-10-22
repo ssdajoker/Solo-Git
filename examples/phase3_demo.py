@@ -22,7 +22,7 @@ from sologit.workflows.auto_merge import AutoMergeWorkflow
 from sologit.workflows.ci_orchestrator import CIOrchestrator
 from sologit.workflows.rollback_handler import RollbackHandler
 from sologit.workflows.promotion_gate import PromotionRules
-from sologit.utils.logger import setup_logging
+from sologit.utils.logger import setup_logger
 
 
 def create_demo_repository(base_path: Path) -> str:
@@ -330,7 +330,7 @@ def main():
     print()
     
     # Setup logger
-    setup_logging(verbose=False)
+    setup_logger(level="INFO")
     
     # Run demos
     try:
