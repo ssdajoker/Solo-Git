@@ -201,7 +201,8 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[st
 
     try:
         if zip_file:
-            assert zip_file is not None
+            if zip_file is None:
+                abort_with_error("Internal error: zip_file is unexpectedly None")
             zip_path = Path(zip_file)
             formatter.print_info(f"Initializing repository from zip: {zip_path.name}")
         else:
