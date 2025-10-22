@@ -50,7 +50,7 @@ def abort_with_error(
     tip: Optional[str] = None,
     suggestions: Optional[Iterable[str]] = None,
     docs_url: Optional[str] = None,
-) -> NoReturn:
+) -> None:
     """Render a contextual error panel and abort the active command."""
 
     formatter.print_error(
