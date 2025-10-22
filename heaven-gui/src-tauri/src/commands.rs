@@ -51,13 +51,6 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
             e
         )
     })?;
-    temp_file.flush().map_err(|e| {
-        format!(
-            "Failed to flush temporary file for {}: {}",
-            path.display(),
-            e
-        )
-    })?;
 
     temp_file
         .persist(path)
