@@ -1,7 +1,8 @@
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import type { NotificationType, TestRun } from '../types/soloGit'
 import './TestDashboard.css'
 
 type NotificationType = 'success' | 'error' | 'warning' | 'info'
@@ -33,17 +34,9 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
   const [activeTab, setActiveTab] = useState<'trends' | 'duration' | 'coverage'>('trends')
   const [runningTests, setRunningTests] = useState(false)
 
-  useEffect(() => {
-    if (workpadId) {
-      loadTestRuns()
-      const interval = setInterval(loadTestRuns, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [workpadId])
-
-  const loadTestRuns = async () => {
+  const loadTestRuns = useCallback(async () => {
     if (!workpadId) return
-    
+
     try {
       setLoading(true)
       const runs = await invoke<TestRun[]>('list_test_runs', { workpadId })
@@ -52,6 +45,29 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
       console.error('Failed to load test runs:', e)
     } finally {
       setLoading(false)
+    }
+  }, [workpadId])
+
+  useEffect(() => {
+    if (workpadId) {
+      void loadTestRuns()
+      const interval = setInterval(() => { void loadTestRuns() }, 5000)
+      return () => clearInterval(interval)
+    }
+    setTestRuns([])
+  }, [workpadId, loadTestRuns])
+
+  const getErrorMessage = (error: unknown) => {
+    if (error instanceof Error) {
+      return error.message
+    }
+    if (typeof error === 'string') {
+      return error
+    }
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return 'Unknown error'
     }
   }
 
@@ -78,7 +94,7 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
       onStateUpdated?.()
     } catch (e) {
       console.error('Failed to run tests:', e)
-      notify?.(`Failed to run tests: ${e}`, 'error')
+      notify?.(`Failed to run tests: ${getErrorMessage(e)}`, 'error')
     } finally {
       setRunningTests(false)
     }
@@ -117,13 +133,20 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
   }
 
   const prepareChartData = () => {
-    return testRuns.slice(-10).map((run, index) => ({
+    if (testRuns.length === 0) {
+      return []
+    }
+
+    const recentRuns = testRuns.slice(-10).reverse()
+
+    return recentRuns.map((run, index) => ({
       name: `Run ${index + 1}`,
-      timestamp: new Date(run.timestamp).toLocaleTimeString(),
-      passed: run.passed_tests,
-      failed: run.failed_tests,
+      timestamp: new Date(run.started_at).toLocaleTimeString(),
+      passed: run.passed,
+      failed: run.failed,
+      skipped: run.skipped,
       duration: run.duration_ms / 1000, // Convert to seconds
-      passRate: (run.passed_tests / run.total_tests) * 100,
+      passRate: run.total_tests === 0 ? 0 : (run.passed / run.total_tests) * 100,
     }))
   }
 
@@ -248,19 +271,19 @@ export default function TestDashboard({ workpadId, notify, onStateUpdated, onRun
               <h4>Recent Test Runs</h4>
               <div className="runs-list">
                 {testRuns.slice(0, 5).map((run) => (
-                  <div key={run.test_run_id} className="run-item">
+                  <div key={run.run_id} className="run-item">
                     <span className={`run-status run-status-${run.status}`}>
                       {getStatusIcon(run.status)}
                     </span>
                     <div className="run-info">
                       <span className="run-tests">
-                        {run.passed_tests}/{run.total_tests} passed
+                        {run.passed}/{run.total_tests} passed
                       </span>
                       <span className="run-duration">
                         {(run.duration_ms / 1000).toFixed(2)}s
                       </span>
                       <span className="run-time">
-                        {new Date(run.timestamp).toLocaleString()}
+                        {new Date(run.started_at).toLocaleString()}
                       </span>
                     </div>
                   </div>

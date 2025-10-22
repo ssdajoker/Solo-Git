@@ -42,77 +42,97 @@ class StateBackend(ABC):
     @abstractmethod
     def read_global_state(self) -> GlobalState:
         """Read the global state from the backend."""
-        ...
+        pass
 
     @abstractmethod
     def write_global_state(self, state: GlobalState) -> None:
         """Persist the provided global state."""
-        ...
+        pass
 
     @abstractmethod
     def read_repository(self, repo_id: str) -> Optional[RepositoryState]:
         """Return the repository state for the given repository identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_repository(self, state: RepositoryState) -> None:
         """Persist the provided repository state."""
-        ...
+        pass
 
     @abstractmethod
     def list_repositories(self) -> List[RepositoryState]:
         """List repository states known to the backend."""
+        pass
+
+    @abstractmethod
+    def delete_repository(self, repo_id: str) -> None:
+        """Remove repository state."""
         ...
 
     @abstractmethod
     def read_workpad(self, workpad_id: str) -> Optional[WorkpadState]:
         """Return the workpad state for the provided identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_workpad(self, state: WorkpadState) -> None:
         """Persist the provided workpad state."""
-        ...
+        pass
 
     @abstractmethod
     def list_workpads(self, repo_id: Optional[str] = None) -> List[WorkpadState]:
         """List workpad states, optionally filtered by repository identifier."""
+        pass
+
+    @abstractmethod
+    def delete_workpad(self, workpad_id: str) -> None:
+        """Remove workpad state."""
         ...
 
     @abstractmethod
     def read_test_run(self, run_id: str) -> Optional[TestRun]:
         """Return the recorded test run for the provided identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_test_run(self, test_run: TestRun) -> None:
         """Persist the provided test run."""
-        ...
+        pass
 
     @abstractmethod
     def list_test_runs(self, workpad_id: Optional[str] = None) -> List[TestRun]:
         """List test runs, optionally filtered by workpad identifier."""
+        pass
+
+    @abstractmethod
+    def delete_test_run(self, run_id: str) -> None:
+        """Remove a test run record."""
         ...
 
     @abstractmethod
     def read_ai_operation(self, operation_id: str) -> Optional[AIOperation]:
         """Return the AI operation for the provided identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_ai_operation(self, operation: AIOperation) -> None:
         """Persist the provided AI operation."""
-        ...
+        pass
 
     @abstractmethod
     def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[AIOperation]:
         """List AI operations, optionally filtered by workpad identifier."""
+        pass
+
+    @abstractmethod
+    def delete_ai_operation(self, operation_id: str) -> None:
+        """Remove AI operation."""
         ...
 
     @abstractmethod
     def write_promotion_record(self, record: PromotionRecord) -> None:
         """Persist a promotion record."""
-        ...
+        pass
 
     @abstractmethod
     def list_promotion_records(
@@ -122,27 +142,32 @@ class StateBackend(ABC):
         limit: int = 100,
     ) -> List[PromotionRecord]:
         """List promotion records filtered by repository or workpad."""
+        pass
+
+    @abstractmethod
+    def delete_promotion_record(self, record_id: str) -> None:
+        """Remove a promotion record."""
         ...
 
     @abstractmethod
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
         """Return commit nodes for the specified repository."""
-        ...
+        pass
 
     @abstractmethod
     def write_commit(self, repo_id: str, commit: CommitNode) -> None:
         """Persist a commit for the specified repository."""
-        ...
+        pass
 
     @abstractmethod
     def write_event(self, event: StateEvent) -> None:
         """Persist a state event."""
-        ...
+        pass
 
     @abstractmethod
     def read_events(self, since: Optional[str] = None, limit: int = 100) -> List[StateEvent]:
         """List recent state events."""
-        ...
+        pass
 
 
 class JSONStateBackend(StateBackend):
@@ -221,7 +246,14 @@ class JSONStateBackend(StateBackend):
             if data:
                 repos.append(RepositoryState.from_dict(data))
         return sorted(repos, key=lambda r: r.created_at, reverse=True)
-    
+
+    def delete_repository(self, repo_id: str) -> None:
+        path = self.repos_dir / f"{repo_id}.json"
+        if path.exists():
+            try:
+                path.unlink()
+            except Exception as exc:
+                logger.error(f"Failed to delete repository {repo_id}: {exc}")
     def read_workpad(self, workpad_id: str) -> Optional[WorkpadState]:
         path = self.workpads_dir / f"{workpad_id}.json"
         data = self._read_json(path)
@@ -241,7 +273,14 @@ class JSONStateBackend(StateBackend):
                 if repo_id is None or workpad.repo_id == repo_id:
                     workpads.append(workpad)
         return sorted(workpads, key=lambda w: w.created_at, reverse=True)
-    
+
+    def delete_workpad(self, workpad_id: str) -> None:
+        path = self.workpads_dir / f"{workpad_id}.json"
+        if path.exists():
+            try:
+                path.unlink()
+            except Exception as exc:
+                logger.error(f"Failed to delete workpad {workpad_id}: {exc}")
     def read_test_run(self, run_id: str) -> Optional[TestRun]:
         path = self.tests_dir / f"{run_id}.json"
         data = self._read_json(path)
@@ -260,7 +299,14 @@ class JSONStateBackend(StateBackend):
                 if workpad_id is None or test_run.workpad_id == workpad_id:
                     test_runs.append(test_run)
         return sorted(test_runs, key=lambda t: t.started_at, reverse=True)
-    
+
+    def delete_test_run(self, run_id: str) -> None:
+        path = self.tests_dir / f"{run_id}.json"
+        if path.exists():
+            try:
+                path.unlink()
+            except Exception as exc:
+                logger.error(f"Failed to delete test run {run_id}: {exc}")
     def read_ai_operation(self, operation_id: str) -> Optional[AIOperation]:
         path = self.ai_ops_dir / f"{operation_id}.json"
         data = self._read_json(path)
@@ -279,6 +325,14 @@ class JSONStateBackend(StateBackend):
                 if workpad_id is None or operation.workpad_id == workpad_id:
                     operations.append(operation)
         return sorted(operations, key=lambda o: o.started_at, reverse=True)
+
+    def delete_ai_operation(self, operation_id: str) -> None:
+        path = self.ai_ops_dir / f"{operation_id}.json"
+        if path.exists():
+            try:
+                path.unlink()
+            except Exception as exc:
+                logger.error(f"Failed to delete AI operation {operation_id}: {exc}")
 
     def write_promotion_record(self, record: PromotionRecord) -> None:
         path = self.promotions_dir / f"{record.record_id}.json"
@@ -303,6 +357,14 @@ class JSONStateBackend(StateBackend):
                 if len(records) >= limit:
                     break
         return records
+
+    def delete_promotion_record(self, record_id: str) -> None:
+        path = self.promotions_dir / f"{record_id}.json"
+        if path.exists():
+            try:
+                path.unlink()
+            except Exception as exc:
+                logger.error(f"Failed to delete promotion record {record_id}: {exc}")
 
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
         path = self.commits_dir / f"{repo_id}.json"
@@ -418,10 +480,26 @@ class StateManager:
     def list_repositories(self) -> List[RepositoryState]:
         """List all repositories."""
         return self.backend.list_repositories()
-    
+
+    def delete_repository(self, repo_id: str) -> None:
+        """Delete repository state and related records."""
+
+        repo = self.get_repository(repo_id)
+        if not repo:
+            return
+
+        # Remove associated workpads and promotions
+        for workpad in self.list_workpads(repo_id):
+            self.delete_workpad(workpad.workpad_id)
+
+        for record in self.list_promotion_records(repo_id=repo_id):
+            self.backend.delete_promotion_record(record.record_id)
+
+        self.backend.delete_repository(repo_id)
+
     # Workpads
-    
-    def create_workpad(self, workpad_id: str, repo_id: str, title: str, 
+
+    def create_workpad(self, workpad_id: str, repo_id: str, title: str,
                        branch_name: str, base_commit: str) -> WorkpadState:
         """Create a new workpad state."""
         state = WorkpadState(
@@ -461,7 +539,29 @@ class StateManager:
     def list_workpads(self, repo_id: Optional[str] = None) -> List[WorkpadState]:
         """List workpads, optionally filtered by repository."""
         return self.backend.list_workpads(repo_id)
-    
+
+    def delete_workpad(self, workpad_id: str) -> None:
+        """Delete workpad state and related records."""
+
+        workpad = self.get_workpad(workpad_id)
+        if not workpad:
+            return
+
+        for test_run in self.list_test_runs(workpad_id):
+            self.backend.delete_test_run(test_run.run_id)
+
+        for operation in self.list_ai_operations(workpad_id):
+            self.backend.delete_ai_operation(operation.operation_id)
+
+        for record in self.list_promotion_records(workpad_id=workpad_id):
+            self.backend.delete_promotion_record(record.record_id)
+
+        self.backend.delete_workpad(workpad_id)
+
+        repo = self.get_repository(workpad.repo_id)
+        if repo and workpad_id in repo.workpads:
+            repo.workpads.remove(workpad_id)
+            self.backend.write_repository(repo)
     # Test Runs
     
     def create_test_run(self, workpad_id: Optional[str], target: str) -> TestRun:

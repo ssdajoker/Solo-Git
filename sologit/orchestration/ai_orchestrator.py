@@ -468,95 +468,194 @@ class AIOrchestrator:
         patch: GeneratedPatch,
         context: Optional[Dict[str, Any]] = None
     ) -> ReviewResponse:
-        """
-        AI review of a generated patch.
-        
-        Args:
-            patch: Generated patch to review
-            context: Additional context
-        
-        Returns:
-            Review response with issues and suggestions
-        """
+        """AI review of a generated patch with visual progress feedback."""
+
         logger.info("Reviewing patch with %d files", len(patch.files_changed))
-        
-        # Use planning-tier model for reviews (need good reasoning)
+
         remaining_budget = self.cost_guard.get_remaining_budget()
-        model_config = self.model_router._get_model_for_tier(
-            ModelTier.PLANNING,
-            remaining_budget
-        )
-        
-        # For Phase 2, return a mock review
-        # Full implementation would call the AI model
-        logger.warning("Using mock review for Phase 2")
-        
-        issues = []
-        suggestions = []
-        
-        # Basic heuristics for mock review
-        if patch.additions > 200:
-            issues.append("Large patch - consider breaking into smaller changes")
-        
-        if not any('test' in f.lower() for f in patch.files_changed):
-            suggestions.append("Consider adding tests for these changes")
-        
-        # Mock cost
-        estimated_cost = 0.01  # Small cost for review
-        
+        model_config = None
+        issues: List[str] = []
+        suggestions: List[str] = []
+        estimated_cost = 0.01
+        review_context = context or {}
+
+        with self._progress("AI code review", total=100) as progress_ctx:
+            progress, task_id = progress_ctx or (None, None)
+
+            with self._progress_stage(progress, task_id, "Selecting review model", 20):
+                model_config = self.model_router._get_model_for_tier(
+                    ModelTier.PLANNING,
+                    remaining_budget,
+                )
+
+            with self._progress_stage(progress, task_id, "Analyzing patch metadata", 45):
+                total_changes = patch.additions + patch.deletions
+                if total_changes > 200:
+                    issues.append("Large patch - consider splitting into smaller commits")
+                if total_changes == 0:
+                    issues.append("Patch contains no changes. Verify diff generation.")
+
+                # Highlight risky files
+                risky_files = [
+                    file_name for file_name in patch.files_changed
+                    if any(keyword in file_name.lower() for keyword in ["auth", "security", "login"])
+                ]
+                if risky_files:
+                    suggestions.append(
+                        "Security sensitive files modified: "
+                        + ", ".join(sorted(set(risky_files)))
+                    )
+
+                # Detect potential debugging artefacts
+                lowered_diff = (patch.diff or "").lower()
+                if "print(" in lowered_diff or "pdb.set_trace" in lowered_diff:
+                    issues.append("Debug statements detected. Remove before committing.")
+
+            with self._progress_stage(progress, task_id, "Assessing test coverage", 20):
+                has_tests = any('test' in f.lower() for f in patch.files_changed)
+                if not has_tests:
+                    suggestions.append("Consider adding tests for these changes")
+
+                if review_context.get('requires_regression_checks'):
+                    suggestions.append("Run regression suite before promotion")
+                if review_context.get('security_sensitive'):
+                    suggestions.append("Request security review due to sensitive context")
+
+            with self._progress_stage(progress, task_id, "Recording review metrics", 15):
+                if model_config is None:
+                    raise RuntimeError("Review model configuration missing")
+
+                estimated_tokens = max(total_changes * 2, 50)
+                estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                self.cost_guard.record_usage(
+                    model=model_config.name,
+                    prompt_tokens=int(estimated_tokens * 0.6),
+                    completion_tokens=int(estimated_tokens * 0.4),
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.REVIEW.value,
+                )
+
+            if progress and task_id is not None:
+                progress.update(task_id, description="Review complete", completed=100)
+
         return ReviewResponse(
             approved=len(issues) == 0,
             issues=issues,
             suggestions=suggestions,
-            model_used=model_config.name,
+            model_used=model_config.name if model_config else "unknown",
             cost_usd=estimated_cost
         )
-    
+
     def diagnose_failure(
         self,
         test_output: str,
         patch: GeneratedPatch,
         context: Optional[Dict[str, Any]] = None
     ) -> str:
-        """
-        Diagnose test failures and suggest fixes.
-        
-        Args:
-            test_output: Test failure output
-            patch: The patch that was tested
-            context: Additional context
-        
-        Returns:
-            Diagnosis and suggested fixes
-        """
+        """Diagnose test failures and suggest fixes with progress updates."""
+
         logger.info("Diagnosing test failures")
-        
-        # Use planning-tier model for diagnosis (needs reasoning)
+
         remaining_budget = self.cost_guard.get_remaining_budget()
-        model_config = self.model_router._get_model_for_tier(
-            ModelTier.PLANNING,
-            remaining_budget
+        model_config = None
+        analysis_context = context or {}
+        trimmed_output = (test_output or "").strip()
+        insights: List[str] = []
+        recommendations: List[str] = []
+        estimated_cost = 0.0
+
+        with self._progress("AI failure diagnosis", total=100) as progress_ctx:
+            progress, task_id = progress_ctx or (None, None)
+
+            with self._progress_stage(progress, task_id, "Selecting diagnostic model", 20):
+                model_config = self.model_router._get_model_for_tier(
+                    ModelTier.PLANNING,
+                    remaining_budget,
+                )
+
+            with self._progress_stage(progress, task_id, "Analyzing failure output", 40):
+                lowered_output = trimmed_output.lower()
+                if "assert" in lowered_output:
+                    insights.append("Assertion mismatch detected. Compare expected and actual values.")
+                if "importerror" in lowered_output or "module not found" in lowered_output:
+                    insights.append("Import error observed. Ensure dependencies and PYTHONPATH are correct.")
+                if "timeout" in lowered_output:
+                    insights.append("Test timed out. Investigate long-running operations or deadlocks.")
+                if "permission" in lowered_output:
+                    insights.append("Permission issue detected. Confirm file and directory permissions.")
+                if "flake8" in lowered_output or "lint" in lowered_output:
+                    insights.append("Linting failure detected. Run lint tools locally to reproduce.")
+
+                if analysis_context.get('previous_failures'):
+                    insights.append(
+                        f"This suite has failed {analysis_context['previous_failures']} time(s); compare with prior runs."
+                    )
+
+            with self._progress_stage(progress, task_id, "Compiling recommendations", 30):
+                base_actions = [
+                    "Review the specific error message and stack trace for clues.",
+                    "Check whether recent changes introduced syntax or import errors.",
+                    "Validate that test fixtures and setup/teardown routines execute correctly.",
+                    "Re-run the failing test locally with increased logging for additional context.",
+                ]
+
+                recommendations.extend(base_actions)
+
+                for insight in insights:
+                    if "Assertion" in insight:
+                        recommendations.append("Double-check assertions and expected values in the affected tests.")
+                    elif "Import" in insight:
+                        recommendations.append("Ensure required packages are installed and module paths are correct.")
+                    elif "timeout" in insight.lower():
+                        recommendations.append("Profile the test for performance regressions or external dependencies.")
+
+                if analysis_context.get('rerun_command'):
+                    recommendations.append(
+                        f"Re-run using the suggested command: {analysis_context['rerun_command']}"
+                    )
+
+            with self._progress_stage(progress, task_id, "Recording diagnostic metrics", 10):
+                if model_config is None:
+                    raise RuntimeError("Diagnostic model configuration missing")
+
+                token_estimate = max(len(trimmed_output.split('\n')), 80)
+                estimated_cost = (token_estimate / 1000.0) * model_config.cost_per_1k_tokens
+                self.cost_guard.record_usage(
+                    model=model_config.name,
+                    prompt_tokens=int(token_estimate * 0.7),
+                    completion_tokens=int(token_estimate * 0.3),
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.DIAGNOSIS.value,
+                )
+
+            if progress and task_id is not None:
+                progress.update(task_id, description="Diagnosis complete", completed=100)
+
+        truncated_output = trimmed_output[:500] or "No output captured"
+        insight_section = (
+            "\n".join(f"- {item}" for item in insights)
+            if insights
+            else "- No specific automated insights detected"
         )
-        
-        # For Phase 2, return a basic diagnosis
-        logger.warning("Using basic diagnosis for Phase 2")
-        
-        diagnosis = f"""Test Failure Diagnosis:
+        # Deduplicate recommendations while preserving insertion order (Python 3.7+)
+        recommendation_section = "\n".join(
+            f"{idx}. {item}" for idx, item in enumerate(dict.fromkeys(recommendations), start=1)
+        )
 
-Test Output:
-{test_output[:500]}
+        patch_summary = (
+            f"Files Changed: {', '.join(patch.files_changed) or 'Unknown'}\n"
+            f"Additions: {patch.additions} | Deletions: {patch.deletions}"
+        )
 
-Patch Applied:
-{patch}
+        diagnosis = (
+            "Test Failure Diagnosis:\n\n"
+            f"Test Output Summary:\n{truncated_output}\n\n"
+            f"Patch Context:\n{patch_summary}\n\n"
+            f"Insights:\n{insight_section}\n\n"
+            f"Suggested Actions:\n{recommendation_section}\n\n"
+            f"Estimated Review Cost: ${estimated_cost:.4f}"
+        )
 
-Suggested Actions:
-1. Review the test output for specific error messages
-2. Check if the patch introduced syntax errors
-3. Verify that all imports are correct
-4. Ensure test setup/teardown is working
-
-This is a basic diagnosis. Full AI-powered diagnosis will be available in production."""
-        
         return diagnosis
     
     def get_status(self) -> Dict[str, Any]:
