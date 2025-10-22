@@ -203,53 +203,55 @@ def hello():
 @click.option('--dev', is_flag=True, help='Launch in development mode')
 @click.pass_context
 def gui(ctx, dev: bool):
-    """Launch the Heaven Interface GUI."""
-    formatter.print_header("Heaven Interface GUI")
-
+    """Launch Heaven Interface GUI."""
     config_manager = ctx.obj.get('config') if ctx and ctx.obj else None
     env = os.environ.copy()
-    if config_manager is not None and (config_path := getattr(config_manager, "config_path", None)):
+    if config_manager is not None and (
+        config_path := getattr(config_manager, "config_path", None)
+    ):
         env.setdefault("SOLOGIT_CONFIG_PATH", str(config_path))
 
     if dev:
-        formatter.print_info("Launching GUI in development mode...")
         gui_dir = _find_heaven_gui_dir()
         if not gui_dir:
             abort_with_error(
-                "Heaven GUI project not found",
-                "Run from the Solo Git repository or ensure the heaven-gui directory exists."
+                "Unable to locate heaven-gui project for development mode.",
+                "Ensure the heaven-gui directory exists alongside the CLI sources."
             )
 
+        formatter.print_info(
+            "Launching Heaven Interface GUI in development mode (tauri:dev)..."
+        )
         try:
-            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=str(gui_dir), check=True, env=env)
+            subprocess.run(['npm', 'run', 'tauri:dev'], cwd=gui_dir, check=True, env=env)
         except FileNotFoundError:
             abort_with_error(
-                "npm not found",
-                "Install Node.js and npm to run the GUI in development mode."
+                "Failed to launch development GUI.",
+                "npm was not found on PATH. Install Node.js/npm and try again."
             )
         except subprocess.CalledProcessError as exc:
             abort_with_error(
-                "GUI development server exited unexpectedly",
-                f"Exit code: {exc.returncode}"
+                "Development GUI exited with a non-zero status.",
+                f"Command: npm run tauri:dev\nExit code: {exc.returncode}"
             )
         return
 
-    formatter.print_info("Launching built GUI executable...")
-    executable = _resolve_gui_executable()
-    if not executable:
+    gui_path = _resolve_gui_executable()
+    if not gui_path:
         abort_with_error(
             "GUI not built.",
             "Run: cd heaven-gui && npm run tauri:build"
         )
 
+    formatter.print_info(f"Launching Heaven Interface GUI from {gui_path}...")
     try:
-        subprocess.Popen([str(executable)], env=env)
+        subprocess.Popen([str(gui_path)], env=env)
     except FileNotFoundError:
         abort_with_error(
-            "GUI executable not found",
-            f"Expected to find executable at {executable}"
+            "GUI executable not found.",
+            f"Expected to find executable at {gui_path}"
         )
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - unexpected launch errors
         logger.error(f"Failed to launch GUI: {exc}")
         abort_with_error("GUI launch failed", str(exc))
 
