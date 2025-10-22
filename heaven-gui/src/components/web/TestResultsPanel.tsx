@@ -8,7 +8,8 @@
 import { useState } from 'react'
 import { cn } from '../shared/utils'
 
-export type TestStatus = 'passed' | 'failed' | 'skipped'
+// Import shared TestStatus type
+export type TestStatus = 'passed' | 'failed' | 'skipped' | 'running' | 'pending'
 
 export interface TestCase {
   id: string
@@ -40,6 +41,42 @@ export interface TestResultsPanelProps {
   duration: number
   isLiveStreaming?: boolean
   className?: string
+}
+
+// Helper function to get status icon for any status value
+const getTestStatusIcon = (status: TestStatus): string => {
+  switch (status) {
+    case 'passed':
+      return '✓'
+    case 'failed':
+      return '✗'
+    case 'running':
+      return '◉'
+    case 'pending':
+      return '○'
+    case 'skipped':
+      return '⊘'
+    default:
+      return '?'
+  }
+}
+
+// Helper function to get status color class
+const getTestStatusColor = (status: TestStatus): string => {
+  switch (status) {
+    case 'passed':
+      return 'text-heaven-accent-green'
+    case 'failed':
+      return 'text-heaven-accent-red'
+    case 'running':
+      return 'text-heaven-accent-blue'
+    case 'pending':
+      return 'text-heaven-text-tertiary'
+    case 'skipped':
+      return 'text-heaven-text-tertiary'
+    default:
+      return 'text-heaven-text-secondary'
+  }
 }
 
 export function TestResultsPanel({
@@ -237,15 +274,8 @@ export function TestResultsPanel({
                       )}
                     >
                       <div className="flex items-center gap-2 flex-1 text-left">
-                        <span className={cn(
-                          'text-sm',
-                          test.status === 'passed' && 'text-heaven-accent-green',
-                          test.status === 'failed' && 'text-heaven-accent-red',
-                          test.status === 'skipped' && 'text-heaven-text-tertiary'
-                        )}>
-                          {test.status === 'passed' && '✓'}
-                          {test.status === 'failed' && '✗'}
-                          {test.status === 'skipped' && '○'}
+                        <span className={cn('text-sm', getTestStatusColor(test.status))}>
+                          {getTestStatusIcon(test.status)}
                         </span>
                         <span className="text-sm text-heaven-text-primary truncate">
                           {test.name}
