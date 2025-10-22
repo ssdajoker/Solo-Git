@@ -48,6 +48,7 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
   - 5 engagement levels (Idle → Navigation → Planning → Coding/Test → Commit/Resolve)
   - Dark theme with minimal accent colors (#61AFEF blue, #98C379 green, #E06C75 red)
   - JSON-based state synchronization between CLI/TUI/GUI
+  - **Read-only interactions today**: the GUI is currently limited to viewing repository state; write operations must be performed through the CLI or TUI interfaces.
 
 **Design Tokens**:
 - Typography: JetBrains Mono/SF Mono for code, SF Pro/Roboto for UI
