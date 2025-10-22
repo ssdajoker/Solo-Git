@@ -10,7 +10,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use tempfile::Builder;
-use uuid::Uuid;
 
 use crate::{
     get_state_dir, list_test_runs, AIOperation, GlobalState, PromotionRecord, RepositoryState,
@@ -96,7 +95,7 @@ fn store_patch_diff(workpad_id: &str, diff: &str) -> Result<String, String> {
     })?;
 
     let mut temp_file = Builder::new()
-        .prefix("sologit_patch_")
+        .prefix(&format!("sologit_patch_{}_", workpad_id))
         .suffix(".diff")
         .tempfile_in(&patches_dir)
         .map_err(|e| {
@@ -111,17 +110,12 @@ fn store_patch_diff(workpad_id: &str, diff: &str) -> Result<String, String> {
         .write_all(diff.as_bytes())
         .map_err(|e| format!("Failed to write patch diff: {}", e))?;
 
-    let patch_path = patches_dir.join(format!("{}-{}.diff", workpad_id, Uuid::new_v4().simple()));
+    let (path, file) = temp_file
+        .keep()
+        .map_err(|e| format!("Failed to persist patch file: {}", e))?;
+    drop(file);
 
-    temp_file.persist_noclobber(&patch_path).map_err(|e| {
-        format!(
-            "Failed to persist patch file {}: {}",
-            patch_path.display(),
-            e
-        )
-    })?;
-
-    Ok(patch_path.to_string_lossy().to_string())
+    Ok(path.to_string_lossy().to_string())
 }
 
 fn load_global_state() -> Result<GlobalState, String> {
