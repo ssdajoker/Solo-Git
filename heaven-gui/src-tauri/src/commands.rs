@@ -110,6 +110,21 @@ fn store_patch_diff(workpad_id: &str, diff: &str) -> Result<String, String> {
         .write_all(diff.as_bytes())
         .map_err(|e| format!("Failed to write patch diff: {}", e))?;
 
+    let patch_path = patches_dir.join(format!("{}-{}.diff", workpad_id, Uuid::new_v4().simple()));
+
+    let persisted_file = temp_file.persist_noclobber(&patch_path).map_err(|e| {
+        format!(
+            "Failed to persist patch file {}: {}",
+            patch_path.display(),
+            e
+        )
+    })?;
+
+    // Ensure the file handle returned from `persist_noclobber` is explicitly
+    // dropped so the underlying file descriptor is released immediately.
+    drop(persisted_file);
+
+    Ok(patch_path.to_string_lossy().to_string())
     let (path, file) = temp_file
         .keep()
         .map_err(|e| format!("Failed to persist patch file: {}", e))?;
