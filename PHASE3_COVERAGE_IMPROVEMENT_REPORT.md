@@ -374,8 +374,8 @@ async def test_run_smoke_tests_async(...):
 
 ## Challenges Overcome
 
-### 1. ** Dependencies**
-Some tests required  which wasn't available in test environment. Solution: Used mocks to simulate container-dependent behavior.
+### 1. **Container Dependencies**
+Some tests required container runtime which wasn't available in the test environment. Solution: Used mocks to simulate container-dependent behavior.
 
 ### 2. **API Mismatches in Old Tests**
 Some existing tests had outdated API signatures. Solution: Created new comprehensive test files with correct APIs.
