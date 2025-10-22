@@ -92,7 +92,6 @@ def iter_shortcuts() -> Iterable[Shortcut]:
 
     for category in SHORTCUT_CATEGORIES:
         yield from category.shortcuts
-
 def format_help_markup() -> str:
     """Return Rich markup for the help modal."""
 
