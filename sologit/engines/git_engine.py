@@ -204,6 +204,56 @@ class GitEngine:
                 shutil.rmtree(repo_path)
             logger.error(f"Failed to initialize repository from Git: {e}")
             raise GitEngineError(f"Failed to initialize from Git: {e}")
+
+    def create_empty_repo(self, name: str, path: Optional[Path] = None) -> str:
+        """Create an empty repository managed by Solo Git."""
+
+        if not name or not name.strip():
+            raise GitEngineError("Repository name cannot be empty")
+
+        repo_id = f"repo_{uuid4().hex[:8]}"
+        if path is not None:
+            repo_path = Path(path).expanduser().resolve()
+        else:
+            repo_path = (self.repos_path / repo_id).resolve()
+
+        if repo_path.exists() and any(repo_path.iterdir()):
+            raise GitEngineError(
+                f"Target directory {repo_path} already exists and is not empty"
+            )
+
+        try:
+            repo_path.mkdir(parents=True, exist_ok=True)
+            repo = Repo.init(repo_path)
+
+            placeholder = repo_path / ".gitkeep"
+            if not placeholder.exists():
+                placeholder.write_text("", encoding="utf-8")
+
+            repo.index.add('*')
+            repo.index.commit('Initial commit (empty repository)')
+
+            if 'main' not in repo.heads:
+                repo.create_head('main')
+            repo.heads.main.checkout()
+
+            repository = Repository(
+                id=repo_id,
+                name=name.strip(),
+                path=repo_path,
+                trunk_branch='main',
+                source_type='empty',
+            )
+            self.repo_db[repo_id] = repository
+            self._save_metadata()
+
+            logger.info(f"Created empty repository {repo_id} at {repo_path}")
+            return repo_id
+        except Exception as exc:
+            logger.error(f"Failed to create empty repository: {exc}")
+            if repo_path.exists():
+                shutil.rmtree(repo_path)
+            raise GitEngineError(f"Failed to create empty repository: {exc}")
     
     def create_workpad(self, repo_id: str, title: str) -> str:
         """
@@ -339,6 +389,50 @@ class GitEngine:
         except GitCommandError as e:
             logger.error(f"Failed to apply patch: {e}")
             raise GitEngineError(f"Failed to apply patch: {e}")
+
+    def delete_repository(self, repo_id: str, remove_files: bool = False) -> None:
+        """Delete a repository and associated metadata."""
+
+        self._validate_repo_id(repo_id)
+
+        repository = self.repo_db.get(repo_id)
+        if not repository:
+            raise RepositoryNotFoundError(f"Repository {repo_id} not found")
+
+        repo_path = Path(repository.path).resolve()
+
+        # Remove associated workpads from metadata
+        workpads_to_remove = [
+            pad_id for pad_id, pad in self.workpad_db.items() if pad.repo_id == repo_id
+        ]
+        for pad_id in workpads_to_remove:
+            self.workpad_db.pop(pad_id, None)
+
+        # Remove repository from metadata
+        self.repo_db.pop(repo_id, None)
+        self._save_metadata()
+
+        managed_root = self.repos_path.resolve()
+        is_managed_repo = False
+        try:
+            is_managed_repo = repo_path.is_relative_to(managed_root)
+        except AttributeError:
+            # Python < 3.9 fallback
+            try:
+                repo_path.relative_to(managed_root)
+                is_managed_repo = True
+            except ValueError:
+                is_managed_repo = False
+
+        if repo_path.exists() and (remove_files or is_managed_repo):
+            try:
+                if repo_path.is_dir():
+                    shutil.rmtree(repo_path)
+                else:
+                    repo_path.unlink()
+                logger.debug(f"Removed repository files at {repo_path}")
+            except Exception as exc:
+                logger.warning(f"Failed to remove repository files: {exc}")
     
     def can_promote(self, pad_id: str) -> bool:
         """
