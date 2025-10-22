@@ -174,8 +174,7 @@ function App() {
     const workpadId = ensureActiveWorkpad()
     if (!workpadId) return
 
-    const promptResult = target ?? window.prompt('Test target (leave blank for default)', 'default') ?? 'default'
-    const actualTarget = promptResult && promptResult.trim() ? promptResult.trim() : 'default'
+    const actualTarget = (target ?? window.prompt('Test target (leave blank for default)', 'default') ?? 'default').trim() || 'default'
 
     try {
       addNotification('Running tests...', 'info')
