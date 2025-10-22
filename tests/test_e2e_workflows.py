@@ -96,7 +96,6 @@ def test_runner(git_sync: GitStateSync, tmp_path_factory) -> TestOrchestrator:
     log_dir = tmp_path_factory.mktemp("logs")
     return TestOrchestrator(
         git_sync.git_engine,
-        execution_mode="subprocess",
         log_dir=log_dir,
     )
 

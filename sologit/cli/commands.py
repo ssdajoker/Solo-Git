@@ -225,11 +225,9 @@ def get_test_orchestrator() -> TestOrchestrator:
     global _test_orchestrator
     if _test_orchestrator is None:
         config = get_config_manager().config.tests
-        log_dir = Path(config.log_dir).expanduser()
+        log_dir = Path(config.log_dir).expanduser() if config.log_dir else None
         _test_orchestrator = TestOrchestrator(
             get_git_engine(),
-            sandbox_image=config.sandbox_image,
-            execution_mode=config.execution_mode,
             log_dir=log_dir,
             formatter=formatter,
         )
@@ -251,11 +249,6 @@ def repo() -> None:
     pass
 
 
-@repo.command("init")
-@click.option("--zip", "zip_file", type=click.Path(exists=True), help="Initialize from zip file")
-@click.option("--git", "git_url", type=str, help="Initialize from Git URL")
-@click.option("--name", type=str, help="Repository name (optional)")
-def repo_init(zip_file: Optional[str], git_url: Optional[str], name: Optional[str]):
 @repo.command('init')
 @click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
 @click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
@@ -786,7 +779,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         info = f"""[bold]Workpad:[/bold] {workpad.title}
 [bold]Tests:[/bold] {len(tests)}
 [bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
-[bold]Mode:[/bold] {test_orchestrator.mode.value}
+[bold]Mode:[/bold] {test_orchestrator.mode}
 [bold]Target:[/bold] {target}"""
         formatter.print_panel(info, title="🧪 Test Execution")
 
@@ -984,8 +977,6 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 )
 @click.pass_context
 def pad_auto_merge(
-    ctx, pad_id: str, target: str, no_auto_promote: bool, test_overrides: Tuple[str, ...]
-):
     ctx: click.Context,
     pad_id: str,
     target: str,

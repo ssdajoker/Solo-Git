@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from sologit.cli.main import cli
 from sologit.engines.git_engine import GitEngineError
-from sologit.engines.test_orchestrator import TestStatus, TestResult, TestExecutionMode
+from sologit.engines.test_orchestrator import TestStatus, TestResult
 from datetime import datetime
 from pathlib import Path
 
@@ -26,9 +26,7 @@ def mock_test_orchestrator():
     with patch('sologit.cli.commands.get_test_orchestrator') as mock_get:
         mock_orchestrator = MagicMock()
         mock_orchestrator.run_tests = AsyncMock()
-        # Mock the 'mode' attribute directly on the instance
-        mock_orchestrator.mode = MagicMock()
-        mock_orchestrator.mode.value = "docker"
+        mock_orchestrator.mode = "subprocess"
         mock_get.return_value = mock_orchestrator
         yield mock_orchestrator
 
@@ -391,8 +389,8 @@ def test_test_run_success(mock_git_engine, mock_test_orchestrator, mock_state_ma
     mock_git_engine.get_workpad.return_value = mock_pad
 
     results = [
-        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1234, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('/log/unit.txt')),
-        TestResult(name='integration', status=TestStatus.PASSED, duration_ms=5678, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('/log/int.txt')),
+        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1234, exit_code=0, stdout='', stderr='', mode='subprocess', log_path=Path('/log/unit.txt')),
+        TestResult(name='integration', status=TestStatus.PASSED, duration_ms=5678, exit_code=0, stdout='', stderr='', mode='subprocess', log_path=Path('/log/int.txt')),
     ]
     mock_test_orchestrator.run_tests.return_value = results
     mock_test_orchestrator.get_summary.return_value = {
@@ -437,8 +435,8 @@ def test_test_run_failure(mock_git_engine, mock_test_orchestrator, mock_state_ma
     mock_git_engine.get_workpad.return_value = mock_pad
 
     results = [
-        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1000, exit_code=0, stdout='', stderr='', mode='docker', log_path=Path('log1.txt')),
-        TestResult(name='integration', status=TestStatus.FAILED, duration_ms=2000, exit_code=1, stdout='', stderr='', error="Assertion failed", mode='docker', log_path=Path('log2.txt')),
+        TestResult(name='unit-tests', status=TestStatus.PASSED, duration_ms=1000, exit_code=0, stdout='', stderr='', mode='subprocess', log_path=Path('log1.txt')),
+        TestResult(name='integration', status=TestStatus.FAILED, duration_ms=2000, exit_code=1, stdout='', stderr='', error="Assertion failed", mode='subprocess', log_path=Path('log2.txt')),
     ]
     mock_test_orchestrator.run_tests.return_value = results
     mock_test_orchestrator.get_summary.return_value = {

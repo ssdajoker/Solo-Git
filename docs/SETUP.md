@@ -34,7 +34,6 @@ This comprehensive guide covers everything you need to get Solo Git up and runni
 
 | Software | Purpose | Installation |
 |----------|---------|--------------|
-| **Docker** | Test sandboxing (Phase 1+) | [docs.docker.com/get-docker](https://docs.docker.com/get-docker/) |
 | **Jenkins** | CI/CD integration (Phase 3+) | [jenkins.io/download](https://www.jenkins.io/download/) |
 
 ### System Requirements
