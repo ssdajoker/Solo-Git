@@ -203,7 +203,7 @@ def hello():
 @click.option('--dev', is_flag=True, help='Launch in development mode')
 @click.pass_context
 def gui(ctx, dev: bool):
-    """Launch Heaven Interface GUI."""
+    """Launch the Heaven Interface GUI."""
     config_manager = ctx.obj.get('config') if ctx and ctx.obj else None
     env = os.environ.copy()
     if config_manager is not None and (
