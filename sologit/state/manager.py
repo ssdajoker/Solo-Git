@@ -42,27 +42,27 @@ class StateBackend(ABC):
     @abstractmethod
     def read_global_state(self) -> GlobalState:
         """Read the global state from the backend."""
-        ...
+        pass
 
     @abstractmethod
     def write_global_state(self, state: GlobalState) -> None:
         """Persist the provided global state."""
-        ...
+        pass
 
     @abstractmethod
     def read_repository(self, repo_id: str) -> Optional[RepositoryState]:
         """Return the repository state for the given repository identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_repository(self, state: RepositoryState) -> None:
         """Persist the provided repository state."""
-        ...
+        pass
 
     @abstractmethod
     def list_repositories(self) -> List[RepositoryState]:
         """List repository states known to the backend."""
-        ...
+        pass
 
     @abstractmethod
     def delete_repository(self, repo_id: str) -> None:
@@ -72,17 +72,17 @@ class StateBackend(ABC):
     @abstractmethod
     def read_workpad(self, workpad_id: str) -> Optional[WorkpadState]:
         """Return the workpad state for the provided identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_workpad(self, state: WorkpadState) -> None:
         """Persist the provided workpad state."""
-        ...
+        pass
 
     @abstractmethod
     def list_workpads(self, repo_id: Optional[str] = None) -> List[WorkpadState]:
         """List workpad states, optionally filtered by repository identifier."""
-        ...
+        pass
 
     @abstractmethod
     def delete_workpad(self, workpad_id: str) -> None:
@@ -92,17 +92,17 @@ class StateBackend(ABC):
     @abstractmethod
     def read_test_run(self, run_id: str) -> Optional[TestRun]:
         """Return the recorded test run for the provided identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_test_run(self, test_run: TestRun) -> None:
         """Persist the provided test run."""
-        ...
+        pass
 
     @abstractmethod
     def list_test_runs(self, workpad_id: Optional[str] = None) -> List[TestRun]:
         """List test runs, optionally filtered by workpad identifier."""
-        ...
+        pass
 
     @abstractmethod
     def delete_test_run(self, run_id: str) -> None:
@@ -112,17 +112,17 @@ class StateBackend(ABC):
     @abstractmethod
     def read_ai_operation(self, operation_id: str) -> Optional[AIOperation]:
         """Return the AI operation for the provided identifier."""
-        ...
+        pass
 
     @abstractmethod
     def write_ai_operation(self, operation: AIOperation) -> None:
         """Persist the provided AI operation."""
-        ...
+        pass
 
     @abstractmethod
     def list_ai_operations(self, workpad_id: Optional[str] = None) -> List[AIOperation]:
         """List AI operations, optionally filtered by workpad identifier."""
-        ...
+        pass
 
     @abstractmethod
     def delete_ai_operation(self, operation_id: str) -> None:
@@ -132,7 +132,7 @@ class StateBackend(ABC):
     @abstractmethod
     def write_promotion_record(self, record: PromotionRecord) -> None:
         """Persist a promotion record."""
-        ...
+        pass
 
     @abstractmethod
     def list_promotion_records(
@@ -142,7 +142,7 @@ class StateBackend(ABC):
         limit: int = 100,
     ) -> List[PromotionRecord]:
         """List promotion records filtered by repository or workpad."""
-        ...
+        pass
 
     @abstractmethod
     def delete_promotion_record(self, record_id: str) -> None:
@@ -152,22 +152,22 @@ class StateBackend(ABC):
     @abstractmethod
     def read_commits(self, repo_id: str, limit: int = 100) -> List[CommitNode]:
         """Return commit nodes for the specified repository."""
-        ...
+        pass
 
     @abstractmethod
     def write_commit(self, repo_id: str, commit: CommitNode) -> None:
         """Persist a commit for the specified repository."""
-        ...
+        pass
 
     @abstractmethod
     def write_event(self, event: StateEvent) -> None:
         """Persist a state event."""
-        ...
+        pass
 
     @abstractmethod
     def read_events(self, since: Optional[str] = None, limit: int = 100) -> List[StateEvent]:
         """List recent state events."""
-        ...
+        pass
 
 
 class JSONStateBackend(StateBackend):
