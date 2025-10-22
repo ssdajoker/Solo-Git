@@ -132,28 +132,41 @@ def cli(ctx, verbose, config):
     # Setup logging
     setup_logging(verbose=verbose)
 
-    # Initialize context
-    ctx.ensure_object(dict)
+    # Initialize context - support both dict and SimpleNamespace
+    if ctx.obj is None:
+        ctx.obj = {}
+    
+    # Convert to dict if needed for compatibility
+    if not isinstance(ctx.obj, dict):
+        # If ctx.obj is a SimpleNamespace or similar, convert it to dict
+        # preserving any existing attributes
+        obj_dict = {}
+        if hasattr(ctx.obj, '__dict__'):
+            obj_dict = vars(ctx.obj).copy()
+        ctx.obj = obj_dict
+    
     ctx.obj['console'] = console
     ctx.obj['history'] = get_command_history()
     formatter.set_console(console)
     commands.set_formatter_console(console)
     config_commands.set_formatter_console(console)
 
-    # Load configuration
-    try:
-        manager_cls = ConfigManager
-        if manager_cls is _ORIGINAL_CONFIG_MANAGER:
-            manager_cls = getattr(config_commands, "ConfigManager", _ORIGINAL_CONFIG_MANAGER)
+    # Load configuration only if not already provided
+    if 'config' not in ctx.obj or ctx.obj['config'] is None:
+        try:
+            manager_cls = ConfigManager
+            if manager_cls is _ORIGINAL_CONFIG_MANAGER:
+                manager_cls = getattr(config_commands, "ConfigManager", _ORIGINAL_CONFIG_MANAGER)
 
-        config_manager = manager_cls(config_path=config)
-        ctx.obj['config'] = config_manager
-        ctx.obj['verbose'] = verbose
-    except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
-        if verbose:
-            raise
-        sys.exit(1)
+            config_manager = manager_cls(config_path=config)
+            ctx.obj['config'] = config_manager
+        except Exception as e:
+            logger.error(f"Failed to load configuration: {e}")
+            if verbose:
+                raise
+            sys.exit(1)
+    
+    ctx.obj['verbose'] = verbose
 
 
 @cli.command()
