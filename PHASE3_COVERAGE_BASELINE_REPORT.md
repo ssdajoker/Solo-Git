@@ -181,12 +181,12 @@ This report documents the baseline test coverage for all Phase 3 components befo
 | `test_auto_merge_enhanced.py` | 14 | ✅ All Pass | Auto-merge edge cases |
 | `test_ci_orchestrator_enhanced.py` | 12 | ⚠️ Some Fail | CI orchestrator tests |
 | `test_rollback_handler_comprehensive.py` | 19 | ✅ All Pass | Rollback scenarios |
-| `test_phase3_workflows.py` | 16 | ⚠️ Docker Issues | Integration tests |
+| `test_phase3_workflows.py` | 16 | ⚠️ Container Issues | Integration tests |
 | `test_phase3_enhanced_mocks.py` | 14 | ✅ All Pass | Mocked workflows |
 
 **Total Phase 3 Tests**: ~118 tests  
 **Passing**: ~104 tests (88%)  
-**Failing/Errors**: ~14 tests (12% - mostly Docker-related)
+**Failing/Errors**: ~14 tests (12% - mostly container-runtime related)
 
 ---
 
@@ -194,7 +194,7 @@ This report documents the baseline test coverage for all Phase 3 components befo
 
 ### Test Failures (Not Coverage Related)
 
-1. **Docker Dependency**: Some tests require Docker which isn't available in test environment
+1. **Container Dependency**: Some tests require a container runtime which isn't available in the test environment
 2. **Mock Issues**: Some enhanced tests have incorrect mock setups
 3. **API Changes**: Some tests need updates for API signature changes
 

@@ -215,12 +215,14 @@ repositories:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
+| `sandbox_image` | string | No | - | Docker image for test sandbox |
 | `timeout_seconds` | integer | No | 300 | Test timeout (5 minutes) |
-| `parallel_max` | integer | No | 4 | Max parallel test processes |
+| `parallel_max` | integer | No | 4 | Max parallel test containers |
 
 **Example:**
 ```yaml
 tests:
+  sandbox_image: ghcr.io/you/evogit-sandbox:latest
   timeout_seconds: 600
   parallel_max: 8
 ```

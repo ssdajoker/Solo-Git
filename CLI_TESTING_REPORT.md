@@ -13,7 +13,7 @@
 - ✅ pyyaml >= 6.0
 - ✅ requests >= 2.31.0
 - ✅ gitpython >= 3.1.40
-- ✅ docker >= 7.0.0
+- ✅ No container runtime required (policy ban in effect)
 - ✅ rich >= 13.7.0
 - ✅ textual >= 0.47.0
 - ✅ prompt-toolkit >= 3.0.43

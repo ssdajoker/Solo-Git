@@ -1,149 +1,88 @@
-"""
-Enhanced CLI commands with Heaven Interface formatting and state management.
+"""Enhanced command helpers that wrap core CLI operations with Rich output."""
 
-Wraps existing commands with Rich formatting and StateManager integration.
-"""
+from __future__ import annotations
 
-import click
 from pathlib import Path
-from typing import Optional, Callable, TypeVar
+from typing import Optional
 from datetime import datetime
 import uuid
+from typing import Callable, Optional, TypeVar
+
+import click
 
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
 from sologit.engines.test_orchestrator import TestOrchestrator
-from sologit.ui.formatter import RichFormatter
-from sologit.ui.graph import CommitGraphRenderer
 from sologit.state.manager import StateManager
-from sologit.state.schema import CommitNode
+from sologit.ui.formatter import RichFormatter
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-StageResult = TypeVar("StageResult")
-
 
 class EnhancedCLI:
-    """Enhanced CLI with Rich formatting and state management."""
-    
-    def __init__(self):
-        self.formatter = RichFormatter()
+    """Enhanced CLI with Rich formatting and state management helpers."""
+
+    def __init__(self, formatter: Optional[RichFormatter] = None) -> None:
+        self.formatter = formatter or RichFormatter()
         self.state_manager = StateManager()
-        self.graph_renderer = CommitGraphRenderer(self.formatter.console)
-        
-        # Engines
         self._git_engine: Optional[GitEngine] = None
         self._patch_engine: Optional[PatchEngine] = None
         self._test_orchestrator: Optional[TestOrchestrator] = None
-    
+
     @property
     def git_engine(self) -> GitEngine:
         if self._git_engine is None:
             self._git_engine = GitEngine()
         return self._git_engine
-    
+
     @property
     def patch_engine(self) -> PatchEngine:
         if self._patch_engine is None:
             self._patch_engine = PatchEngine(self.git_engine)
         return self._patch_engine
-    
+
     @property
     def test_orchestrator(self) -> TestOrchestrator:
         if self._test_orchestrator is None:
             self._test_orchestrator = TestOrchestrator(self.git_engine)
         return self._test_orchestrator
-
-    def _initialize_repository_state(self, repo) -> None:
-        """Persist repository metadata and set active context."""
-
-        self.state_manager.create_repository(
-            repo_id=repo.id,
-            name=repo.name,
-            path=str(repo.path)
-        )
-        self.state_manager.set_active_context(repo_id=repo.id)
-
-    def _load_initial_commit_history(self, repo) -> None:
-        """Load initial commit history into the state manager."""
-
-        try:
-            import git
-
-            git_repo = git.Repo(repo.path)
-            for commit in list(git_repo.iter_commits())[:20]:
-                commit_node = CommitNode(
-                    sha=commit.hexsha,
-                    short_sha=commit.hexsha[:8],
-                    message=commit.message,
-                    author=commit.author.name,
-                    timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
-                    parent_sha=commit.parents[0].hexsha if commit.parents else None,
-                    is_trunk=True,
-                )
-                self.state_manager.add_commit(repo.id, commit_node)
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.warning(f"Could not load commit history: {exc}")
-
+    
     # Repository Commands
-
-    def repo_init(self, zip_file: Optional[str] = None, git_url: Optional[str] = None,
+    
+    def repo_init(self, zip_file: Optional[str] = None, git_url: Optional[str] = None, 
                   name: Optional[str] = None) -> None:
-        """Initialize a new repository with progress feedback."""
-
-        repo = None
-        progress = None
-        overall_task: Optional[int] = None
-
-        try:
-            with self.formatter.progress("Repository initialization") as progress_ctx:
-                progress = progress_ctx
-                overall_task = progress.add_task("Repository setup", total=100)
-
-                def run_stage(description: str, advance: int, operation: Callable[[], StageResult]) -> StageResult:
-                    stage_task = progress.add_task(description, total=None)
-                    progress.update(overall_task, description=description)
-                    success = False
-                    try:
-                        result = operation()
-                        success = True
-                        return result
-                    finally:
-                        progress.remove_task(stage_task)
-                        if success and advance:
-                            progress.advance(overall_task, advance)
-
+        """Initialize a new repository."""
+        with self.formatter.create_progress() as progress:
+            task = progress.add_task("[cyan]Initializing repository...", total=100)
+            
+            try:
                 if zip_file:
                     zip_path = Path(zip_file)
-                    zip_data = run_stage(
-                        "Loading archive from disk",
-                        25,
-                        lambda: zip_path.read_bytes(),
-                    )
-
+                    zip_data = zip_path.read_bytes()
                     if not name:
                         name = zip_path.stem
-
-                    repo_id = run_stage(
-                        "Importing files & creating initial commit",
-                        35,
-                        lambda: self.git_engine.init_from_zip(zip_data, name),
-                    )
-                else:
+                    
+                    progress.update(task, advance=30, description="[cyan]Extracting zip...")
+                    repo_id = self.git_engine.init_from_zip(zip_data, name)
+                    
+                else:  # git_url
                     if not name:
                         name = Path(git_url).stem.replace('.git', '')
-
-                    repo_id = run_stage(
-                        "Cloning remote repository",
-                        60,
-                        lambda: self.git_engine.init_from_git(git_url, name),
-                    )
-
-                repo = run_stage(
-                    "Fetching repository metadata",
-                    15,
-                    lambda: self.git_engine.get_repo(repo_id),
+                    
+                    progress.update(task, advance=30, description="[cyan]Cloning repository...")
+                    repo_id = self.git_engine.init_from_git(git_url, name)
+                
+                progress.update(task, advance=40, description="[cyan]Initializing state...")
+                
+                # Get repo info
+                repo = self.git_engine.get_repo(repo_id)
+                
+                # Create state entry
+                self.state_manager.create_repository(
+                    repo_id=repo.id,
+                    name=repo.name,
+                    path=str(repo.path)
                 )
                 
                 # Set as active
@@ -171,52 +110,12 @@ class EnhancedCLI:
             
             except GitEngineError as e:
                 progress.stop()
-                existing = self.state_manager.list_repositories()
-                repo_suggestions = [
-                    f"{repo.repo_id} • {repo.name}" for repo in existing
-                ]
-                self.formatter.print_error(
-                    "Repository Initialization Failed",
-                    "Solo Git could not complete the initialization process.",
-                    help_text="Confirm the source path or Git URL is accessible and that you have the necessary credentials.",
-                    tip="Run the command again with --verbose to surface the underlying git output for troubleshooting.",
-                    suggestions=["evogitctl repo list"] + repo_suggestions[:4],
-                    docs_url="docs/SETUP.md#initialize-a-repository",
-                    details=str(e),
-                )
+                self.formatter.print_error(f"Failed to initialize repository: {e}")
                 raise click.Abort()
         
-
-                run_stage(
-                    "Recording repository in state store",
-                    15,
-                    lambda: self._initialize_repository_state(repo),
-                )
-
-                run_stage(
-                    "Loading recent commit history",
-                    10,
-                    lambda: self._load_initial_commit_history(repo),
-                )
-
-                progress.update(
-                    overall_task,
-                    description="[green]Repository ready",
-                    completed=100,
-                )
-
-        except GitEngineError as exc:
-            if progress is not None and overall_task is not None:
-                progress.update(overall_task, description="[red]Initialization failed")
-            self.formatter.print_error(f"Failed to initialize repository: {exc}")
-            raise click.Abort()
-
         # Print success summary
-        if repo is None:
-            return
-
         self.formatter.print_success("Repository initialized successfully!")
-
+        
         content = f"""[bold]Repository ID:[/bold] {repo.id}
 [bold]Name:[/bold] {repo.name}
 [bold]Path:[/bold] {repo.path}
@@ -228,33 +127,85 @@ class EnhancedCLI:
         self.formatter.console.print("  1. Create a workpad: [cyan]evogitctl pad create \"<title>\"[/cyan]")
         self.formatter.console.print("  2. Or start AI pairing: [cyan]evogitctl pair \"<task>\"[/cyan]")
     
-    def repo_list(self) -> None:
-        """List all repositories."""
-        repos = self.state_manager.list_repositories()
-        
-        if not repos:
-            self.formatter.print_warning("No repositories found.")
-            self.formatter.print_info("Initialize one with: evogitctl repo init --zip <file>")
-            return
-        
-        table = self.formatter.table(title="📁 Repositories", headers=["ID", "Name", "Path", "Workpads", "Created"])
-        
-        active_repo = self.state_manager.get_active_context()['repo_id']
-        
-        for repo in repos:
-            is_active = repo.repo_id == active_repo
-            repo_id_display = f"[bold]{repo.repo_id}[/bold]" if is_active else repo.repo_id
-            if is_active:
-                repo_id_display += " *"
-            
-            table.add_row(
-                repo_id_display,
-                repo.name,
-                repo.path,
-                str(len(repo.workpads)),
-                self.formatter.format_timestamp(repo.created_at)
+
+    def _run_stage(self, description: str, operation: Callable[[], StageResult]) -> StageResult:
+        """Run a stage while emitting progress output."""
+
+        self.formatter.print_info(description)
+        return operation()
+
+    def repo_init(
+        self,
+        zip_file: Optional[str] = None,
+        git_url: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> None:
+        """Initialize a new repository with simple progress output."""
+
+        if not zip_file and not git_url:
+            raise click.BadParameter("Provide either zip_file or git_url")
+
+        self.formatter.print_header("Enhanced Repository Initialization")
+        repo_id: Optional[str] = None
+
+        try:
+            if zip_file:
+                zip_path = Path(zip_file)
+                if not name:
+                    name = zip_path.stem
+                archive_bytes = self._run_stage(
+                    "Loading archive",
+                    lambda: zip_path.read_bytes(),
+                )
+                repo_id = self._run_stage(
+                    "Importing repository contents",
+                    lambda: self.git_engine.init_from_zip(archive_bytes, name),
+                )
+            else:
+                if not git_url:
+                    raise click.BadParameter("git_url is required when no zip file is provided")
+                if not name:
+                    base = git_url.rstrip("/").split("/")[-1]
+                    if base.endswith(".git"):
+                        base = base[:-4]
+                    name = base
+                repo_id = self._run_stage(
+                    "Cloning remote repository",
+                    lambda: self.git_engine.init_from_git(git_url, name),
+                )
+
+            repo = self._run_stage(
+                "Fetching repository metadata",
+                lambda: self.git_engine.get_repo(repo_id),
             )
-        
+            if repo is None:
+                raise GitEngineError("Repository initialization did not return metadata")
+
+            self.state_manager.set_active_context(repo_id=repo.id)
+            self.formatter.print_success(
+                f"Repository {repo.name} ({repo.id}) initialized at {repo.path}"
+            )
+        except GitEngineError as exc:
+            self.formatter.print_error(
+                "Repository Initialization Failed",
+                "Solo Git could not complete the initialization process.",
+                help_text="Confirm the source path or Git URL is accessible and that you have the necessary credentials.",
+                tip="Run the command again with --verbose to inspect git output.",
+                details=str(exc),
+            )
+            raise click.Abort()
+
+    def repo_list(self) -> None:
+        """Render repositories tracked by the Git engine."""
+
+        repos = self.git_engine.list_repos()
+        if not repos:
+            self.formatter.print_info("No repositories available.")
+            return
+
+        table = self.formatter.table(headers=["ID", "Name", "Trunk"])
+        for repo in repos:
+            table.add_row(repo.id, getattr(repo, "name", repo.id), getattr(repo, "trunk_branch", "main"))
         self.formatter.console.print(table)
         
         if active_repo:
@@ -265,16 +216,7 @@ class EnhancedCLI:
         repo = self.state_manager.get_repository(repo_id)
         
         if not repo:
-            repos = self.state_manager.list_repositories()
-            options = [f"{r.repo_id} • {r.name}" for r in repos]
-            self.formatter.print_error(
-                "Repository Not Found",
-                f"Repository '{repo_id}' is not tracked in the Solo Git state manager.",
-                help_text="Pick one of the listed repository IDs or initialize a new repository with 'evogitctl repo init'.",
-                tip="Set a default repository with 'evogitctl repo use <repo-id>' to avoid this prompt.",
-                suggestions=["evogitctl repo list"] + options[:5],
-                docs_url="docs/SETUP.md#initialize-a-repository",
-            )
+            self.formatter.print_error(f"Repository not found: {repo_id}")
             raise click.Abort()
         
         # Repository details panel
@@ -333,15 +275,7 @@ class EnhancedCLI:
                 if len(repos) == 1:
                     repo_id = repos[0].repo_id
                 else:
-                    repo_suggestions = [f"{r.repo_id} • {r.name}" for r in repos]
-                    self.formatter.print_error(
-                        "No Active Repository",
-                        "Solo Git could not determine which repository to use for this command.",
-                        help_text="Pass --repo <repo-id> explicitly or set a default repository using the repo commands.",
-                        tip="Run 'evogitctl repo list' to copy the correct repository identifier before retrying.",
-                        suggestions=["evogitctl repo list"] + repo_suggestions[:5],
-                        docs_url="docs/SETUP.md#initialize-a-repository",
-                    )
+                    self.formatter.print_error("No active repository. Specify with --repo or set active repo.")
                     raise click.Abort()
         
         with self.formatter.create_progress() as progress:
@@ -369,18 +303,7 @@ class EnhancedCLI:
             
             except Exception as e:
                 progress.stop()
-                self.formatter.print_error(
-                    "Workpad Creation Failed",
-                    "Solo Git could not create the workpad in the target repository.",
-                    help_text="Ensure the repository is initialized and free of uncommitted changes that might block workpad creation.",
-                    tip="Try syncing the repository with 'git status' and resolving outstanding changes before retrying.",
-                    suggestions=[
-                        f"evogitctl pad list --repo {repo_id}",
-                        "evogitctl repo info <repo-id>",
-                    ],
-                    docs_url="docs/HEAVEN_INTERFACE_GUIDE.md#workpads",
-                    details=str(e),
-                )
+                self.formatter.print_error(f"Failed to create workpad: {e}")
                 raise click.Abort()
         
         # Show success
@@ -448,74 +371,19 @@ class EnhancedCLI:
         workpad = self.state_manager.get_workpad(workpad_id)
         
         if not workpad:
-            context = self.state_manager.get_active_context()
-            active_repo_id = context.get('repo_id')
-            workpads = self.state_manager.list_workpads(active_repo_id) if active_repo_id else []
-            options = [f"{wp.workpad_id[:8]} • {wp.title}" for wp in workpads]
-            suggestion_commands = []
-            if active_repo_id:
-                suggestion_commands.append(f"evogitctl pad list --repo {active_repo_id}")
-            else:
-                suggestion_commands.append("evogitctl pad list")
-            suggestion_commands.append("evogitctl pad create \"<title>\"")
+            self.formatter.print_error(f"Workpad not found: {workpad_id}")
 
-            self.formatter.print_error(
-                "Workpad Not Found",
-                f"Workpad '{workpad_id}' is not tracked in the Solo Git state manager.",
-                help_text="Select one of the available workpad IDs below or create a new workpad with 'evogitctl pad create'.",
-                tip="If you recently created the workpad elsewhere, run 'evogitctl pad list' to refresh the cached state.",
-                suggestions=suggestion_commands + options[:5],
-                docs_url="docs/HEAVEN_INTERFACE_GUIDE.md#workpads",
-            )
+    def workpad_diff(self, pad_id: str) -> None:
+        """Display the diff for a given workpad."""
+
+        workpad = self.git_engine.get_workpad(pad_id)
+        if workpad is None:
+            self.formatter.print_error("Workpad not found", f"Workpad {pad_id} could not be located.")
             raise click.Abort()
-        
-        # Print workpad summary
-        self.formatter.print_workpad_summary(workpad.__dict__)
-        
-        # Show test runs
-        test_runs = self.state_manager.list_test_runs(workpad_id)
-        if test_runs:
-            self.formatter.print("\n")
-            self.formatter.print_header("Test Runs")
-            
-            table = self.formatter.table(headers=["ID", "Target", "Status", "Pass/Fail", "Duration", "Started"])
-            for run in test_runs[:5]:
-                status_icon = self.formatter.theme_obj.get_status_icon(run.status)
-                status_color = self.formatter.theme_obj.get_status_color(run.status)
-                
-                table.add_row(
-                    run.run_id[:8],
-                    run.target,
-                    f"[{status_color}]{status_icon} {run.status}[/{status_color}]",
-                    f"{run.passed}/{run.total_tests}",
-                    self.formatter.format_duration(run.duration_ms),
-                    self.formatter.format_timestamp(run.started_at)
-                )
-            
-            self.formatter.console.print(table)
-        
-        # Show AI operations
-        ai_ops = self.state_manager.list_ai_operations(workpad_id)
-        if ai_ops:
-            self.formatter.print("\n")
-            self.formatter.print_header("AI Operations")
-            
-            table = self.formatter.table(headers=["ID", "Type", "Model", "Status", "Cost", "Started"])
-            for op in ai_ops[:5]:
-                status_icon = self.formatter.theme_obj.get_status_icon(op.status)
-                status_color = self.formatter.theme_obj.get_status_color(op.status)
-                
-                table.add_row(
-                    op.operation_id[:8],
-                    op.operation_type,
-                    op.model,
-                    f"[{status_color}]{status_icon} {op.status}[/{status_color}]",
-                    f"${op.cost_usd:.4f}",
-                    self.formatter.format_timestamp(op.started_at)
-                )
-            
-            self.formatter.console.print(table)
+
+        diff_text = self.git_engine.get_diff(pad_id)
+        self.formatter.print_header(f"Diff for {workpad.title}")
+        self.formatter.console.print(diff_text)
 
 
-# Global CLI instance
 enhanced_cli = EnhancedCLI()
