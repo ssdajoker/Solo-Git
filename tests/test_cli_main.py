@@ -181,7 +181,7 @@ def test_main_uses_interactive_shell(cli_main, monkeypatch):
     called = {}
 
     monkeypatch.setattr(cli_main, "_run_interactive_shell", lambda: called.setdefault("shell", 0))
-    monkeypatch.setattr(cli_main, "_execute_cli_command", lambda args: called.setdefault("cmd", args))
+    monkeypatch.setattr(cli_main, "_execute_cli_command", lambda args: called.__setitem__("cmd", args))
 
     monkeypatch.setattr(cli_main.sys, "argv", ["evogitctl"])
 
