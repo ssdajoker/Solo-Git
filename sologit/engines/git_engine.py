@@ -311,9 +311,9 @@ class GitEngine:
                 status="active",
             )
             self.workpad_db[pad_id] = workpad
-            repository.workpad_count += 1
-            repository.last_activity = datetime.now()
-            self._save_metadata()
+            
+            # Update repository metadata
+            self._update_repo_metadata(repo_id, workpad_count_delta=1)
             
             logger.info(f"Workpad created: {pad_id}")
             return pad_id
@@ -508,9 +508,7 @@ class GitEngine:
             
             # Update metadata
             workpad.status = "promoted"
-            repository.workpad_count -= 1
-            repository.last_activity = datetime.now()
-            self._save_metadata()
+            self._update_repo_metadata(workpad.repo_id, workpad_count_delta=-1)
             
             logger.info(f"Workpad promoted: {pad_id} -> {commit_hash}")
             return commit_hash
@@ -832,9 +830,7 @@ class GitEngine:
             
             # Update metadata
             workpad.status = "deleted"
-            repository.workpad_count -= 1
-            repository.last_activity = datetime.now()
-            self._save_metadata()
+            self._update_repo_metadata(workpad.repo_id, workpad_count_delta=-1)
             
             logger.info(f"Workpad deleted: {pad_id}")
             
@@ -1448,6 +1444,36 @@ class GitEngine:
         """Validate workpad ID format."""
         if not pad_id or not pad_id.startswith('pad_'):
             raise GitEngineError(f"Invalid workpad ID format: {pad_id}")
+    
+    def _update_repo_metadata(
+        self, 
+        repo_id: str, 
+        workpad_count_delta: int = 0,
+        update_last_activity: bool = True
+    ) -> None:
+        """
+        Update repository metadata efficiently.
+        
+        This method provides a targeted way to update repository fields
+        without requiring the caller to load and manipulate the entire
+        repository object.
+        
+        Args:
+            repo_id: Repository ID to update
+            workpad_count_delta: Amount to add to workpad_count (can be negative)
+            update_last_activity: Whether to update last_activity to now
+        """
+        repository = self.repo_db.get(repo_id)
+        if not repository:
+            raise RepositoryNotFoundError(f"Repository {repo_id} not found")
+        
+        if workpad_count_delta != 0:
+            repository.workpad_count += workpad_count_delta
+        
+        if update_last_activity:
+            repository.last_activity = datetime.now()
+        
+        self._save_metadata()
     
     def _walk_directory(
         self, 
