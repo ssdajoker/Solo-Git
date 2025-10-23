@@ -316,6 +316,7 @@ def repo_init(
     target_path: Optional[Path],
     name: Optional[str],
 ) -> None:
+    """Initialize a repository from a zip archive, Git URL, or create an empty repo."""
     """Initialize a new repository from zip file, Git URL, or empty."""
 
     formatter.print_header("Repository Initialization")
@@ -325,6 +326,12 @@ def repo_init(
         "git": bool(git_url),
         "empty": bool(empty),
     }
+    selected = [key for key, value in sources.items() if value]
+
+    if len(selected) != 1:
+        abort_with_error(
+            "Invalid Source Specification",
+            f"Please specify exactly one of --zip, --git, or --empty. Provided: {', '.join(selected) or 'None'}",
     provided_sources = [label for label, enabled in sources.items() if enabled]
 
     if len(provided_sources) != 1:
@@ -336,6 +343,7 @@ def repo_init(
             suggestions=[
                 "evogitctl repo init --zip app.zip",
                 "evogitctl repo init --git https://github.com/user/repo.git",
+                "evogitctl repo init --empty --path ./new-repo",
                 "evogitctl repo init --empty --name my-repo",
             ],
             docs_url="docs/SETUP.md#initialize-a-repository",
@@ -349,6 +357,27 @@ def repo_init(
             formatter.print_info(f"Initializing from zip: {zip_file.name}")
             repo_info = git_sync.init_repo_from_zip(zip_file.read_bytes(), repo_name)
         elif git_url:
+            repo_name = name or Path(git_url.rstrip("/")).stem.replace(".git", "")
+            formatter.print_info(f"Cloning from: {git_url}")
+            repo_info = git_sync.init_repo_from_git(git_url, repo_name)
+        else:
+            repo_name = name or (target_path.name if target_path else "solo-git-repo")
+            formatter.print_info(f"Creating empty repository: {repo_name}")
+            repo_info = git_sync.create_empty_repo(
+                repo_name, str(target_path) if target_path else None
+            )
+
+        formatter.print_success("Repository initialized!")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
+        summary.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
+        summary.add_row("Path", repo_info.get("path", "-"))
+        summary.add_row(
+            "Trunk",
+            f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]",
+        )
+        formatter.console.print(summary)
+
             base = git_url.rstrip("/").split("/")[-1]
             if base.endswith(".git"):
                 base = base[:-4]
