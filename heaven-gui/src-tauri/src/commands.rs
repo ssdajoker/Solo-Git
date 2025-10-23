@@ -260,9 +260,7 @@ pub(crate) fn create_workpad(repo_id: String, title: String) -> Result<WorkpadSt
 
     let workpad = save_workpad(workpad)?;
 
-    if !repo.workpads.iter().any(|id| id == &workpad_id) {
-        repo.workpads.insert(0, workpad_id.clone());
-    }
+    repo.workpads.insert(0, workpad_id.clone());
     let _ = save_repository(repo)?;
 
     let mut global = load_global_state()?;
