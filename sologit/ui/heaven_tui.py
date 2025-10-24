@@ -206,16 +206,16 @@ class AIActivityPanel(Static):
             
             # Status icon
             if status == 'completed':
-                icon = "✓"
+                icon = theme.icons.success
                 color = "green"
             elif status == 'failed':
-                icon = "✗"
+                icon = theme.icons.error
                 color = "red"
             elif status == 'running':
-                icon = "⟳"
+                icon = theme.icons.running
                 color = "cyan"
             else:
-                icon = "○"
+                icon = theme.icons.pending
                 color = "dim"
             
             lines.append(f"[{color}]{icon}[/] {op_type}")
