@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -15,6 +16,16 @@ use crate::{
     get_state_dir, list_test_runs, AIOperation, GlobalState, PromotionRecord, RepositoryState,
     TestRun, WorkpadState,
 };
+
+#[tauri::command]
+pub(crate) fn read_file_content(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read file {}: {}", path, e))
+}
+
+#[tauri::command]
+pub(crate) fn write_file_content(path: String, content: String) -> Result<(), String> {
+    fs::write(&path, content).map_err(|e| format!("Failed to write to file {}: {}", path, e))
+}
 
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
     if !path.exists() {
@@ -340,7 +351,7 @@ pub(crate) fn apply_patch(
 
     let patch_history_path = store_patch_diff(&workpad_id, &diff)?;
     let temp_path = env::temp_dir().join(format!("sologit_patch_{}.diff", Uuid::new_v4().simple()));
-    fs::write(&temp_path, diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
+    fs::write(&temp_path, &diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
 
     let patch_arg = temp_path
         .to_str()
@@ -372,13 +383,10 @@ pub(crate) fn apply_patch(
         .append(true)
         .open(&notes_path)
         .and_then(|mut file| file.write_all(entry.as_bytes()));
-    let result = run_cli_command(cli_args);
+    let result = run_cli_command(cli_args.clone());
 
     let _ = fs::remove_file(&temp_path);
 
-    let result = run_cli_command(cli_args);
-
-    let _ = fs::remove_file(&temp_path);
     result?;
 
     load_workpad(&workpad_id)

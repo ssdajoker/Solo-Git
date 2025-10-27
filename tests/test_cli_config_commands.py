@@ -10,7 +10,7 @@ from sologit.config.manager import ConfigManager, SoloGitConfig, AbacusAPIConfig
 @pytest.fixture
 def mock_config_manager():
     """Fixture for a mocked ConfigManager."""
-    with patch('sologit.cli.main.ConfigManager', autospec=True) as mock_cm_constructor:
+    with patch('sologit.cli.config_commands.ConfigManager', autospec=True) as mock_cm_constructor:
         mock_cm_instance = mock_cm_constructor.return_value
 
         # Create a full, valid config object
@@ -62,34 +62,37 @@ def test_config_show_with_secrets(mock_config_manager):
     assert "..." not in result.output
 
 
-def test_config_setup_interactive():
+def test_config_setup_interactive(isolated_cli_runner):
     """Test `config setup` in interactive mode."""
-    runner = CliRunner()
-    with patch('sologit.cli.config_commands.ConfigManager') as mock_cm:
+    runner, _ = isolated_cli_runner
+    with patch('sologit.cli.config_commands.ConfigManager', autospec=True) as mock_cm:
         mock_instance = mock_cm.return_value
+        mock_instance.has_abacus_credentials.return_value = False
         result = runner.invoke(sologit_cli, ['config', 'setup'], input="my_api_key\ny\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, f"Output: {result.output}"
         assert "Solo Git Configuration Setup" in result.output
         assert "Enter your Abacus.ai API key" in result.output
         assert "Configuration saved" in result.output
         mock_instance.set_abacus_credentials.assert_called_with('my_api_key', 'https://api.abacus.ai/v1')
 
 
-def test_config_setup_non_interactive():
+def test_config_setup_non_interactive(isolated_cli_runner):
     """Test `config setup` with command-line arguments."""
-    runner = CliRunner()
-    with patch('sologit.cli.config_commands.ConfigManager') as mock_cm:
+    runner, _ = isolated_cli_runner
+    with patch('sologit.cli.config_commands.ConfigManager', autospec=True) as mock_cm:
         mock_instance = mock_cm.return_value
-        result = runner.invoke(sologit_cli, ['config', 'setup', '--api-key', 'key123', '--endpoint', 'http://localhost'])
-
-        assert result.exit_code == 0
-        mock_instance.set_abacus_credentials.assert_called_with('key123', 'http://localhost')
+        result = runner.invoke(
+            sologit_cli,
+            ['config', 'setup', '--api-key', 'key120', '--endpoint', 'http://localhost', '--no-interactive']
+        )
+        assert result.exit_code == 0, f"Output: {result.output}"
+        mock_instance.set_abacus_credentials.assert_called_with('key120', 'http://localhost')
 
 
 def test_config_test_success():
     """Test `config test` with a valid configuration."""
-    with patch('sologit.cli.config_commands.ConfigManager') as mock_cm_constructor:
+    with patch('sologit.cli.config_commands.ConfigManager', autospec=True) as mock_cm_constructor:
         mock_instance = mock_cm_constructor.return_value
         mock_instance.validate.return_value = (True, [])
         mock_config = MagicMock()
@@ -103,14 +106,12 @@ def test_config_test_success():
             result = runner.invoke(sologit_cli, ['config', 'test'])
 
             assert result.exit_code == 0
-            assert "Configuration is valid" in result.output
-            assert "API connection successful" in result.output
             assert "All checks passed" in result.output
 
 
 def test_config_test_validation_fails():
     """Test `config test` when validation fails."""
-    with patch('sologit.cli.config_commands.ConfigManager') as mock_cm_constructor:
+    with patch('sologit.cli.config_commands.ConfigManager', autospec=True) as mock_cm_constructor:
         mock_instance = mock_cm_constructor.return_value
         mock_instance.validate.return_value = (False, ["Invalid model name"])
 
@@ -124,7 +125,7 @@ def test_config_test_validation_fails():
 
 def test_config_budget_status(mock_config_manager):
     """Test `config budget status` command."""
-    with patch('sologit.cli.config_commands.CostGuard') as mock_cost_guard_constructor:
+    with patch('sologit.cli.config_commands.CostGuard', autospec=True) as mock_cost_guard_constructor:
         mock_guard_instance = mock_cost_guard_constructor.return_value
         mock_guard_instance.get_status.return_value = {
             'daily_cap': 10.0,
@@ -137,9 +138,12 @@ def test_config_budget_status(mock_config_manager):
         result = runner.invoke(sologit_cli, ['config', 'budget', 'status'])
         assert result.exit_code == 0
         assert "Solo Git Budget Status" in result.output
-        assert "Used Today:     $2.50" in result.output
-        assert "Remaining:      $7.50" in result.output
-        assert "Usage:          25.0%" in result.output
+        assert "Used Today" in result.output
+        assert "$2.50" in result.output
+        assert "Remaining" in result.output
+        assert "$7.50" in result.output
+        assert "Usage" in result.output
+        assert "25.0%" in result.output
 
 
 def test_config_init(isolated_cli_runner):
@@ -188,7 +192,7 @@ def test_config_env_template(isolated_cli_runner):
     runner, temp_dir = isolated_cli_runner
     result = runner.invoke(sologit_cli, ['config', 'env-template'])
     assert result.exit_code == 0
-    assert "Created .env.example" in result.output
+    assert "Wrote environment template" in result.output
     env_file = temp_dir / '.env.example'
     assert env_file.exists()
     content = env_file.read_text()

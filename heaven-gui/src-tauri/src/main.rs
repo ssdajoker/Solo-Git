@@ -655,6 +655,8 @@ fn main() {
             commands::rollback_workpad,
             commands::trigger_ai_operation,
             commands::update_config,
+                commands::read_file_content,
+                commands::write_file_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

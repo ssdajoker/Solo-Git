@@ -6,9 +6,7 @@ Configuration commands for Solo Git CLI.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, NoReturn, Optional, cast
-from typing import Any, Dict, Iterable, List, NoReturn, Optional, cast
-from typing import Dict, Iterable, NoReturn, Optional
+from typing import Any, Dict, Iterable, NoReturn, Optional, cast, List
 
 import click
 from rich.console import Console
@@ -31,8 +29,6 @@ def set_formatter_console(console: Console) -> None:
     formatter.set_console(console)
 
 
-    """Allow external callers to reuse a shared Rich console."""
-
 def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
     """Ensure the Click context has an initialized object dictionary and return it."""
     ctx.ensure_object(dict)
@@ -47,7 +43,6 @@ def _get_config_manager(ctx: click.Context) -> ConfigManager:
         config_manager = ConfigManager()
         context_obj['config'] = config_manager
     return config_manager
-    formatter.set_console(console)
 
 
 def abort_with_error(
@@ -61,7 +56,6 @@ def abort_with_error(
     docs_url: Optional[str] = None,
 ) -> NoReturn:
     """Render a formatted error panel and abort the command."""
-    """Display a formatted error panel with context and abort the command."""
 
     formatter.print_error(
         title or "Configuration Error",
@@ -76,44 +70,6 @@ def abort_with_error(
         details=details,
     )
     raise click.Abort()
-
-
-def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
-    """Ensure the Click context stores a mutable dictionary."""
-def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
-    """Display a formatted error and exit."""
-    plain_message = f"Error: {message}"
-    formatter.print_error(plain_message)
-
-    content = f"[bold]{plain_message}[/bold]"
-    if details:
-        content += f"\n\n{details}"
-    formatter.print_error_panel(content)
-    sys.exit(1)
-
-    sys.exit(1)
-
-
-@click.group(name='config')
-    raise click.Abort()
-
-
-def _ensure_context(ctx: click.Context) -> Dict[str, object]:
-    """Ensure the Click context carries a dictionary object."""
-
-    ctx.ensure_object(dict)
-    return ctx.obj  # type: ignore[return-value]
-
-
-def _get_config_manager(ctx: click.Context) -> ConfigManager:
-    """Fetch a ConfigManager attached to the Click context."""
-
-    context_obj = _ensure_context(ctx)
-    manager = context_obj.get("config")  # type: ignore[assignment]
-    if manager is None:
-        manager = ConfigManager()
-        context_obj["config"] = manager
-    return cast(ConfigManager, manager)
 
 
 def _mask_secret(secret: Optional[str]) -> str:
@@ -134,32 +90,6 @@ def _format_currency(amount: Optional[float]) -> str:
     return f"${amount:.2f}"
 
 
-def abort_with_error(
-    message: str,
-    details: Optional[str] = None,
-    *,
-    title: Optional[str] = None,
-    help_text: Optional[str] = None,
-    tip: Optional[str] = None,
-    suggestions: Optional[Iterable[str]] = None,
-    docs_url: Optional[str] = None,
-) -> NoReturn:
-    """Display a formatted error panel with context and abort the command."""
-    formatter.print_error(
-        title or "Configuration Error",
-        message,
-        help_text=help_text or "Review the command usage below and update the provided arguments.",
-        tip=tip or "Run 'evogitctl config --help' to list available options.",
-        suggestions=suggestions or [
-            "evogitctl config show",
-            "evogitctl config setup",
-        ],
-        docs_url=docs_url or "docs/SETUP.md#configuration",
-        details=details,
-    )
-    raise click.Abort()
-
-
 @click.group(name="config")
 def config_group() -> None:
     """Configuration management commands."""
@@ -169,13 +99,14 @@ def config_group() -> None:
 @click.option("--api-key", help="Abacus.ai API key")
 @click.option("--endpoint", help="Abacus.ai API endpoint", default="https://api.abacus.ai/v1")
 @click.option("--interactive/--no-interactive", default=True, help="Interactive setup mode")
-def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: bool) -> None:
+@click.pass_context
+def setup_config(ctx: click.Context, api_key: Optional[str], endpoint: Optional[str], interactive: bool) -> None:
     """Guided Abacus.ai configuration setup."""
 
     formatter.print_header("Solo Git Configuration Setup")
     formatter.print_info("Guiding you through Abacus.ai credential setup.")
 
-    config_manager = ConfigManager()
+    config_manager = _get_config_manager(ctx)
 
     if config_manager.has_abacus_credentials() and interactive:
         formatter.print_warning("Existing configuration detected.")
@@ -332,7 +263,6 @@ def budget_status(ctx: click.Context) -> None:
 
     budget_config = config.budget if isinstance(config.budget, BudgetConfig) else None
     if budget_config is None:
-        # Try to create a default BudgetConfig if possible
         try:
             budget_config = BudgetConfig()
         except Exception:
@@ -348,16 +278,6 @@ def budget_status(ctx: click.Context) -> None:
 
     formatter.print_header("Solo Git Budget Status")
 
-    if not isinstance(config.budget, BudgetConfig):
-        abort_with_error(
-            "Invalid budget configuration",
-            "The 'budget' section of your configuration is missing or malformed.",
-            help_text="Please check your configuration file and ensure the 'budget' section is correctly specified.",
-            tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
-        )
-
-    guard = CostGuard(config.budget)
-    status = guard.get_status()
     summary_table = formatter.table(headers=["Metric", "Value"])
     summary_table.add_row("Daily Cap", f"${status['daily_cap']:.2f}")
     summary_table.add_row("Used Today", f"${status['current_cost']:.2f}")
@@ -368,20 +288,11 @@ def budget_status(ctx: click.Context) -> None:
     summary_table.add_row("Within Budget", f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]")
     formatter.console.print(summary_table)
 
-    formatter.print_info(f"Daily Cap:       ${status['daily_cap']:.2f}")
-    formatter.print_info(f"Used Today:     ${status['current_cost']:.2f}")
-    formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
-    formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
-
     alerts = status.get("alerts")
     if alerts:
         alerts_panel = "\n".join(
             f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
             for alert in alerts
-    if status.get('alerts'):
-        alerts_panel = "\n".join(
-            f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
-            for alert in status['alerts']
         )
         formatter.print_warning("Budget alerts detected.")
         formatter.print_info_panel(alerts_panel, title="Alerts")
@@ -413,19 +324,6 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_info_panel(last_panel, title="Most Recent Usage")
 
 
-    within_budget = status.get("within_budget", True)
-    icon = theme.icons.success if within_budget else theme.icons.warning
-    color = theme.colors.success if within_budget else theme.colors.warning
-
-    formatter.console.print(
-        f"[{color}]{icon}[/{color}] Budget status: {'Within budget' if within_budget else 'Over budget'}"
-    )
-    formatter.console.print(f"Daily Cap:      {_format_currency(status.get('daily_cap'))}")
-    formatter.console.print(f"Used Today:     {_format_currency(status.get('current_cost'))}")
-    formatter.console.print(f"Remaining:      {_format_currency(status.get('remaining'))}")
-    formatter.console.print(f"Usage:          {status.get('percentage_used', 0)}%")
-
-
 @config_group.command(name="init")
 @click.option("--force", is_flag=True, help="Overwrite existing configuration file")
 def init_config(force: bool) -> None:
@@ -440,14 +338,6 @@ def init_config(force: bool) -> None:
     target_path.write_text(DEFAULT_CONFIG_TEMPLATE)
     formatter.print_success("Created configuration file at %s" % target_path)
 
-    # Write template
-    with open(config_path, 'w') as f:
-        f.write(DEFAULT_CONFIG_TEMPLATE)
-
-    formatter.print_success_panel(
-        f"Created configuration file at [bold]{config_path}[/bold]",
-        title="Config Initialized"
-    )
     formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
 
 
@@ -461,25 +351,10 @@ def env_template() -> None:
     env_path.write_text(ENV_TEMPLATE.rstrip() + "\n", encoding="utf-8")
     formatter.print_success(f"Wrote environment template to {env_path}")
 
-@config_group.command(name='env-template')
-def env_template() -> None:
-    """Generate .env template file."""
-    env_path = Path.cwd() / '.env.example'
-    formatter.print_success(f"Created configuration file at {config_path}")
 
 @config_group.command(name="path")
 def config_path() -> None:
     """Print the resolved path to the configuration file."""
 
-    config_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
-    formatter.print_info(f"Configuration file: {config_path}")
     target_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
     formatter.print_info(str(target_path))
-
-
-@config_group.command(name="env-template")
-def config_env_template() -> None:
-    """Generate a .env.example file with required variables."""
-    env_path = Path(".env.example")
-    env_path.write_text(ENV_TEMPLATE)
-    formatter.print_success("Created .env.example")
