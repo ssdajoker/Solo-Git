@@ -659,7 +659,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 
     tests = list(_default_tests(target))
 
-    mode_display = getattr(test_orchestrator, "mode", "subprocess")
+    mode_display = str(getattr(test_orchestrator, "mode", "subprocess"))
     info_panel = "\n".join(
         [
             f"[bold]Workpad:[/bold] {workpad.title}",
