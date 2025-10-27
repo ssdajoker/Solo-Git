@@ -235,7 +235,6 @@ class AIOrchestrator:
         if isinstance(plan, str):
             # Create a minimal CodePlan from the string plan
             # This is for backwards compatibility with string-based workflows
-            from sologit.orchestration.planning_engine import FileChange
             code_plan = CodePlan(
                 title="Generated patch",
                 description=plan,
@@ -292,7 +291,6 @@ class AIOrchestrator:
                     )
 
             with self._progress_stage(progress, task_id, f"Generating code with {model_config.name}", 55):
-                client = AbacusClient(self.config.abacus)
                 deployment_creds = self._get_deployment_credentials(model_config.name)
 
                 try:
@@ -305,7 +303,7 @@ class AIOrchestrator:
                     if deployment_creds:
                         gen_kwargs['deployment_id'] = deployment_creds.get('deployment_id')
                         gen_kwargs['deployment_token'] = deployment_creds.get('deployment_token')
-                    
+
                     patch = self.code_generator.generate_patch(**gen_kwargs)
                 except Exception as e:
                     if escalate_on_failure:
@@ -324,7 +322,7 @@ class AIOrchestrator:
                                 if escalated_creds:
                                     escalated_kwargs['deployment_id'] = escalated_creds.get('deployment_id')
                                     escalated_kwargs['deployment_token'] = escalated_creds.get('deployment_token')
-                                
+
                                 patch = self.code_generator.generate_patch(**escalated_kwargs)
                                 model_config = escalated_model
                             else:
