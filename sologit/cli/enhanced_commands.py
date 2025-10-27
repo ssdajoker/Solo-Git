@@ -48,6 +48,14 @@ class EnhancedCLI:
         if self._test_orchestrator is None:
             self._test_orchestrator = TestOrchestrator(self.git_engine)
         return self._test_orchestrator
+    
+    # Repository Commands
+
+    def _run_stage(self, description: str, operation: Callable[[], StageResult]) -> StageResult:
+        """Run a stage while emitting progress output."""
+
+        self.formatter.print_info(description)
+        return operation()
 
     # Repository Commands
 
