@@ -177,6 +177,23 @@ def test_execute_cli_command_records_history(cli_main, monkeypatch):
     assert history.results == [("entry-1", {"exit_code": 0})]
 
 
+def test_execute_cli_command_no_history(cli_main, monkeypatch):
+    monkeypatch.setattr(
+        cli_main,
+        "get_command_history",
+        lambda: (_ for _ in ()).throw(AssertionError("history should not be accessed")),
+    )
+
+    exit_code = cli_main._execute_cli_command(
+        ["hello"],
+        record_cli_history=False,
+        record_command=False,
+        command_entry_id=None,
+    )
+
+    assert exit_code == 0
+
+
 def test_main_uses_interactive_shell(cli_main, monkeypatch):
     called = {}
 
@@ -200,3 +217,97 @@ def test_main_uses_interactive_shell(cli_main, monkeypatch):
     assert called["shell"] == 0
     assert "cmd" not in called
     assert exit_codes == [0]
+
+
+def test_run_interactive_shell_no_history(cli_main, monkeypatch):
+    monkeypatch.setattr(cli_main, "_AUTOCOMPLETE_AVAILABLE", True)
+
+    key_module = types.ModuleType("prompt_toolkit.key_binding")
+
+    class DummyKeyBindings:
+        def add(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    def merge_key_bindings(bindings):
+        return object()
+
+    key_module.KeyBindings = DummyKeyBindings
+    key_module.merge_key_bindings = merge_key_bindings
+    monkeypatch.setitem(sys.modules, "prompt_toolkit.key_binding", key_module)
+
+    completion_module = types.ModuleType("prompt_toolkit.completion")
+
+    class DummyFuzzyWordCompleter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    completion_module.FuzzyWordCompleter = DummyFuzzyWordCompleter
+    monkeypatch.setitem(sys.modules, "prompt_toolkit.completion", completion_module)
+
+    shortcuts_module = types.ModuleType("prompt_toolkit.shortcuts")
+
+    def dummy_prompt(*args, **kwargs):
+        raise AssertionError("history search prompt should not be invoked")
+
+    shortcuts_module.prompt = dummy_prompt
+    monkeypatch.setitem(sys.modules, "prompt_toolkit.shortcuts", shortcuts_module)
+
+    document_module = types.ModuleType("prompt_toolkit.document")
+
+    class DummyDocument:
+        def __init__(self, text, cursor_position=None):
+            self.text = text
+            self.cursor_position = cursor_position
+
+    document_module.Document = DummyDocument
+    monkeypatch.setitem(sys.modules, "prompt_toolkit.document", document_module)
+
+    captured = {}
+
+    class DummySession:
+        def __init__(self):
+            self.app = types.SimpleNamespace(key_bindings=None)
+            self.calls = 0
+
+        def prompt(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return "hello"
+            raise EOFError()
+
+    session = DummySession()
+
+    def fake_create_enhanced_prompt(*args, **kwargs):
+        captured["create_args"] = (args, kwargs)
+        return session
+
+    monkeypatch.setattr(cli_main, "create_enhanced_prompt", fake_create_enhanced_prompt)
+    monkeypatch.setattr(
+        cli_main,
+        "get_command_history",
+        lambda: (_ for _ in ()).throw(AssertionError("history should not be accessed")),
+    )
+    monkeypatch.setattr(
+        cli_main,
+        "get_cli_history_path",
+        lambda: (_ for _ in ()).throw(AssertionError("cli history path should not be used")),
+    )
+
+    executed = {}
+
+    def fake_execute_cli_command(argv, **kwargs):
+        executed["argv"] = argv
+        executed["kwargs"] = kwargs
+        return 0
+
+    monkeypatch.setattr(cli_main, "_execute_cli_command", fake_execute_cli_command)
+
+    exit_code = cli_main._run_interactive_shell(record_history=False)
+
+    assert exit_code == 0
+    assert captured["create_args"][1]["use_file_history"] is False
+    assert executed["kwargs"]["record_cli_history"] is False
+    assert executed["kwargs"]["record_command"] is False
