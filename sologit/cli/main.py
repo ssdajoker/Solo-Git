@@ -30,8 +30,11 @@ except ImportError:  # pragma: no cover - optional feature set
 
 # Re-export ConfigManager for backwards compatibility with existing patches
 if config_commands:
-    ConfigManager = config_commands.ConfigManager
+    ConfigManager: Optional[type] = config_commands.ConfigManager
     _ORIGINAL_CONFIG_MANAGER = ConfigManager
+else:
+    ConfigManager: Optional[type] = None
+    _ORIGINAL_CONFIG_MANAGER = None
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 from sologit.ui.history import (
