@@ -158,8 +158,9 @@ def cli(ctx, verbose, config):
 
     # Initialize context
     ctx.ensure_object(dict)
+    record_history = ctx.obj.setdefault('record_history', True)
     ctx.obj['console'] = console
-    ctx.obj['history'] = get_command_history()
+    ctx.obj['history'] = get_command_history() if record_history else None
     formatter.set_console(console)
     commands.set_formatter_console(console)
     config_commands.set_formatter_console(console)
@@ -639,8 +640,6 @@ def _run_interactive_shell(*, record_history: bool = True) -> int:
             without touching the on-disk history, which is useful for
             demonstrations or when running inside disposable environments.
     """
-def _run_interactive_shell() -> int:
-    """Launch interactive shell with history and autocomplete."""
     if not _AUTOCOMPLETE_AVAILABLE:
         abort_with_error(
             "Interactive shell dependencies not installed",
@@ -655,17 +654,30 @@ def _run_interactive_shell() -> int:
     formatter.print_header("Interactive Shell")
     formatter.print_info("Press Ctrl+R for history search, Tab for autocomplete.")
 
-    cli_history_path = get_cli_history_path()
-    session = create_enhanced_prompt(history_path=cli_history_path, cli_app=cli)
+    cli_history_path: Optional[Path] = None
+    ephemeral_history: List[str] = []
+
+    if record_history:
+        cli_history_path = get_cli_history_path()
+        session = create_enhanced_prompt(
+            history_path=cli_history_path,
+            cli_app=cli,
+            use_file_history=True,
+        )
+    else:
+        session = create_enhanced_prompt(
+            cli_app=cli,
+            use_file_history=False,
+        )
 
     def _load_history_strings() -> List[str]:
-        if not cli_history_path.exists():
-            return []
-        try:
-            with cli_history_path.open('r', encoding='utf-8') as f:
-                return [line.strip() for line in f if line.strip()]
-        except Exception:
-            return []
+        if record_history and cli_history_path is not None and cli_history_path.exists():
+            try:
+                with cli_history_path.open('r', encoding='utf-8') as f:
+                    return [line.strip() for line in f if line.strip()]
+            except Exception:
+                return []
+        return list(ephemeral_history)
 
     bindings = KeyBindings()
 
@@ -737,15 +749,15 @@ def _run_interactive_shell() -> int:
                 record_text=False,
             )
 
+        if not record_history:
+            ephemeral_history.append(command)
+
         exit_code = _execute_cli_command(
             args,
             record_cli_history=record_history,
             command_entry_id=entry_id,
             command_text=command,
             record_command=False,
-            record_cli_history=False,
-            command_entry_id=entry_id,
-            command_text=command
         )
         if exit_code != 0:
             formatter.print_warning(f"Command exited with code {exit_code}")
@@ -758,7 +770,6 @@ def _execute_cli_command(
     command_entry_id: Optional[str] = None,
     command_text: Optional[str] = None,
     record_command: bool = True,
-    command_text: Optional[str] = None
 ) -> int:
     """Execute CLI command with history integration.
 
@@ -775,12 +786,15 @@ def _execute_cli_command(
             to avoid duplicating entries they already created before invoking the
             Click command tree.
     """
-    history = get_command_history()
+    needs_history = record_command or record_cli_history or command_entry_id is not None
+    history = get_command_history() if needs_history else None
 
     command_str = command_text or " ".join(shlex.quote(arg) for arg in argv)
     entry_id = command_entry_id
 
     if command_str and entry_id is None and record_command:
+        if history is None:
+            history = get_command_history()
         entry_id = history.record_cli_command(
             command_str,
             arguments={"argv": argv},
@@ -792,12 +806,17 @@ def _execute_cli_command(
     exit_code = 0
 
     try:
-        cli.main(args=argv, prog_name="evogitctl", standalone_mode=False, obj={})
+        cli.main(
+            args=argv,
+            prog_name="evogitctl",
+            standalone_mode=False,
+            obj={"record_history": needs_history},
+        )
     except SystemExit as exc:
         exit_code = exc.code or 0
     except Exception as exc:
         exit_code = 1
-        if entry_id:
+        if entry_id and history is not None:
             history.update_command_result(
                 entry_id,
                 {
@@ -809,7 +828,7 @@ def _execute_cli_command(
     else:
         exit_code = 0
 
-    if entry_id:
+    if entry_id and history is not None:
         history.update_command_result(entry_id, {"exit_code": exit_code})
 
     return exit_code
