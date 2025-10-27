@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Iterable, NoReturn, Optional, cast
-from typing import Any, Dict, Iterable, List, NoReturn, Optional, cast
-from typing import Dict, Iterable, NoReturn, Optional
 
 import click
 from rich.console import Console
@@ -31,8 +29,6 @@ def set_formatter_console(console: Console) -> None:
     formatter.set_console(console)
 
 
-    """Allow external callers to reuse a shared Rich console."""
-
 def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
     """Ensure the Click context has an initialized object dictionary and return it."""
     ctx.ensure_object(dict)
@@ -47,7 +43,6 @@ def _get_config_manager(ctx: click.Context) -> ConfigManager:
         config_manager = ConfigManager()
         context_obj['config'] = config_manager
     return config_manager
-    formatter.set_console(console)
 
 
 def abort_with_error(
@@ -60,9 +55,7 @@ def abort_with_error(
     suggestions: Optional[Iterable[str]] = None,
     docs_url: Optional[str] = None,
 ) -> NoReturn:
-    """Render a formatted error panel and abort the command."""
     """Display a formatted error panel with context and abort the command."""
-
     formatter.print_error(
         title or "Configuration Error",
         message,
@@ -78,47 +71,8 @@ def abort_with_error(
     raise click.Abort()
 
 
-def _ensure_context(ctx: click.Context) -> Dict[str, Any]:
-    """Ensure the Click context stores a mutable dictionary."""
-def abort_with_error(message: str, details: Optional[str] = None) -> NoReturn:
-    """Display a formatted error and exit."""
-    plain_message = f"Error: {message}"
-    formatter.print_error(plain_message)
-
-    content = f"[bold]{plain_message}[/bold]"
-    if details:
-        content += f"\n\n{details}"
-    formatter.print_error_panel(content)
-    sys.exit(1)
-
-    sys.exit(1)
-
-
-@click.group(name='config')
-    raise click.Abort()
-
-
-def _ensure_context(ctx: click.Context) -> Dict[str, object]:
-    """Ensure the Click context carries a dictionary object."""
-
-    ctx.ensure_object(dict)
-    return ctx.obj  # type: ignore[return-value]
-
-
-def _get_config_manager(ctx: click.Context) -> ConfigManager:
-    """Fetch a ConfigManager attached to the Click context."""
-
-    context_obj = _ensure_context(ctx)
-    manager = context_obj.get("config")  # type: ignore[assignment]
-    if manager is None:
-        manager = ConfigManager()
-        context_obj["config"] = manager
-    return cast(ConfigManager, manager)
-
-
 def _mask_secret(secret: Optional[str]) -> str:
     """Return a masked representation of a secret value."""
-
     if not secret:
         return "<not configured>"
     if len(secret) <= 12:
@@ -128,36 +82,9 @@ def _mask_secret(secret: Optional[str]) -> str:
 
 def _format_currency(amount: Optional[float]) -> str:
     """Return a USD currency string for display."""
-
     if amount is None:
         return "$0.00"
     return f"${amount:.2f}"
-
-
-def abort_with_error(
-    message: str,
-    details: Optional[str] = None,
-    *,
-    title: Optional[str] = None,
-    help_text: Optional[str] = None,
-    tip: Optional[str] = None,
-    suggestions: Optional[Iterable[str]] = None,
-    docs_url: Optional[str] = None,
-) -> NoReturn:
-    """Display a formatted error panel with context and abort the command."""
-    formatter.print_error(
-        title or "Configuration Error",
-        message,
-        help_text=help_text or "Review the command usage below and update the provided arguments.",
-        tip=tip or "Run 'evogitctl config --help' to list available options.",
-        suggestions=suggestions or [
-            "evogitctl config show",
-            "evogitctl config setup",
-        ],
-        docs_url=docs_url or "docs/SETUP.md#configuration",
-        details=details,
-    )
-    raise click.Abort()
 
 
 @click.group(name="config")
@@ -373,11 +300,6 @@ def budget_status(ctx: click.Context) -> None:
     formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
     formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
 
-    alerts = status.get("alerts")
-    if alerts:
-        alerts_panel = "\n".join(
-            f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
-            for alert in alerts
     if status.get('alerts'):
         alerts_panel = "\n".join(
             f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
