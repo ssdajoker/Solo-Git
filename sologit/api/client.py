@@ -121,13 +121,12 @@ class AbacusClient:
                 )
             return creds['deployment_id'], creds['deployment_token']
 
-        if not deployment_id or not deployment_token:
-            raise ValueError(
-                "Abacus.ai requires deployment_id and deployment_token. "
-                "Provide them directly or register them via register_deployment()."
-            )
-
-        return deployment_id, deployment_token
+        # If we reach here, deployment is None, so both deployment_id and 
+        # deployment_token must be provided
+        raise ValueError(
+            "Abacus.ai requires deployment_id and deployment_token. "
+            "Provide them directly or register them via register_deployment()."
+        )
 
     def _post(
         self,

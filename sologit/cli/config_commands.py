@@ -1,4 +1,5 @@
 
+
 """
 Configuration commands for Solo Git CLI.
 """
@@ -7,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Iterable, NoReturn, Optional, cast, List
+from typing import Any, Dict, Iterable, NoReturn, Optional, cast
 
 import click
 from rich.console import Console
@@ -57,6 +59,7 @@ def abort_with_error(
 ) -> NoReturn:
     """Render a formatted error panel and abort the command."""
 
+    """Display a formatted error panel with context and abort the command."""
     formatter.print_error(
         title or "Configuration Error",
         message,
@@ -74,7 +77,6 @@ def abort_with_error(
 
 def _mask_secret(secret: Optional[str]) -> str:
     """Return a masked representation of a secret value."""
-
     if not secret:
         return "<not configured>"
     if len(secret) <= 12:
@@ -84,7 +86,6 @@ def _mask_secret(secret: Optional[str]) -> str:
 
 def _format_currency(amount: Optional[float]) -> str:
     """Return a USD currency string for display."""
-
     if amount is None:
         return "$0.00"
     return f"${amount:.2f}"
@@ -222,6 +223,8 @@ def test_config(ctx: click.Context) -> None:
             tip="Run 'evogitctl config show' to inspect the current values.",
         )
 
+    formatter.print_info("Configuration is valid")
+
     config = config_manager.get_config()
     if not config.abacus.is_configured():
         abort_with_error(
@@ -242,6 +245,7 @@ def test_config(ctx: click.Context) -> None:
             tip="Generate a fresh API key from the Abacus.ai dashboard and try again.",
         )
 
+    formatter.print_info("API connection successful")
     formatter.print_success_panel(
         "All checks passed! Solo Git is ready to use.",
         title="Ready"
@@ -293,6 +297,15 @@ def budget_status(ctx: click.Context) -> None:
         alerts_panel = "\n".join(
             f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
             for alert in alerts
+    formatter.print_info(f"Daily Cap:       ${status['daily_cap']:.2f}")
+    formatter.print_info(f"Used Today:     ${status['current_cost']:.2f}")
+    formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
+    formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
+
+    if status.get('alerts'):
+        alerts_panel = "\n".join(
+            f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
+            for alert in status['alerts']
         )
         formatter.print_warning("Budget alerts detected.")
         formatter.print_info_panel(alerts_panel, title="Alerts")
@@ -352,9 +365,26 @@ def env_template() -> None:
     formatter.print_success(f"Wrote environment template to {env_path}")
 
 
+    
+    formatter.print_success_panel(
+        f"Created configuration file at [bold]{target_path}[/bold]",
+        title="Config Initialized"
+    )
+    formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
+
+
 @config_group.command(name="path")
 def config_path() -> None:
     """Print the resolved path to the configuration file."""
 
     target_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
     formatter.print_info(str(target_path))
+    formatter.print_info(f"Configuration file: {target_path}")
+
+
+@config_group.command(name="env-template")
+def config_env_template() -> None:
+    """Generate a .env.example file with required variables."""
+    env_path = Path(".env.example")
+    env_path.write_text(ENV_TEMPLATE)
+    formatter.print_success("Created .env.example")
