@@ -338,8 +338,11 @@ def test_diagnose_failure_with_context(orchestrator):
     assert len(diagnosis) > 0
 
 
-def test_get_status_with_no_api_key(tmp_path):
+def test_get_status_with_no_api_key(tmp_path, monkeypatch):
     """Test status when API key not configured."""
+    # Clear environment variable to ensure it's not used
+    monkeypatch.delenv('ABACUS_API_KEY', raising=False)
+    
     config_file = tmp_path / "config_no_key.yaml"
     
     config_content = """
@@ -347,14 +350,25 @@ abacus:
   endpoint: "https://api.abacus.ai/api/v0"
   api_key: ""
 
-ai:
-  models:
-    fast:
-      primary: "llama-3.1-8b-instruct"
-    coding:
-      primary: "deepseek-coder-33b"
-    planning:
-      primary: "gpt-4o"
+models:
+  fast:
+    primary:
+      name: "llama-3.1-8b-instruct"
+      provider: "abacus"
+      cost_per_1k_tokens: 0.001
+      max_tokens: 1024
+  coding:
+    primary:
+      name: "deepseek-coder-33b"
+      provider: "abacus"
+      cost_per_1k_tokens: 0.001
+      max_tokens: 1024
+  planning:
+    primary:
+      name: "gpt-4o"
+      provider: "abacus"
+      cost_per_1k_tokens: 0.001
+      max_tokens: 1024
 
 budget:
   daily_usd_cap: 10.0

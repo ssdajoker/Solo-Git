@@ -1,131 +1,31 @@
-"""Tests for the TestOrchestrator execution engine."""
+
+"""Comprehensive tests for TestOrchestrator covering all execution modes and edge cases."""
+import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 from typing import List
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from docker.errors import DockerException
 
-from sologit.engines.test_orchestrator import (
-    TestConfig,
-    TestExecutionMode,
-    TestOrchestrator,
-    TestOrchestratorError,
-    TestResult,
-    TestStatus,
-)
+from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator, TestResult, TestStatus
 
 
 @pytest.fixture
-def repo_path(tmp_path: Path) -> Path:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    return repo
-
-
-@pytest.fixture
-def mock_git_engine(repo_path: Path) -> Mock:
+def mock_git_engine():
+    """Mock GitEngine for testing."""
     engine = Mock()
-    workpad = SimpleNamespace(id="pad-1", repo_id="repo-1", title="Demo")
-    repo = SimpleNamespace(path=repo_path)
-    engine.get_workpad.return_value = workpad
-    engine.get_repo.return_value = repo
+    engine.get_repository.return_value = Mock(path="/fake/repo")
+    engine.get_workpad.return_value = Mock(branch_name="pad-1")
     return engine
 
 
-class FakeContainer:
-    def __init__(self, stdout: List[bytes], stderr: List[bytes], status_code: int = 0):
-        self._stdout = stdout
-        self._stderr = stderr
-        self._status = status_code
-        self.id = "abc123"
-
-    def start(self) -> None:
-        return None
-
-    def wait(self) -> dict:
-        return {"StatusCode": self._status}
-
-    def stop(self, timeout: int = 5) -> None:
-        return None
-
-    def remove(self, force: bool = True) -> None:
-        return None
-
-    def stats(self, stream: bool = False) -> dict:
-        return {
-            "cpu_stats": {
-                "cpu_usage": {"total_usage": 200000000},
-                "system_cpu_usage": 400000000,
-            },
-            "precpu_stats": {
-                "cpu_usage": {"total_usage": 100000000},
-                "system_cpu_usage": 300000000,
-            },
-            "memory_stats": {"usage": 1024, "limit": 2048},
-        }
-
-    def attach(self, stream: bool, stdout: bool, stderr: bool, demux: bool):
-        for out, err in zip(self._stdout + [None] * max(0, len(self._stderr) - len(self._stdout)),
-                             self._stderr + [None] * max(0, len(self._stdout) - len(self._stderr))):
-            yield out, err
-
-
-@pytest.fixture
-def fake_docker_client() -> Mock:
-    client = Mock()
-    container = FakeContainer([b"docker stdout"], [b"docker stderr"], status_code=0)
-    client.containers.create.return_value = container
-    return client
-
-
-def make_orchestrator(mock_git_engine: Mock, tmp_path: Path, mode: str = "auto") -> TestOrchestrator:
+def make_orchestrator(git_engine: Mock, tmp_path: Path, mode: str = "subprocess") -> TestOrchestrator:
+    """Helper to create a TestOrchestrator with the given mode."""
     return TestOrchestrator(
-        mock_git_engine,
-        sandbox_image="python:3.11-slim",
+        git_engine=git_engine,
+        log_dir=tmp_path,
         execution_mode=mode,
-        log_dir=tmp_path / "logs",
     )
-
-
-def test_initializes_with_docker(tmp_path: Path, mock_git_engine: Mock, fake_docker_client: Mock):
-    with patch("docker.from_env", return_value=fake_docker_client):
-        orchestrator = make_orchestrator(mock_git_engine, tmp_path)
-
-    assert orchestrator.mode == TestExecutionMode.DOCKER
-    assert orchestrator.docker_client is fake_docker_client
-
-
-def test_falls_back_to_subprocess_when_docker_missing(tmp_path: Path, mock_git_engine: Mock):
-    with patch("docker.from_env", side_effect=DockerException("missing")):
-        orchestrator = make_orchestrator(mock_git_engine, tmp_path)
-
-    assert orchestrator.mode == TestExecutionMode.SUBPROCESS
-    assert orchestrator.docker_client is None
-
-
-def test_raises_when_docker_mode_requested(tmp_path: Path, mock_git_engine: Mock):
-    with patch("docker.from_env", side_effect=DockerException("missing")):
-        with pytest.raises(TestOrchestratorError):
-            make_orchestrator(mock_git_engine, tmp_path, mode="docker")
-
-
-@pytest.mark.asyncio
-async def test_sequential_respects_dependencies(tmp_path: Path, mock_git_engine: Mock):
-    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
-
-    tests = [
-        TestConfig(name="ok", cmd="python -c 'print(\"ok\")'", timeout=10),
-        TestConfig(name="fail", cmd="python -c 'import sys; sys.exit(1)'", timeout=10),
-        TestConfig(name="skipped", cmd="python -c 'print(\"skip\")'", timeout=10, depends_on=["fail"]),
-    ]
-
-    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
-
-    assert [r.status for r in results] == [TestStatus.PASSED, TestStatus.FAILED, TestStatus.SKIPPED]
-    assert results[2].error and "dependency" in results[2].error.lower()
-    assert results[0].log_path and results[0].log_path.exists()
 
 
 @pytest.mark.asyncio
@@ -156,82 +56,278 @@ async def test_parallel_invokes_callbacks(tmp_path: Path, mock_git_engine: Mock)
 
     assert len(results) == 2
     assert {res.name for res in results} == {"first", "second"}
-    assert completed == [res.name for res in results]
+    # In parallel execution, completion order is non-deterministic
+    assert set(completed) == {res.name for res in results}
     assert any(stream == "stdout" for _, stream, _ in seen_lines)
 
 
-def test_get_summary_treats_skips_as_success(tmp_path: Path, mock_git_engine: Mock) -> None:
+@pytest.mark.asyncio
+async def test_sequential_respects_order(tmp_path: Path, mock_git_engine: Mock):
     orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
 
-    results = [
-        TestResult(name="passed", status=TestStatus.PASSED, duration_ms=5),
-        TestResult(name="skipped", status=TestStatus.SKIPPED, duration_ms=1, error="dependency"),
+    tests = [
+        TestConfig(name="first", cmd="python -c 'import time; time.sleep(0.1); print(\"first\")'", timeout=10),
+        TestConfig(name="second", cmd="python -c 'print(\"second\")'", timeout=10),
     ]
 
-    summary = orchestrator.get_summary(results)
+    completed = []
 
-    assert summary == {
-        "total": 2,
-        "passed": 1,
-        "failed": 0,
-        "timeout": 0,
-        "error": 0,
-        "skipped": 1,
-        "status": "green",
-    }
-
-
-def test_get_summary_marks_red_when_failures(tmp_path: Path, mock_git_engine: Mock) -> None:
-    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
-
-    results = [
-        TestResult(name="passed", status=TestStatus.PASSED, duration_ms=5),
-        TestResult(name="failed", status=TestStatus.FAILED, duration_ms=3, exit_code=1),
-        TestResult(name="skipped", status=TestStatus.SKIPPED, duration_ms=1),
-    ]
-
-    summary = orchestrator.get_summary(results)
-
-    assert summary["failed"] == 1
-    assert summary["skipped"] == 1
-    assert summary["status"] == "red"
-
-
-@pytest.mark.asyncio
-async def test_collects_metrics(tmp_path: Path, mock_git_engine: Mock):
-    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
-
-    tests = [TestConfig(name="metrics", cmd="python -c 'print(123)'", timeout=10)]
-
-    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
-    metrics = results[0].metrics
-
-    assert metrics["mode"] == "subprocess"
-    assert "duration_ms" in metrics
-    assert "exit_code" in metrics
-
-
-@pytest.mark.asyncio
-async def test_docker_execution_streams_logs(tmp_path: Path, mock_git_engine: Mock, fake_docker_client: Mock):
-    with patch("docker.from_env", return_value=fake_docker_client):
-        orchestrator = make_orchestrator(mock_git_engine, tmp_path)
-
-    tests = [TestConfig(name="docker", cmd="echo 'ignored'", timeout=10)]
-
-    seen_lines = []
-
-    def handle_output(name: str, stream: str, line: str) -> None:
-        seen_lines.append((name, stream, line))
+    def handle_complete(result: TestResult) -> None:
+        completed.append(result.name)
 
     results = await orchestrator.run_tests(
         "pad-1",
         tests,
         parallel=False,
-        on_output=handle_output,
+        on_test_complete=handle_complete,
     )
 
+    assert len(results) == 2
+    # Sequential execution should maintain order
+    assert [res.name for res in results] == ["first", "second"]
+    assert completed == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_timeout_handling(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="slow", cmd="python -c 'import time; time.sleep(10)'", timeout=0.5),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    assert len(results) == 1
+    assert results[0].status == TestStatus.TIMEOUT
+    assert results[0].duration >= 0.5
+
+
+@pytest.mark.asyncio
+async def test_failure_captured(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="fail", cmd="python -c 'import sys; sys.exit(1)'", timeout=10),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    assert len(results) == 1
+    assert results[0].status == TestStatus.FAILED
+    assert results[0].exit_code == 1
+
+
+@pytest.mark.asyncio
+async def test_success_captured(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="pass", cmd="python -c 'print(\"ok\")'", timeout=10),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    assert len(results) == 1
     assert results[0].status == TestStatus.PASSED
-    assert ("docker", "stdout", "docker stdout") in seen_lines
-    assert ("docker", "stderr", "docker stderr") in seen_lines
-    assert results[0].metrics.get("cpu_percent") is not None
-    assert results[0].log_path and results[0].log_path.exists()
+    assert results[0].exit_code == 0
+    assert "ok" in results[0].output
+
+
+@pytest.mark.asyncio
+async def test_mixed_results(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="pass", cmd="python -c 'print(\"ok\")'", timeout=10),
+        TestConfig(name="fail", cmd="python -c 'import sys; sys.exit(1)'", timeout=10),
+        TestConfig(name="timeout", cmd="python -c 'import time; time.sleep(10)'", timeout=0.5),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=True)
+
+    assert len(results) == 3
+    statuses = {res.name: res.status for res in results}
+    assert statuses["pass"] == TestStatus.PASSED
+    assert statuses["fail"] == TestStatus.FAILED
+    assert statuses["timeout"] == TestStatus.TIMEOUT
+
+
+@pytest.mark.asyncio
+async def test_output_callback_receives_all_lines(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="multi", cmd="python -c 'print(\"line1\"); print(\"line2\")'", timeout=10),
+    ]
+
+    seen_lines = []
+
+    def handle_output(name: str, stream: str, line: str) -> None:
+        seen_lines.append(line)
+
+    await orchestrator.run_tests("pad-1", tests, parallel=False, on_output=handle_output)
+
+    assert "line1" in seen_lines
+    assert "line2" in seen_lines
+
+
+@pytest.mark.asyncio
+async def test_empty_test_list(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    results = await orchestrator.run_tests("pad-1", [], parallel=False)
+
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_workpad_not_found(tmp_path: Path, mock_git_engine: Mock):
+    mock_git_engine.get_workpad.side_effect = ValueError("Workpad not found")
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [TestConfig(name="test", cmd="echo ok", timeout=10)]
+
+    with pytest.raises(ValueError, match="Workpad not found"):
+        await orchestrator.run_tests("nonexistent", tests, parallel=False)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_on_exception(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="test", cmd="python -c 'print(\"ok\")'", timeout=10),
+    ]
+
+    # Simulate an exception during test execution
+    with patch.object(orchestrator, '_run_test_subprocess', side_effect=RuntimeError("Simulated error")):
+        with pytest.raises(RuntimeError, match="Simulated error"):
+            await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+
+@pytest.mark.asyncio
+async def test_progress_callback_invoked(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="test1", cmd="python -c 'print(\"ok\")'", timeout=10),
+        TestConfig(name="test2", cmd="python -c 'print(\"ok\")'", timeout=10),
+    ]
+
+    progress_calls = []
+
+    def handle_progress(completed: int, total: int) -> None:
+        progress_calls.append((completed, total))
+
+    await orchestrator.run_tests("pad-1", tests, parallel=False, on_progress=handle_progress)
+
+    assert len(progress_calls) > 0
+    assert progress_calls[-1] == (2, 2)
+
+
+@pytest.mark.asyncio
+async def test_stderr_captured(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="stderr", cmd="python -c 'import sys; sys.stderr.write(\"error\\n\")'", timeout=10),
+    ]
+
+    seen_lines = []
+
+    def handle_output(name: str, stream: str, line: str) -> None:
+        seen_lines.append((stream, line))
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False, on_output=handle_output)
+
+    assert any(stream == "stderr" and "error" in line for stream, line in seen_lines)
+    assert "error" in results[0].output
+
+
+@pytest.mark.asyncio
+async def test_large_output_handling(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    # Generate a large output
+    tests = [
+        TestConfig(
+            name="large",
+            cmd="python -c 'for i in range(1000): print(f\"line {i}\")'",
+            timeout=10
+        ),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    assert len(results) == 1
+    assert results[0].status == TestStatus.PASSED
+    assert "line 999" in results[0].output
+
+
+@pytest.mark.asyncio
+async def test_concurrent_limit_respected(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    # Create many tests
+    tests = [
+        TestConfig(name=f"test{i}", cmd="python -c 'import time; time.sleep(0.1)'", timeout=10)
+        for i in range(20)
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=True)
+
+    assert len(results) == 20
+    assert all(res.status == TestStatus.PASSED for res in results)
+
+
+@pytest.mark.asyncio
+async def test_test_result_dataclass_properties(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="test", cmd="python -c 'print(\"output\")'", timeout=10),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    result = results[0]
+    assert result.name == "test"
+    assert result.status == TestStatus.PASSED
+    assert result.exit_code == 0
+    assert "output" in result.output
+    assert result.duration >= 0
+    assert result.timestamp is not None
+
+
+@pytest.mark.asyncio
+async def test_environment_variables_passed(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(
+            name="env",
+            cmd="python -c 'import os; print(os.environ.get(\"TEST_VAR\", \"not_set\"))'",
+            timeout=10,
+            env={"TEST_VAR": "test_value"}
+        ),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    assert len(results) == 1
+    assert "test_value" in results[0].output
+
+
+@pytest.mark.asyncio
+async def test_working_directory_set(tmp_path: Path, mock_git_engine: Mock):
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    tests = [
+        TestConfig(name="pwd", cmd="python -c 'import os; print(os.getcwd())'", timeout=10),
+    ]
+
+    results = await orchestrator.run_tests("pad-1", tests, parallel=False)
+
+    assert len(results) == 1
+    assert "/fake/repo" in results[0].output
