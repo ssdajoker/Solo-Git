@@ -63,11 +63,11 @@ class StatusBar(Static):
             f"│  {shortcuts}"
         )
     
-    def update_context(self, repo_name: str, workpad_name: str = None, test_status: str = None):
+    def update_context(self, repo_name: str, workpad_name: str = None, test_status: str = theme.icons.pending):
         """Update status bar context."""
         self.repo_name = repo_name
         self.workpad_name = workpad_name or "No workpad"
-        self.test_status = test_status if test_status is not None else theme.icons.pending
+        self.test_status = test_status
         self.refresh()
 
 
