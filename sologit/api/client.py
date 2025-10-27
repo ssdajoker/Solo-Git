@@ -121,13 +121,12 @@ class AbacusClient:
                 )
             return creds['deployment_id'], creds['deployment_token']
 
-        if not deployment_id or not deployment_token:
-            raise ValueError(
-                "Abacus.ai requires deployment_id and deployment_token. "
-                "Provide them directly or register them via register_deployment()."
-            )
-
-        return deployment_id, deployment_token
+        # If we reach here, deployment is None, so both deployment_id and 
+        # deployment_token must be provided
+        raise ValueError(
+            "Abacus.ai requires deployment_id and deployment_token. "
+            "Provide them directly or register them via register_deployment()."
+        )
 
     def _post(
         self,
@@ -141,7 +140,6 @@ class AbacusClient:
         url = f"{self.endpoint}{path}"
         logger.debug("POST %s", url)
         for attempt in range(max_retries):
-        for attempt in range(3):
             try:
                 response = self.session.post(
                     url,
@@ -174,17 +172,8 @@ class AbacusClient:
                 )
                 time.sleep(delay)
                 continue
-                if response.status_code < 400:
-                    break
-                if response.status_code != 503:
-                    raise self._build_http_error(path, response)
-            except requests.RequestException as exc:
-                raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
-            time.sleep(1)
 
             raise self._build_http_error(path, response)
-        else:
-            raise AbacusAPIError(f"Request to {path} failed after {max_retries} retries.")
 
     def _get_retry_delay(self, response: requests.Response, attempt: int) -> float:
         """Calculate retry delay with exponential backoff and jitter."""
