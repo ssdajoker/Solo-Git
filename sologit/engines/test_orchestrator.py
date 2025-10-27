@@ -859,12 +859,16 @@ class TestOrchestrator:
     def get_summary(self, results: List[TestResult]) -> dict:
         """Get test results summary."""
 
+        failed = sum(1 for r in results if r.status == TestStatus.FAILED)
+        timeout = sum(1 for r in results if r.status == TestStatus.TIMEOUT)
+        error = sum(1 for r in results if r.status == TestStatus.ERROR)
+
         return {
             "total": len(results),
             "passed": sum(1 for r in results if r.status == TestStatus.PASSED),
-            "failed": sum(1 for r in results if r.status == TestStatus.FAILED),
-            "timeout": sum(1 for r in results if r.status == TestStatus.TIMEOUT),
-            "error": sum(1 for r in results if r.status == TestStatus.ERROR),
+            "failed": failed,
+            "timeout": timeout,
+            "error": error,
             "skipped": sum(1 for r in results if r.status == TestStatus.SKIPPED),
-            "status": "green" if self.all_tests_passed(results) else "red",
+            "status": "green" if not any([failed, timeout, error]) else "red",
         }
