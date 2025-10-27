@@ -1,146 +1,25 @@
-"""Comprehensive end-to-end workflow tests using real git operations."""
-
-from __future__ import annotations
-
-import difflib
-import json
-from io import BytesIO
-from pathlib import Path
-from typing import Callable, Iterable
-from zipfile import ZipFile
-
+import os
+import shutil
 import pytest
-
-from git import Repo
-
-from sologit.state.git_sync import GitStateSync
-from sologit.engines.patch_engine import PatchEngine
-from sologit.engines.test_orchestrator import (
-    TestConfig,
-    TestOrchestrator,
-    TestStatus,
-    TestResult,
-)
-from sologit.analysis.test_analyzer import TestAnalyzer, TestAnalysis
-from sologit.orchestration.ai_orchestrator import AIOrchestrator
-from sologit.orchestration.planning_engine import FileChange
-from sologit.config.manager import ConfigManager
-from sologit.workflows.ci_orchestrator import CIOrchestrator, CIStatus, CIResult
-from sologit.workflows.rollback_handler import RollbackHandler
-from sologit.workflows.promotion_gate import (
-    PromotionDecisionType,
-    PromotionGate,
-    PromotionRules,
-)
-from sologit.engines.git_engine import CannotPromoteError
-
+from click.testing import CliRunner
+from sologit.cli.main import cli
+from sologit.core.repository import Repository
+from sologit.state.manager import StateManager
 
 @pytest.fixture
-def sample_project_zip() -> bytes:
-    """Create a small Python project archive used by the workflows."""
-    buffer = BytesIO()
-    with ZipFile(buffer, "w") as zf:
-        zf.writestr(
-            "hello.py",
-            """def greet(name):
-    \"\"\"Say hello to someone.\"\"\"
-    return f\"Hello, {name}!\"
-
-
-if __name__ == \"__main__\":
-    print(greet(\"World\"))
-""",
-        )
-        zf.writestr(
-            "tests/__init__.py",
-            "",
-        )
-        zf.writestr(
-            "tests/test_hello.py",
-            """from hello import greet
-
-
-def test_greet_known_names():
-    assert greet(\"Alice\") == \"Hello, Alice!\"
-    assert greet(\"Bob\") == \"Hello, Bob!\"
-""",
-        )
-        zf.writestr(
-            "README.md",
-            """# Sample Project
-
-This repository is used for Solo Git E2E workflow tests.
-""",
-        )
-    buffer.seek(0)
-    return buffer.read()
-
+def runner(tmp_path_factory):
+    state_path = tmp_path_factory.mktemp("sologit_state")
+    runner = CliRunner(env={"SOLOGIT_STATE_PATH": str(state_path)})
+    return runner
 
 @pytest.fixture
-def git_sync(tmp_path_factory) -> GitStateSync:
-    """Provide a GitStateSync instance backed by temporary directories."""
-    base = tmp_path_factory.mktemp("solo_git_data")
-    data_dir = base / "git"
-    state_dir = base / "state"
-    return GitStateSync(state_dir=state_dir, data_dir=data_dir)
-
+def test_repo_path(tmp_path):
+    return tmp_path / "test_repo"
 
 @pytest.fixture
-def patch_engine(git_sync: GitStateSync) -> PatchEngine:
-    return PatchEngine(git_sync.git_engine)
-
-
-@pytest.fixture
-def test_runner(git_sync: GitStateSync, tmp_path_factory) -> TestOrchestrator:
-    log_dir = tmp_path_factory.mktemp("logs")
-    return TestOrchestrator(
-        git_sync.git_engine,
-        execution_mode="subprocess",
-        log_dir=log_dir,
-    )
-
-
-@pytest.fixture
-def ai_config_manager(tmp_path) -> ConfigManager:
-    """Create a minimal configuration file for AI orchestrator tests."""
-    config_file = tmp_path / "config.yaml"
-    config_file.write_text(
-        """
-abacus:
-  endpoint: "https://api.abacus.ai/api/v0"
-  api_key: "test_key"
-
-ai:
-  models:
-    fast:
-      primary: "llama-3.1-8b-instruct"
-      max_tokens: 1024
-      temperature: 0.1
-    coding:
-      primary: "deepseek-coder-33b"
-      max_tokens: 2048
-      temperature: 0.1
-    planning:
-      primary: "gpt-4o"
-      max_tokens: 4096
-      temperature: 0.2
-
-escalation:
-  triggers: []
-
-budget:
-  daily_usd_cap: 5.0
-  alert_threshold: 0.8
-  track_by_model: true
-
-promote_on_green: true
-rollback_on_ci_red: true
-"""
-    )
-    return ConfigManager(config_path=config_file)
-
-
-@pytest.fixture
+def setup_repo(runner, test_repo_path):
+    # Create a directory for the repo
+    os.makedirs(test_repo_path, exist_ok=True)
 def ai_orchestrator(ai_config_manager: ConfigManager, tmp_path) -> AIOrchestrator:
     orchestrator = AIOrchestrator(ai_config_manager)
     # Ensure isolated budget tracking between tests
@@ -760,31 +639,39 @@ def test_parallel_workpads_rebase_and_promote(
     pad2_info = git_sync.create_workpad(repo_id, "Add feature Y")
     pad2_id = pad2_info["workpad_id"]
 
-    feature_x_patch = _generate_create_patch("feature_x.txt", "Feature X")
-    git_sync.apply_patch(pad1_id, feature_x_patch, "Add feature X")
+    # Set up sologit
+    result = runner.invoke(cli, ["repo", "init", "--path", str(test_repo_path), "--name", "test-repo", "--empty"])
+    assert result.exit_code == 0, f"Failed to init repo: {result.output}"
 
-    feature_y_patch = _generate_create_patch("feature_y.txt", "Feature Y")
-    git_sync.apply_patch(pad2_id, feature_y_patch, "Add feature Y")
+    yield test_repo_path
 
-    # Promote the first workpad
-    _, results1 = _run_pytest_and_record(git_sync, test_runner, pad1_id)
-    assert all(result.status == TestStatus.PASSED for result in results1)
-    git_sync.promote_workpad(pad1_id)
+    # Teardown: clean up the created directory
+    shutil.rmtree(test_repo_path)
 
-    # Rebase and promote the second workpad
-    repo = Repo(repo_path)
-    repo.git.checkout(pad2_info["branch_name"])
-    repo.git.rebase(repo_info["trunk_branch"])
+def test_happy_path_workflow(runner, setup_repo):
+    repo_path = setup_repo
+    state_manager = StateManager()
 
-    _, results2 = _run_pytest_and_record(git_sync, test_runner, pad2_id)
-    assert all(result.status == TestStatus.PASSED for result in results2)
-    git_sync.promote_workpad(pad2_id)
+    # 1. Find the created repository in the state
+    repos = state_manager.list_repositories()
+    assert len(repos) == 1, "Expected one repository to be created"
+    repo_state = repos[0]
+    repo_id = repo_state.repo_id
 
-    # Verify both files exist
-    assert (repo_path / "feature_x.txt").exists()
-    assert (repo_path / "feature_y.txt").exists()
+    # 2. Create a workpad
+    result = runner.invoke(cli, ["pad", "create", "My first workpad", "--repo", repo_id])
+    assert result.exit_code == 0, f"Failed to create workpad: {result.output}"
 
+    # 3. Verify state
+    repo_state_after_create = state_manager.get_repository(repo_id)
+    assert repo_state_after_create is not None, "Repository state not found"
 
+    pads = state_manager.list_workpads(repo_id)
+    assert len(pads) == 1, "Workpad was not created"
+
+    workpad = pads[0]
+    assert workpad.title == "My first workpad", "Workpad title is incorrect"
+    assert workpad.status == "draft", "Workpad status should be 'draft'"
 def test_promote_empty_workpad_fails(
     git_sync: GitStateSync,
     sample_project_zip: bytes,

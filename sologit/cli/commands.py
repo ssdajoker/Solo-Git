@@ -1,6 +1,14 @@
 
 """Command implementations for Solo Git CLI."""
 
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+import time
+from pathlib import Path
+from typing import Iterable, List, NoReturn, Optional, Union, Dict, Any, Sequence
 import asyncio
 import click
 from pathlib import Path
@@ -53,6 +61,7 @@ def abort_with_error(
     tip: Optional[str] = None,
     suggestions: Optional[List[str]] = None,
     docs_url: Optional[str] = None,
+) -> NoReturn:
 ) -> None:
     """Display a formatted error with rich context and abort the command."""
 
@@ -218,6 +227,24 @@ def repo() -> None:
     pass
 
 
+@repo.command("init")
+@click.option("--zip", "zip_file", type=click.Path(exists=True, path_type=Path), help="Path to zip archive")
+@click.option("--git", "git_url", type=str, help="Git repository URL")
+@click.option("--empty", is_flag=True, help="Create an empty repository")
+@click.option(
+    "--path",
+    "target_path",
+    type=click.Path(path_type=Path),
+    help="Directory for empty repository (defaults to Solo Git data dir)",
+)
+@click.option("--name", type=str, help="Repository name (optional)")
+def repo_init(
+    zip_file: Optional[Path],
+    git_url: Optional[str],
+    empty: bool,
+    target_path: Optional[Path],
+    name: Optional[str],
+) -> None:
 @repo.command('init')
 @click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
 @click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
@@ -234,6 +261,10 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
         'empty': empty
     }
 
+    if len(selected) != 1:
+        abort_with_error(
+            "Invalid Source Specification",
+            "Please specify exactly one of --zip, --git, or --empty.",
     provided_sources = [name for name, value in sources.items() if value]
 
     if len(provided_sources) != 1:
@@ -256,6 +287,21 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
+            repo_info = git_sync.create_empty_repo(
+                repo_name, str(target_path) if target_path else None
+            )
+
+        formatter.print_success("Repository initialized!")
+        summary = formatter.table(headers=["Field", "Value"])
+        summary.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
+        summary.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
+        summary.add_row("Path", repo_info.get("path", "-"))
+        summary.add_row(
+            "Trunk",
+            f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]",
+        )
+        formatter.console.print(summary)
+    except GitEngineError as exc:
             repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
         elif zip_file:
             zip_path = Path(zip_file)
@@ -313,6 +359,11 @@ def repo_list() -> None:
     
     for repo in repos:
         table.add_row(
+            f"[cyan]{repo_obj.id}[/cyan]",
+            f"[bold]{getattr(repo_obj, 'name', repo_obj.id)}[/bold]",
+            getattr(repo_obj, 'trunk_branch', 'main'),
+            str(getattr(repo_obj, 'workpad_count', 0)),
+            _format_datetime(getattr(repo_obj, 'created_at', '')),
             f"[cyan]{repo.id}[/cyan]",
             f"[bold]{repo.name}[/bold]",
             repo.trunk_branch,
@@ -403,6 +454,10 @@ def pad_create(title: str, repo_id: Optional[str]) -> None:
         repos = git_engine.list_repos()
         if len(repos) == 0:
             abort_with_error("No repositories found", "Initialize a repository first: evogitctl repo init --zip app.zip")
+        if len(repos) == 1:
+            repo = repos[0]
+            repo_id = repo.id
+            formatter.print_info(f"Using repository: {repo.name} ({repo_id})")
         elif len(repos) == 1:
             repo_id = repos[0].id
             formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
@@ -417,12 +472,21 @@ def pad_create(title: str, repo_id: Optional[str]) -> None:
                 "Multiple repositories detected. Please rerun with --repo <ID>.",
                 title="Repository Selection Required"
             )
+            table = formatter.table(headers=["ID", "Name"])
+            for repo_obj in repos:
+                table.add_row(f"[cyan]{repo_obj.id}[/cyan]", getattr(repo_obj, "name", repo_obj.id))
+            formatter.print_panel(
+                "Multiple repositories found. Please rerun with --repo <ID>.",
+                title="Repository Selection Required",
+            )
             formatter.console.print(repo_table)
             raise click.Abort()
 
     try:
         formatter.print_info(f"Creating workpad: {title}")
         pad_id = git_engine.create_workpad(repo_id, title)
+
+        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
 
         workpad = git_engine.get_workpad(pad_id)
         formatter.print_success("Workpad created!")
@@ -461,6 +525,24 @@ def pad_list(repo_id: Optional[str]) -> None:
     
     formatter.print_header(title)
     table = formatter.table(headers=["ID", "Title", "Status", "Checkpoints", "Tests", "Created"])
+
+    for pad_obj in workpads:
+        status = getattr(pad_obj, "status", "unknown")
+        status_color = theme.get_status_color(status)
+        status_icon = theme.get_status_icon(status)
+        status_display = f"[{status_color}]{status_icon} {status}[/{status_color}]"
+
+        if getattr(pad_obj, "test_status", None):
+            test_status = pad_obj.test_status
+            if test_status == "passed":
+                test_display = "✅ passed"
+            elif test_status.lower() == "failed":
+                test_display = "❌ failed"
+            else:
+                test_display = "⏳ pending"
+        else:
+            test_display = "-"
+
     
     for pad in workpads:
         # Color-code status
@@ -477,6 +559,9 @@ def pad_list(repo_id: Optional[str]) -> None:
             f"[cyan]{pad.id[:8]}[/cyan]",
             f"[bold]{pad.title}[/bold]",
             status_display,
+            str(len(getattr(pad_obj, "checkpoints", []))),
+            test_display,
+            _format_datetime(getattr(pad_obj, "created_at", "")),
             str(len(pad.checkpoints)),
             test_display,
             pad.created_at.strftime('%Y-%m-%d %H:%M')
@@ -611,6 +696,52 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     run_id = getattr(run_entry, "run_id", getattr(run_entry, "id", str(run_entry)))
     state_manager.update_test_run(run_id, status="running")
 
+
+    try:
+        results = asyncio.run(orchestrator.run_tests(pad_id, tests=test_configs))
+    except Exception as exc:
+        abort_with_error("Test execution failed", str(exc))
+    finally:
+        total = len(results)
+    passed = sum(1 for result in results if result.status == TestStatus.PASSED)
+    failed = sum(1 for result in results if result.status in {TestStatus.FAILED, TestStatus.ERROR, TestStatus.TIMEOUT})
+    skipped = sum(1 for result in results if result.status == TestStatus.SKIPPED)
+    duration_ms = sum(result.duration_ms for result in results)
+
+    for result in results:
+        icon = _STATUS_ICONS.get(result.status, theme.icons.info)
+        formatter.print_info(f"{icon} {result.status.value} — {result.name}")
+
+    formatter.print_subheader("Test Summary")
+
+    if failed == 0:
+        formatter.print_success("All tests passed!")
+    else:
+        formatter.print_warning("Tests Require Attention")
+        formatter.print_info("Some tests failed or timed out. Review results below.")
+
+    summary_table = formatter.table(headers=["Metric", "Value"])
+    summary_table.add_row("Total", str(total))
+    summary_table.add_row("Passed", str(passed))
+    summary_table.add_row("Failed", str(failed))
+    summary_table.add_row("Skipped", str(skipped))
+    summary_table.add_row("Duration (ms)", str(duration_ms))
+    formatter.console.print(summary_table)
+    formatter.print_info(f"Passed: {passed}")
+    formatter.print_info(f"Failed: {failed}")
+    formatter.print_info(f"Skipped: {skipped}")
+
+    state_results: List[StateTestResult] = []
+    for result in results:
+        state_results.append(
+            StateTestResult(
+                test_id=f"{run_id}:{result.name}",
+                name=result.name,
+                status=result.status.value,
+                duration_ms=result.duration_ms,
+                output=(result.stdout or result.stderr or ""),
+                error=result.error,
+            )
     if target == 'fast':
         tests = [
             TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
@@ -790,6 +921,16 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         raise click.Abort()
 
 
+    state_manager.update_test_run(
+        run_id,
+        status=overall_status,
+        total_tests=total,
+        passed=passed,
+        failed=failed,
+        skipped=skipped,
+        duration_ms=duration_ms,
+        tests=state_results,
+    )
 
 
 
@@ -880,6 +1021,15 @@ def pad_auto_merge(
         ci_config=config_manager.config.ci,
         rollback_on_ci_red=config_manager.config.rollback_on_ci_red
     )
+
+    formatter.print_header("Auto-Merge Workflow")
+    overview = formatter.table(headers=["Field", "Value"])
+    overview.add_row("Workpad", f"[bold]{workpad.title}[/bold] ({workpad.id[:8]})")
+    overview.add_row("Target", target)
+    overview.add_row("Auto-promote", "Enabled" if not no_auto_promote else "Disabled")
+    overview.add_row("Tests", str(len(tests)))
+    formatter.console.print(overview)
+
 
     try:
         formatter.print_header("Auto-Merge Workflow")
@@ -1203,6 +1353,9 @@ def execute_pair_loop(
     try:
         formatter.print_subheader("Workpad Setup")
         formatter.print_info("Creating ephemeral workpad...")
+        assert repo_id is not None
+        pad_id = git_engine.create_workpad(repo_id, title)
+        workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
         pad_id = git_engine.create_workpad(repo_id, title)
         workpad = git_engine.get_workpad(pad_id)
         formatter.print_success("Workpad created")
@@ -1228,6 +1381,7 @@ def execute_pair_loop(
             'trunk_branch': repo.trunk_branch
         }
 
+        plan_response = orchestrator.plan(prompt=prompt, repo_context=context)
         plan_response = orchestrator.plan(
             prompt=prompt,
             repo_context=context
@@ -1258,6 +1412,7 @@ def execute_pair_loop(
         formatter.print_subheader("Code Generation")
         formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
         start_time = time.time()
+
 
         patch_response = orchestrator.generate_patch(
             plan=plan,

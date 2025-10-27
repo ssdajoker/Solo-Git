@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/tauri'
 import { FileExplorer } from './FileExplorer'
 import { CodeEditor } from './CodeEditor'
 import { EditorTabs, EditorTab } from './EditorTabs'
@@ -93,7 +94,7 @@ export function MainLayout({
   }
   
   // Handle file selection
-  const handleFileSelect = (path: string) => {
+  const handleFileSelect = async (path: string) => {
     // Check if file is already open
     const existingTab = openTabs.find(tab => tab.path === path)
     
@@ -116,9 +117,18 @@ export function MainLayout({
       setOpenTabs(prev => [...prev, newTab])
       setActiveTabId(tabId)
       
-      // Mock file content - in production, load from Tauri
-      const mockContent = `// ${path}\n\nfunction example() {\n  console.log('Hello from ${path}');\n}\n\nexport default example;`
-      setFileContents(prev => ({ ...prev, [tabId]: mockContent }))
+      // Load file content from Tauri
+      try {
+        const content = await invoke<string>('read_file_content', { path });
+        setFileContents(prev => ({ ...prev, [tabId]: content }));
+      } catch (error) {
+        console.error(`Failed to read file ${path}:`, error);
+        // Optionally show an error to the user
+        setFileContents(prev => ({
+          ...prev,
+          [tabId]: `Error loading file. Please try again.${error && error.message ? ` (${error.message})` : ''}`
+        }));
+      }
     }
   }
   
@@ -182,22 +192,26 @@ export function MainLayout({
   }
   
   // Handle save
-  const handleSave = (content: string) => {
-    if (!activeTabId) return
+  const handleSave = async (content: string) => {
+    if (!activeTabId || !activeTab) return
     
-    // In production, save to file system via Tauri
-    console.log('Saving file:', activeTab?.path, content)
-    
-    // Mark as clean
-    setDirtyFiles(prev => {
-      const newDirty = new Set(prev)
-      newDirty.delete(activeTabId)
-      return newDirty
-    })
-    
-    setOpenTabs(prev => prev.map(t => 
-      t.id === activeTabId ? { ...t, isDirty: false } : t
-    ))
+    try {
+      await invoke('write_file_content', { path: activeTab.path, content });
+
+      // Mark as clean
+      setDirtyFiles(prev => {
+        const newDirty = new Set(prev)
+        newDirty.delete(activeTabId)
+        return newDirty
+      })
+
+      setOpenTabs(prev => prev.map(t =>
+        t.id === activeTabId ? { ...t, isDirty: false } : t
+      ))
+    } catch (error) {
+      console.error(`Failed to save file ${activeTab.path}:`, error);
+      // Optionally show an error to the user
+    }
   }
   
   // Handle voice input submission

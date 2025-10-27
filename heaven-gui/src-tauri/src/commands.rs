@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -15,6 +16,41 @@ use crate::{
     get_state_dir, list_test_runs, AIOperation, GlobalState, PromotionRecord, RepositoryState,
     TestRun, WorkpadState,
 };
+
+#[tauri::command]
+pub(crate) fn read_file_content(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read file {}: {}", path, e))
+}
+
+#[tauri::command]
+pub(crate) fn write_file_content(path: String, content: String) -> Result<(), String> {
+    // Set maximum file size (e.g., 1MB)
+    const MAX_FILE_SIZE: usize = 1024 * 1024; // 1MB
+    if content.len() > MAX_FILE_SIZE {
+        return Err(format!("File size exceeds maximum allowed size of {} bytes", MAX_FILE_SIZE));
+    }
+
+    // Get repository root directory
+    let repo_dir = match get_state_dir() {
+        Ok(dir) => dir,
+        Err(e) => return Err(format!("Failed to get repository directory: {}", e)),
+    };
+
+    // Sanitize and resolve the path
+    let rel_path = Path::new(&path);
+    if rel_path.is_absolute() {
+        return Err("Absolute paths are not allowed".to_string());
+    }
+    let full_path = repo_dir.join(rel_path).canonicalize()
+        .map_err(|e| format!("Invalid path: {}", e))?;
+
+    // Ensure the resolved path is within the repository directory
+    if !full_path.starts_with(&repo_dir) {
+        return Err("Attempted directory traversal or write outside repository directory".to_string());
+    }
+
+    fs::write(&full_path, content).map_err(|e| format!("Failed to write to file {}: {}", full_path.display(), e))
+}
 
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
     if !path.exists() {
@@ -340,7 +376,7 @@ pub(crate) fn apply_patch(
 
     let patch_history_path = store_patch_diff(&workpad_id, &diff)?;
     let temp_path = env::temp_dir().join(format!("sologit_patch_{}.diff", Uuid::new_v4().simple()));
-    fs::write(&temp_path, diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
+    fs::write(&temp_path, &diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
 
     let patch_arg = temp_path
         .to_str()
@@ -372,13 +408,10 @@ pub(crate) fn apply_patch(
         .append(true)
         .open(&notes_path)
         .and_then(|mut file| file.write_all(entry.as_bytes()));
-    let result = run_cli_command(cli_args);
+    let result = run_cli_command(cli_args.clone());
 
     let _ = fs::remove_file(&temp_path);
 
-    let result = run_cli_command(cli_args);
-
-    let _ = fs::remove_file(&temp_path);
     result?;
 
     load_workpad(&workpad_id)

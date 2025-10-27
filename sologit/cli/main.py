@@ -1,4 +1,3 @@
-
 """
 Main CLI entry point for Solo Git.
 
@@ -18,16 +17,31 @@ from rich.console import Console
 
 from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
-from sologit.cli import commands, config_commands
-
+try:
+    from sologit.cli import commands, config_commands
+except ModuleNotFoundError as e:
+    print(
+        f"Error: Could not import 'commands' and/or 'config_commands' from 'sologit.cli'.\n"
+        f"Details: {e}\n"
+        "Possible solutions:\n"
+        "- Ensure that the 'sologit' package is installed and accessible in your Python environment.\n"
+        "- Check your PYTHONPATH and installation for missing files.\n"
+        "- If you are developing, make sure you have run the appropriate setup/install commands."
+    )
+    commands = None
+    config_commands = None
 try:
     from sologit.cli import integrated_commands
 except ImportError:  # pragma: no cover - optional feature set
     integrated_commands = None
 
 # Re-export ConfigManager for backwards compatibility with existing patches
-ConfigManager = config_commands.ConfigManager
-_ORIGINAL_CONFIG_MANAGER = ConfigManager
+if config_commands:
+    ConfigManager: Optional[type] = config_commands.ConfigManager
+    _ORIGINAL_CONFIG_MANAGER = ConfigManager
+else:
+    ConfigManager: Optional[type] = None
+    _ORIGINAL_CONFIG_MANAGER = None
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 from sologit.ui.history import (
@@ -162,19 +176,22 @@ def cli(ctx, verbose, config):
     ctx.obj['console'] = console
     ctx.obj['history'] = get_command_history() if record_history else None
     formatter.set_console(console)
-    commands.set_formatter_console(console)
-    config_commands.set_formatter_console(console)
+    if commands:
+        commands.set_formatter_console(console)
+    if config_commands:
+        config_commands.set_formatter_console(console)
     if integrated_commands is not None:
         integrated_commands.set_formatter_console(console)
 
     # Load configuration
     try:
-        manager_cls = ConfigManager
-        if manager_cls is _ORIGINAL_CONFIG_MANAGER:
-            manager_cls = getattr(config_commands, "ConfigManager", _ORIGINAL_CONFIG_MANAGER)
+        if config_commands:
+            manager_cls = ConfigManager
+            if manager_cls is _ORIGINAL_CONFIG_MANAGER:
+                manager_cls = getattr(config_commands, "ConfigManager", _ORIGINAL_CONFIG_MANAGER)
 
-        config_manager = manager_cls(config_path=config)
-        ctx.obj['config'] = config_manager
+            config_manager = manager_cls(config_path=config)
+            ctx.obj['config'] = config_manager
         ctx.obj['verbose'] = verbose
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
@@ -325,17 +342,20 @@ def gui(ctx, dev: bool):
 
 
 # Register command groups
-cli.add_command(config_commands.config_group)
+if config_commands:
+    cli.add_command(config_commands.config_group)
 
 # Phase 1 command groups
-from sologit.cli.commands import repo, pad, test
-cli.add_command(repo)
-cli.add_command(pad)
-cli.add_command(test)
+if commands:
+    from sologit.cli.commands import repo, pad, test
+    cli.add_command(repo)
+    cli.add_command(pad)
+    cli.add_command(test)
 
 # Phase 3 command groups
-from sologit.cli.commands import ci
-cli.add_command(ci)
+if commands:
+    from sologit.cli.ci_commands import ci
+    cli.add_command(ci)
 
 def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
     """Shared launcher for the Heaven TUI."""
@@ -559,41 +579,42 @@ def pair(ctx, prompt, repo_id, title, no_test, no_promote, target):
             "Usage: evogitctl pair \"your task description\"\n"
             "Example: evogitctl pair \"add user login feature\""
         )
+    if commands:
+        from sologit.cli.commands import execute_pair_loop
 
-    from sologit.cli.commands import execute_pair_loop
-
-    formatter.print_header("AI Pair Programming")
-    try:
-        execute_pair_loop(
-            ctx=ctx,
-            prompt=prompt,
-            repo_id=repo_id,
-            title=title,
-            no_test=no_test,
-            no_promote=no_promote,
-            target=target
-        )
-    except Exception as e:
-        logger.error(f"Pair command failed: {e}", exc_info=ctx.obj.get('verbose', False))
-        abort_with_error("Pair session failed", str(e))
+        formatter.print_header("AI Pair Programming")
+        try:
+            execute_pair_loop(
+                ctx=ctx,
+                prompt=prompt,
+                repo_id=repo_id,
+                title=title,
+                no_test=no_test,
+                no_promote=no_promote,
+                target=target
+            )
+        except Exception as e:
+            logger.error(f"Pair command failed: {e}", exc_info=ctx.obj.get('verbose', False))
+            abort_with_error("Pair session failed", str(e))
 
 
 # Phase 4: Integrated Heaven Interface commands
 try:
-    from sologit.cli.integrated_commands import (
-        workpad as integrated_workpad,
-        ai as integrated_ai,
-        history as integrated_history,
-        edit as integrated_edit
-    )
+    if integrated_commands:
+        from sologit.cli.integrated_commands import (
+            workpad as integrated_workpad,
+            ai as integrated_ai,
+            history as integrated_history,
+            edit as integrated_edit
+        )
 
-    # Register with distinct names to avoid clashing with core commands
-    cli.add_command(integrated_workpad, name="workpad-integrated")
-    cli.add_command(integrated_ai, name="ai")
-    cli.add_command(integrated_history, name="heaven-history")
-    cli.add_command(integrated_edit, name="edit")
+        # Register with distinct names to avoid clashing with core commands
+        cli.add_command(integrated_workpad, name="workpad-integrated")
+        cli.add_command(integrated_ai, name="ai")
+        cli.add_command(integrated_history, name="heaven-history")
+        cli.add_command(integrated_edit, name="edit")
 
-    logger.info("Integrated Heaven Interface commands loaded")
+        logger.info("Integrated Heaven Interface commands loaded")
 except ImportError as e:
     logger.warning(f"Could not load integrated commands: {e}")
 
