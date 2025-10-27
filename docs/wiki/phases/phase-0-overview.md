@@ -13,7 +13,7 @@ Infrastructure ready, core dependencies installed, basic CLI framework operation
 ### Development Environment ✅
 - Python 3.9+ environment configured
 - Git 2.30+ installed and verified
-- Docker environment (planned for test sandboxing)
+- Container runtime (initially planned, later rejected in favor of subprocess sandboxing)
 - Project directory structure created
 
 ### Project Structure ✅

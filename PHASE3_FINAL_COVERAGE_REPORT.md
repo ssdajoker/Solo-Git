@@ -87,20 +87,20 @@ The following Phase 3 components already had excellent coverage from prior impro
 #### Why This Component Had Low Coverage
 
 The TestOrchestrator component had low initial coverage due to:
-1. **Docker dependency**: Most methods require Docker, which isn't available in CI environments
+1. **Container runtime dependency**: Most methods require a container engine, which isn't available in CI environments
 2. **Async methods**: Complex async/await patterns that are harder to test
 3. **Integration focus**: Originally designed for integration testing rather than unit testing
-4. **Container orchestration**: Complex Docker container lifecycle management
+4. **Container orchestration**: Complex container lifecycle management
 
 #### Our Testing Strategy
 
-To achieve 100% coverage without Docker, we implemented a comprehensive mocking strategy:
+To achieve 100% coverage without a container engine, we implemented a comprehensive mocking strategy:
 
 ```python
-# Mock Docker client and containers
+# Mock container client and containers
 @pytest.fixture
-def mock_docker_client():
-    """Create mock docker client."""
+def mock_container_client():
+    """Create mock container client."""
     client = Mock()
     container = Mock()
     container.wait.return_value = {'StatusCode': 0}
@@ -118,8 +118,8 @@ def mock_docker_client():
 ##### Test Categories
 
 1. **Initialization Tests** (2 tests)
-   - ✅ Successful initialization with Docker available
-   - ✅ Graceful failure when Docker is unavailable
+   - ✅ Successful initialization with  available
+   - ✅ Graceful failure when  is unavailable
 
 2. **Async Test Execution** (3 tests)
    - ✅ Parallel test execution
@@ -179,7 +179,7 @@ The following lines were not covered before and are now fully tested:
   - Async task management
   - Deadlock detection
   - Result ordering
-- **Lines 242-305**: Docker container execution:
+- **Lines 242-305**:  container execution:
   - Container creation
   - Test execution
   - Timeout handling
@@ -198,25 +198,25 @@ The following lines were not covered before and are now fully tested:
 
 ```python
 def test_init_success(self, mock_git_engine):
-    """Test successful initialization with Docker available."""
-    with patch('docker.from_env') as mock_docker:
-        mock_docker.return_value = Mock()
+    """Test successful initialization with the container client available."""
+    with patch('container_client.from_env') as mock_client:
+        mock_client.return_value = Mock()
         
         orchestrator = TestOrchestrator(mock_git_engine, "python:3.11-slim")
         
         assert orchestrator.git_engine == mock_git_engine
         assert orchestrator.sandbox_image == "python:3.11-slim"
-        assert orchestrator.docker_client is not None
+        assert orchestrator._client is not None
 ```
 
 ### Async Testing
 
 ```python
 @pytest.mark.asyncio
-async def test_run_tests_parallel(self, mock_git_engine, mock_docker_client):
+async def test_run_tests_parallel(self, mock_git_engine, mock_container_client):
     """Test running tests in parallel."""
-    with patch('docker.from_env') as mock_docker:
-        mock_docker.return_value = mock_docker_client
+    with patch('container_client.from_env') as mock_client:
+        mock_client.return_value = mock_container_client
         
         orchestrator = TestOrchestrator(mock_git_engine)
         
@@ -235,7 +235,7 @@ async def test_run_tests_parallel(self, mock_git_engine, mock_docker_client):
 
 ```python
 @pytest.mark.asyncio
-async def test_run_single_test_timeout(self, mock_git_engine, mock_docker_client):
+async def test_run_single_test_timeout(self, mock_git_engine, mock_container_client):
     """Test test timeout handling."""
     container = Mock()
     container.start = Mock()
@@ -243,7 +243,7 @@ async def test_run_single_test_timeout(self, mock_git_engine, mock_docker_client
     container.wait.side_effect = Exception("Timeout")
     container.remove = Mock()
     
-    mock_docker_client.containers.create.return_value = container
+    mock_container_client.containers.create.return_value = container
     
     orchestrator = TestOrchestrator(mock_git_engine)
     
@@ -257,7 +257,7 @@ async def test_run_single_test_timeout(self, mock_git_engine, mock_docker_client
 
 ```python
 @pytest.mark.asyncio
-async def test_parallel_deadlock_detection(self, mock_git_engine, mock_docker_client):
+async def test_parallel_deadlock_detection(self, mock_git_engine, mock_container_client):
     """Test deadlock detection in parallel execution."""
     orchestrator = TestOrchestrator(mock_git_engine)
     
@@ -344,7 +344,7 @@ TOTAL                   791      0     100% ✅
 
 ### 1. **Reliability**
 - All code paths are tested and verified
-- Docker dependency properly mocked for CI/CD
+-  dependency properly mocked for CI/CD
 - Async/await patterns thoroughly tested
 
 ### 2. **Maintainability**
@@ -371,11 +371,11 @@ TOTAL                   791      0     100% ✅
 
 ## Key Testing Insights
 
-### 1. **Mocking Strategy for Docker**
+### 1. **Mocking Strategy for **
 
-The key to achieving 100% coverage without Docker was implementing a comprehensive mocking strategy:
+The key to achieving 100% coverage without  was implementing a comprehensive mocking strategy:
 
-- Mock Docker client initialization
+- Mock  client initialization
 - Mock container lifecycle (create, start, wait, logs, remove)
 - Mock both success and failure scenarios
 - Mock timeout conditions
@@ -444,7 +444,7 @@ tests/test_test_orchestrator_comprehensive.py
 │
 ├── TestTestOrchestratorInitialization (2 tests)
 │   ├── test_init_success
-│   └── test_init_docker_not_available
+│   └── test_init__not_available
 │
 ├── TestRunTestsAsync (3 tests)
 │   ├── test_run_tests_parallel
@@ -497,7 +497,7 @@ tests/test_test_orchestrator_comprehensive.py
 - Run coverage checks in CI/CD
 
 ### 2. **Integration Testing**
-- Add integration tests with real Docker (when available)
+- Add integration tests with real  (when available)
 - Test actual container execution
 - Verify real Git operations
 
@@ -520,9 +520,9 @@ tests/test_test_orchestrator_comprehensive.py
 
 ## Lessons Learned
 
-### 1. **Docker Mocking is Essential**
+### 1. ** Mocking is Essential**
 
-For components that depend on Docker, comprehensive mocking is not optional—it's essential for CI/CD environments where Docker isn't available.
+For components that depend on , comprehensive mocking is not optional—it's essential for CI/CD environments where  isn't available.
 
 ### 2. **Async Testing Requires Special Care**
 
