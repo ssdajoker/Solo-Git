@@ -1,9 +1,9 @@
 
+import pytest
 from click.testing import CliRunner
 from sologit.cli.main import cli
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
-from sologit.cli.main import cli
 from sologit.engines.git_engine import GitEngineError
 from sologit.engines.test_orchestrator import TestStatus, TestResult
 from datetime import datetime

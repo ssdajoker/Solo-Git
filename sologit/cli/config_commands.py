@@ -292,16 +292,6 @@ def budget_status(ctx: click.Context) -> None:
     summary_table.add_row("Within Budget", f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]")
     formatter.console.print(summary_table)
 
-    alerts = status.get("alerts")
-    if alerts:
-        alerts_panel = "\n".join(
-            f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
-            for alert in alerts
-    formatter.print_info(f"Daily Cap:       ${status['daily_cap']:.2f}")
-    formatter.print_info(f"Used Today:     ${status['current_cost']:.2f}")
-    formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
-    formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
-
     if status.get('alerts'):
         alerts_panel = "\n".join(
             f"[{theme.colors.warning}]{alert['timestamp']}[/] {alert['level'].upper()}: {alert['message']}"
