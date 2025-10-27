@@ -158,8 +158,7 @@ def cli(ctx, verbose, config):
 
     # Initialize context
     ctx.ensure_object(dict)
-    record_history = ctx.obj.get('record_history', True)
-    ctx.obj['record_history'] = record_history
+    record_history = ctx.obj.setdefault('record_history', True)
     ctx.obj['console'] = console
     ctx.obj['history'] = get_command_history() if record_history else None
     formatter.set_console(console)
