@@ -167,13 +167,21 @@ def _generate_modify_patch(
 
 
 def _generate_create_patch(rel_path: str, content: str) -> str:
+    """Create a unified diff for introducing a brand new file."""
+
     if not content.endswith("\n"):
         content += "\n"
+
     lines = content.splitlines(keepends=True)
+
+    # Provide minimal diff headers so git apply recognizes the new file.
     header = [
+        f"diff --git a/{rel_path} b/{rel_path}\n",
+        "new file mode 100644\n",
+        "index 0000000..1111111\n",
         "--- /dev/null\n",
         f"+++ b/{rel_path}\n",
-        f"@@ -0,0 +{len(lines)} @@\n",
+        f"@@ -0,0 +1,{len(lines)} @@\n",
     ]
     body = [f"+{line}" for line in lines]
     return "".join(header + body)
@@ -220,9 +228,10 @@ def test_full_ai_pipeline_end_to_end(
     git_sync: GitStateSync,
     sample_project_zip: bytes,
     ai_orchestrator: AIOrchestrator,
+    patch_engine: PatchEngine,
     test_runner: TestOrchestrator,
 ):
-    """Run the full AI-driven workflow from prompt to auto-merge."""
+    """Run the full AI-driven workflow from prompt all the way to auto-merge."""
     repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Sample App")
     repo_id = repo_info["repo_id"]
     pad_info = git_sync.create_workpad(repo_id, "AI generated documentation")
@@ -247,7 +256,12 @@ def test_full_ai_pipeline_end_to_end(
         "This file captures the AI-assisted workflow.\n"
     )
     diff = _generate_create_patch("docs/DEVELOPER_NOTES.md", doc_content)
-    git_sync.apply_patch(pad_id, diff, "Add developer notes")
+    checkpoint = patch_engine.apply_patch(
+        pad_id,
+        diff,
+        "Add developer notes",
+    )
+    assert checkpoint
 
     _, results = _run_pytest_and_record(git_sync, test_runner, pad_id)
     analysis = _analysis_from_results(results)
@@ -263,6 +277,7 @@ def test_full_ai_pipeline_end_to_end(
     repo_path = Path(repo_info["path"])
     doc_path = repo_path / "docs" / "DEVELOPER_NOTES.md"
     assert doc_path.exists()
+    assert "AI-assisted workflow" in doc_path.read_text()
 
     state_workpad = git_sync.state_manager.get_workpad(pad_id)
     assert state_workpad is not None
@@ -774,7 +789,7 @@ def test_promote_empty_workpad_fails(
     git_sync: GitStateSync,
     sample_project_zip: bytes,
 ):
-    """Verify that an empty workpad cannot be promoted."""
+    """Verify that an empty workpad is rejected by the promotion gate."""
     repo_info = git_sync.init_repo_from_zip(sample_project_zip, "Empty Workpad Repo")
     repo_id = repo_info["repo_id"]
     pad_info = git_sync.create_workpad(repo_id, "Empty Workpad")
@@ -782,3 +797,13 @@ def test_promote_empty_workpad_fails(
 
     ahead_behind = git_sync.git_engine.get_commits_ahead_behind(pad_id)
     assert ahead_behind["ahead"] == 0
+    assert ahead_behind["behind"] == 0
+
+    gate = PromotionGate(git_sync.git_engine)
+    decision = gate.evaluate(pad_id)
+    assert decision.decision == PromotionDecisionType.REJECT
+    assert any("Tests required" in reason for reason in decision.reasons)
+
+    # The state manager should still list the workpad as active (not promoted)
+    workpad_state = git_sync.state_manager.get_workpad(pad_id)
+    assert workpad_state.status == "active"
