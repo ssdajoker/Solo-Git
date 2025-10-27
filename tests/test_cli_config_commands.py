@@ -73,7 +73,7 @@ def test_config_setup_interactive():
         assert result.exit_code == 0, f"Exit code: {result.exit_code}, Output: {result.output}"
         assert "Solo Git Configuration Setup" in result.output
         assert "Enter your Abacus.ai API key" in result.output
-        assert "Configuration saved" in result.output or "Configuration Saved" in result.output
+        assert "Configuration saved" in result.output
         mock_instance.set_abacus_credentials.assert_called_with('my_api_key', 'https://api.abacus.ai/v1')
 
 
