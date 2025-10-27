@@ -143,7 +143,7 @@ class EnhancedCLI:
                     )
                 else:
                     if not git_url:
-                        raise GitEngineError("A Git URL must be provided when --zip is not used.")
+                        raise GitEngineError("A Git URL must be provided when zip_file is not used.")
                     if not name:
                         name = Path(git_url).stem.replace('.git', '')
 
