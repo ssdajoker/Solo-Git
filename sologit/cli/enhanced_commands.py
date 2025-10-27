@@ -48,7 +48,7 @@ class EnhancedCLI:
         if self._test_orchestrator is None:
             self._test_orchestrator = TestOrchestrator(self.git_engine)
         return self._test_orchestrator
-    
+
     # Repository Commands
 
     def repo_init(
@@ -93,9 +93,7 @@ class EnhancedCLI:
             # Persist repository metadata in state store
             self.formatter.print_info("Recording repository in state store")
             self.state_manager.create_repository(
-                repo_id=repo.id,
-                name=repo.name,
-                path=str(repo.path)
+                repo_id=repo.id, name=repo.name, path=str(repo.path)
             )
 
             # Load initial commit history
@@ -115,11 +113,12 @@ class EnhancedCLI:
                 details=str(exc),
             )
             raise click.Abort()
-    
+
     def _load_initial_commit_history(self, repo) -> None:
         """Load initial commit history for a repository."""
         try:
             import git
+
             self.formatter.print_info("Loading recent commit history")
             git_repo = git.Repo(repo.path)
             for commit in list(git_repo.iter_commits())[:20]:
@@ -130,7 +129,7 @@ class EnhancedCLI:
                     author=commit.author.name,
                     timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
                     parent_sha=commit.parents[0].hexsha if commit.parents else None,
-                    is_trunk=True
+                    is_trunk=True,
                 )
                 self.state_manager.add_commit(repo.id, commit_node)
         except Exception as e:
@@ -146,20 +145,22 @@ class EnhancedCLI:
 
         table = self.formatter.table(headers=["ID", "Name", "Trunk"])
         for repo in repos:
-            table.add_row(repo.id, getattr(repo, "name", repo.id), getattr(repo, "trunk_branch", "main"))
+            table.add_row(
+                repo.id, getattr(repo, "name", repo.id), getattr(repo, "trunk_branch", "main")
+            )
         self.formatter.console.print(table)
-        
+
         if active_repo:
             self.formatter.console.print(f"\n* Active repository: [bold]{active_repo}[/bold]")
-    
+
     def repo_info(self, repo_id: str) -> None:
         """Show detailed repository information."""
         repo = self.state_manager.get_repository(repo_id)
-        
+
         if not repo:
             self.formatter.print_error(f"Repository not found: {repo_id}")
             raise click.Abort()
-        
+
         # Repository details panel
         content = f"""[bold]Repository ID:[/bold] {repo.repo_id}
 [bold]Name:[/bold] {repo.name}
@@ -169,65 +170,67 @@ class EnhancedCLI:
 [bold]Total Commits:[/bold] {repo.total_commits}
 [bold]Created:[/bold] {self.formatter.format_timestamp(repo.created_at)}
 [bold]Updated:[/bold] {self.formatter.format_timestamp(repo.updated_at)}"""
-        
+
         self.formatter.print_panel(content, title=f"Repository: {repo.name}")
-        
+
         # Show commit graph
         commits = self.state_manager.get_commits(repo_id, limit=10)
         if commits:
             self.formatter.print("\n")
             self.formatter.print_header("Recent Commits")
             self.graph_renderer.render_graph(commits, max_lines=10)
-        
+
         # Show active workpads
         workpads = self.state_manager.list_workpads(repo_id)
-        active_workpads = [w for w in workpads if w.status in ['active', 'testing']]
-        
+        active_workpads = [w for w in workpads if w.status in ["active", "testing"]]
+
         if active_workpads:
             self.formatter.print("\n")
             self.formatter.print_header(f"Active Workpads ({len(active_workpads)})")
-            
+
             table = self.formatter.table(headers=["ID", "Title", "Status", "Tests", "Created"])
             for wp in active_workpads[:5]:
                 status_icon = self.formatter.theme_obj.get_status_icon(wp.status)
                 status_color = self.formatter.theme_obj.get_status_color(wp.status)
-                
+
                 table.add_row(
                     wp.workpad_id[:8],
                     wp.title,
                     f"[{status_color}]{status_icon} {wp.status}[/{status_color}]",
                     str(len(wp.test_runs)),
-                    self.formatter.format_timestamp(wp.created_at)
+                    self.formatter.format_timestamp(wp.created_at),
                 )
-            
+
             self.formatter.console.print(table)
-    
+
     # Workpad Commands
-    
+
     def pad_create(self, title: str, repo_id: Optional[str] = None) -> None:
         """Create a new workpad."""
         # Determine repo_id
         if not repo_id:
             context = self.state_manager.get_active_context()
-            repo_id = context['repo_id']
-            
+            repo_id = context["repo_id"]
+
             if not repo_id:
                 repos = self.state_manager.list_repositories()
                 if len(repos) == 1:
                     repo_id = repos[0].repo_id
                 else:
-                    self.formatter.print_error("No active repository. Specify with --repo or set active repo.")
+                    self.formatter.print_error(
+                        "No active repository. Specify with --repo or set active repo."
+                    )
                     raise click.Abort()
-        
+
         with self.formatter.progress("Creating workpad") as progress_ctx:
             progress = progress_ctx
             task = progress.add_task("[cyan]Creating workpad...", total=100)
-            
+
             try:
                 # Create workpad in git engine
                 progress.update(task, advance=50)
                 workpad = self.git_engine.create_workpad(repo_id, title)
-                
+
                 # Create state entry
                 progress.update(task, advance=25, description="[cyan]Updating state...")
                 self.state_manager.create_workpad(
@@ -235,64 +238,64 @@ class EnhancedCLI:
                     repo_id=repo_id,
                     title=title,
                     branch_name=workpad.branch_name,
-                    base_commit=workpad.base_commit_sha
+                    base_commit=workpad.base_commit_sha,
                 )
-                
+
                 # Set as active
                 self.state_manager.set_active_context(workpad_id=workpad.id)
-                
+
                 progress.update(task, advance=25, description="[green]Complete!")
-            
+
             except Exception as e:
                 progress.stop()
                 self.formatter.print_error(f"Failed to create workpad: {e}")
                 raise click.Abort()
-        
+
         # Show success
         self.formatter.print_success(f"Workpad created: {title}")
-        
+
         content = f"""[bold]Workpad ID:[/bold] {workpad.id}
 [bold]Title:[/bold] {title}
 [bold]Branch:[/bold] {workpad.branch_name}
 [bold]Base Commit:[/bold] {workpad.base_commit_sha[:8]}
 [bold]Status:[/bold] Active"""
-        
+
         self.formatter.print_panel(content, title="Workpad Details")
-        
+
         self.formatter.print_info("\nNext steps:")
         self.formatter.console.print("  1. Apply patches: [cyan]evogitctl pad apply-patch[/cyan]")
         self.formatter.console.print("  2. Run tests: [cyan]evogitctl test run[/cyan]")
-        self.formatter.console.print("  3. Or use AI: [cyan]evogitctl pair \"<task>\"[/cyan]")
-    
+        self.formatter.console.print('  3. Or use AI: [cyan]evogitctl pair "<task>"[/cyan]')
+
     def pad_list(self, repo_id: Optional[str] = None) -> None:
         """List workpads."""
         if not repo_id:
             context = self.state_manager.get_active_context()
-            repo_id = context['repo_id']
-        
+            repo_id = context["repo_id"]
+
         workpads = self.state_manager.list_workpads(repo_id)
-        
+
         if not workpads:
             self.formatter.print_warning("No workpads found.")
-            self.formatter.print_info("Create one with: evogitctl pad create \"<title>\"")
+            self.formatter.print_info('Create one with: evogitctl pad create "<title>"')
             return
-        
+
         table = self.formatter.table(
-            title="Workpads", 
-            headers=["ID", "Title", "Status", "Branch", "Patches", "Tests", "Created"]
+            title="Workpads",
+            headers=["ID", "Title", "Status", "Branch", "Patches", "Tests", "Created"],
         )
-        
-        active_workpad = self.state_manager.get_active_context()['workpad_id']
-        
+
+        active_workpad = self.state_manager.get_active_context()["workpad_id"]
+
         for wp in workpads[:20]:  # Limit display
             is_active = wp.workpad_id == active_workpad
             wp_id_display = f"[bold]{wp.workpad_id[:8]}[/bold]" if is_active else wp.workpad_id[:8]
             if is_active:
                 wp_id_display += " *"
-            
+
             status_icon = self.formatter.theme_obj.get_status_icon(wp.status)
             status_color = self.formatter.theme_obj.get_status_color(wp.status)
-            
+
             table.add_row(
                 wp_id_display,
                 wp.title[:30],
@@ -300,18 +303,18 @@ class EnhancedCLI:
                 wp.branch_name,
                 str(wp.patches_applied),
                 str(len(wp.test_runs)),
-                self.formatter.format_timestamp(wp.created_at)
+                self.formatter.format_timestamp(wp.created_at),
             )
-        
+
         self.formatter.console.print(table)
-        
+
         if active_workpad:
             self.formatter.console.print(f"\n* Active workpad: [bold]{active_workpad[:8]}[/bold]")
-    
+
     def pad_info(self, workpad_id: str) -> None:
         """Show detailed workpad information."""
         workpad = self.state_manager.get_workpad(workpad_id)
-        
+
         if not workpad:
             self.formatter.print_error(f"Workpad not found: {workpad_id}")
 
@@ -320,7 +323,9 @@ class EnhancedCLI:
 
         workpad = self.git_engine.get_workpad(pad_id)
         if workpad is None:
-            self.formatter.print_error("Workpad not found", f"Workpad {pad_id} could not be located.")
+            self.formatter.print_error(
+                "Workpad not found", f"Workpad {pad_id} could not be located."
+            )
             raise click.Abort()
 
         diff_text = self.git_engine.get_diff(pad_id)
