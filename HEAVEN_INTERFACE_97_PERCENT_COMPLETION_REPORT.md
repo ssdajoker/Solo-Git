@@ -704,7 +704,7 @@ evogitctl pad create "test feature"
 1. **Rust Toolchain Setup Guide**
    - Document Rust installation
    - Automated setup script
-   - Docker-based build option
+   - -based build option
 
 2. **GUI Accessibility**
    - Add ARIA labels

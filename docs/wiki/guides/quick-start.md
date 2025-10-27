@@ -82,7 +82,7 @@ evogitctl pair "add Redis caching to search endpoint"
 This will:
 1. 🧠 Plan the changes (GPT-4 / Claude)
 2. ✍️ Generate patches (DeepSeek Coder)
-3. 🧪 Run tests (Docker sandbox)
+3. 🧪 Run tests (subprocess sandbox)
 4. ✅ Auto-merge if green
 
 **Total time**: ~1 minute

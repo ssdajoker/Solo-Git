@@ -72,27 +72,10 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
   }
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'passed':
-      case 'promoted':
-        return '✓'
-      case 'failed':
-        return '✗'
-      case 'testing':
-      case 'running':
-        return '◉'
-      case 'pending':
-      case 'active':
-        return '○'
-      case 'skipped':
-        return '⊘'
-      case 'cancelled':
-      case 'deleted':
-        return '⊗'
-      default:
-        // Handle any unexpected status values gracefully
-        return '?'
-    }
+    if (status === 'passed' || status === 'promoted') return '✓'
+    if (status === 'failed') return '✗'
+    if (status === 'testing') return '◉'
+    return '○'
   }
 
   const getStatusClass = (status: string) => {

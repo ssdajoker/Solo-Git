@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use chrono::Utc;
@@ -35,30 +34,19 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
             .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
 
+    let tmp_path = path.with_extension("tmp");
     let contents = serde_json::to_string_pretty(value)
         .map_err(|e| format!("Failed to serialize value for {}: {}", path.display(), e))?;
-
-    let parent_dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut temp_file = tempfile::NamedTempFile::new_in(parent_dir).map_err(|e| {
-        format!(
-            "Failed to create temporary file for {}: {}",
-            path.display(),
-            e
-        )
-    })?;
-
-    temp_file.write_all(contents.as_bytes()).map_err(|e| {
-        format!(
-            "Failed to write temporary file for {}: {}",
-            path.display(),
-            e
-        )
-    })?;
-
-    temp_file
-        .persist(path)
-        .map_err(|e| format!("Failed to persist {}: {}", path.display(), e.error))?;
-    Ok(())
+    fs::write(&tmp_path, contents)
+        .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
+    match fs::rename(&tmp_path, path) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // Attempt to clean up the temporary file, ignore any error from remove
+            let _ = fs::remove_file(&tmp_path);
+            Err(format!("Failed to persist {}: {}", path.display(), e))
+        }
+    }
 }
 
 fn run_cli_command(args: Vec<String>) -> Result<String, String> {
@@ -351,6 +339,8 @@ pub(crate) fn apply_patch(
     })?;
 
     let patch_history_path = store_patch_diff(&workpad_id, &diff)?;
+    let temp_path = env::temp_dir().join(format!("sologit_patch_{}.diff", Uuid::new_v4().simple()));
+    fs::write(&temp_path, diff).map_err(|e| format!("Failed to write temporary patch: {}", e))?;
 
     let patch_arg = temp_path
         .to_str()
@@ -386,6 +376,9 @@ pub(crate) fn apply_patch(
 
     let _ = fs::remove_file(&temp_path);
 
+    let result = run_cli_command(cli_args);
+
+    let _ = fs::remove_file(&temp_path);
     result?;
 
     load_workpad(&workpad_id)
@@ -481,7 +474,10 @@ pub(crate) fn rollback_workpad(
             .create(true)
             .append(true)
             .open(&log_path)
-            .and_then(|mut file| file.write_all(entry.as_bytes()));
+            .and_then(|mut file| {
+                use std::io::Write;
+                file.write_all(entry.as_bytes())
+            });
     }
 
     let workpad = save_workpad(workpad)?;

@@ -178,7 +178,7 @@ Tasks to implement:
    - Fast-forward merge operations
 
 2. Test Orchestrator (sologit/engines/test_orchestrator.py)
-   - Docker sandbox integration
+   -  sandbox integration
    - Test configuration parsing
    - Parallel execution
    - Result collection
@@ -202,7 +202,7 @@ Tasks to implement:
 
 6. Dependencies to Add
    - gitpython>=3.1.40
-   - docker>=7.0.0
+   - >=7.0.0
 
 ================================================================================
                         PROJECT STATISTICS

@@ -322,7 +322,7 @@ evogitctl pad delete <pad-id>
 
 ### `test run`
 
-Run tests in Docker sandbox.
+Run tests in the native subprocess sandbox (no containers allowed).
 
 ```bash
 evogitctl test run [OPTIONS]
@@ -380,7 +380,7 @@ tests:
       cmd: npm run test:integration
       timeout: 120
     - name: e2e
-      cmd: docker compose up --abort-on-container-exit
+      cmd: pytest tests/e2e --maxfail=1
       timeout: 180
 ```
 

@@ -202,7 +202,7 @@ $ evogitctl config show
    - Fast-forward merge operations
 
 2. **Test Orchestration Foundation**
-   - Docker sandbox integration
+   - Subprocess sandbox integration (no container runtime)
    - Test configuration parsing
    - Parallel test execution
    - Result collection and reporting
@@ -224,7 +224,7 @@ $ evogitctl config show
 
 ### Dependencies to Add
 - `gitpython>=3.1.40` - Git operations
-- `docker>=7.0.0` - Container management
+- (container runtime intentionally excluded)
 
 ---
 

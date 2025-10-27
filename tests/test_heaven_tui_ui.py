@@ -9,9 +9,10 @@ from git import Repo
 from textual.widgets import Input
 
 from sologit.state.git_sync import GitStateSync
-from sologit.ui.heaven_tui import HeavenTUI
+from sologit.ui.heaven_tui import HeavenTUI, StatusBar
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
 from sologit.ui.test_runner import TestRunner, TestResult, TestStatus
+from sologit.ui.theme import theme
 
 
 def _build_repo_zip(tmp_path: Path) -> bytes:
@@ -113,3 +114,26 @@ async def test_heaven_tui_workpad_flow(tmp_path, monkeypatch):
 
         final_state = git_sync.state_manager.get_workpad(workpad_id)
         assert final_state.status == "promoted"
+
+
+def test_status_bar_uses_named_constants():
+    """Test that StatusBar uses named constants instead of magic values."""
+    status_bar = StatusBar()
+    
+    # Test default initialization uses named constant
+    assert status_bar.test_status == theme.icons.pending
+    assert status_bar.test_status == "○"  # Verify it's the expected character
+    
+    # Test update_context with no test_status parameter uses default constant
+    status_bar.update_context(repo_name="test-repo")
+    assert status_bar.test_status == theme.icons.pending
+    
+    # Test update_context with explicit test_status
+    status_bar.update_context(repo_name="test-repo", test_status=theme.icons.success)
+    assert status_bar.test_status == theme.icons.success
+    
+    status_bar.update_context(repo_name="test-repo", test_status=theme.icons.error)
+    assert status_bar.test_status == theme.icons.error
+    
+    status_bar.update_context(repo_name="test-repo", test_status=theme.icons.running)
+    assert status_bar.test_status == theme.icons.running
