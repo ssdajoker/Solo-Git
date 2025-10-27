@@ -760,7 +760,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         total = summary.get("total", len(results))
         timeout = summary.get("timeout", 0)
 
-        if summary.get("status") == "green" and timeout == 0:
+        if summary.get("status", "unknown") == "green" and timeout == 0:
             formatter.print_success("All tests passed! Ready to promote.")
             final_status = "passed"
         else:
