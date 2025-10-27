@@ -14,6 +14,7 @@ from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
 from sologit.engines.test_orchestrator import TestOrchestrator
 from sologit.state.manager import StateManager
+from sologit.state.schema import CommitNode
 from sologit.ui.formatter import RichFormatter
 from sologit.utils.logger import get_logger
 
@@ -56,177 +57,6 @@ class EnhancedCLI:
         git_url: Optional[str] = None,
         name: Optional[str] = None,
     ) -> None:
-        """Initialize a new repository with progress feedback."""
-
-        repo = None
-        progress = None
-        overall_task: Optional[int] = None
-
-        try:
-            with self.formatter.progress("Repository initialization") as progress_ctx:
-                progress = progress_ctx
-                overall_task = progress.add_task("Repository setup", total=100)
-
-                def run_stage(
-                    description: str,
-                    advance: int,
-                    operation: Callable[[], StageResult],
-                ) -> StageResult:
-                    if progress is None or overall_task is None:
-                        return operation()
-
-                    stage_task = progress.add_task(description, total=None)
-                    progress.update(overall_task, description=description)
-                    success = False
-                    try:
-                        result = operation()
-                        success = True
-                        return result
-                    finally:
-                        progress.remove_task(stage_task)
-                        if success and advance:
-                            progress.advance(overall_task, advance)
-
-    
-    def repo_init(self, zip_file: Optional[str] = None, git_url: Optional[str] = None, 
-                  name: Optional[str] = None) -> None:
-        """Initialize a new repository."""
-        with self.formatter.create_progress() as progress:
-            task = progress.add_task("[cyan]Initializing repository...", total=100)
-            
-            try:
-                if zip_file:
-                    zip_path = Path(zip_file)
-                    zip_data = zip_path.read_bytes()
-                    if not name:
-                        name = zip_path.stem
-
-                    repo_id = run_stage(
-                        "Importing files & creating initial commit",
-                        35,
-                        lambda: self.git_engine.init_from_zip(zip_data, name),
-                    )
-                else:
-                    if not git_url:
-                        raise GitEngineError("A Git URL must be provided when zip_file is not used.")
-                    
-                    progress.update(task, advance=30, description="[cyan]Extracting zip...")
-                    repo_id = self.git_engine.init_from_zip(zip_data, name)
-                    
-                else:  # git_url
-                    if not name:
-                        name = Path(git_url).stem.replace('.git', '')
-                    
-                    progress.update(task, advance=30, description="[cyan]Cloning repository...")
-                    repo_id = self.git_engine.init_from_git(git_url, name)
-                
-                progress.update(task, advance=40, description="[cyan]Initializing state...")
-                
-                # Get repo info
-                repo = self.git_engine.get_repo(repo_id)
-                
-                # Create state entry
-                self.state_manager.create_repository(
-                    repo_id=repo.id,
-                    name=repo.name,
-                    path=str(repo.path)
-                )
-
-                run_stage(
-                    "Recording repository in state store",
-                    15,
-                    lambda: self._initialize_repository_state(repo),
-                )
-
-                run_stage(
-                    "Loading recent commit history",
-                    10,
-                    lambda: self._load_initial_commit_history(repo),
-                )
-
-                progress.update(
-                    overall_task,
-                    description="[green]Repository ready",
-                    completed=100,
-                )
-
-        except GitEngineError as exc:
-            if progress is not None and overall_task is not None:
-                progress.update(
-                    overall_task,
-                    description="[red]Initialization failed",
-                )
-            existing = self.state_manager.list_repositories()
-            repo_suggestions = [
-                f"{tracked.repo_id} • {tracked.name}" for tracked in existing
-            ]
-            self.formatter.print_error(
-                "Repository Initialization Failed",
-                "Solo Git could not complete the initialization process.",
-                help_text="Confirm the source path or Git URL is accessible and that you have the necessary credentials.",
-                tip="Run the command again with --verbose to surface the underlying git output for troubleshooting.",
-                suggestions=["evogitctl repo list"] + repo_suggestions[:4],
-                docs_url="docs/SETUP.md#initialize-a-repository",
-                details=str(exc),
-            )
-            raise click.Abort()
-
-                
-                # Set as active
-                self.state_manager.set_active_context(repo_id=repo.id)
-                
-                # Get initial commits
-                try:
-                    import git
-                    git_repo = git.Repo(repo.path)
-                    for i, commit in enumerate(list(git_repo.iter_commits())[:20]):
-                        commit_node = CommitNode(
-                            sha=commit.hexsha,
-                            short_sha=commit.hexsha[:8],
-                            message=commit.message,
-                            author=commit.author.name,
-                            timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
-                            parent_sha=commit.parents[0].hexsha if commit.parents else None,
-                            is_trunk=True
-                        )
-                        self.state_manager.add_commit(repo.id, commit_node)
-                except Exception as e:
-                    logger.warning(f"Could not load commit history: {e}")
-                
-                progress.update(task, advance=30, description="[green]Complete!")
-            
-            except GitEngineError as e:
-                progress.stop()
-                self.formatter.print_error(f"Failed to initialize repository: {e}")
-                raise click.Abort()
-        
-        # Print success summary
-        self.formatter.print_success("Repository initialized successfully!")
-        
-        content = f"""[bold]Repository ID:[/bold] {repo.id}
-[bold]Name:[/bold] {repo.name}
-[bold]Path:[/bold] {repo.path}
-[bold]Trunk Branch:[/bold] {repo.trunk_branch}"""
-        
-        self.formatter.print_panel(content, title="Repository Details")
-        
-        self.formatter.print_info("\nNext steps:")
-        self.formatter.console.print("  1. Create a workpad: [cyan]evogitctl pad create \"<title>\"[/cyan]")
-        self.formatter.console.print("  2. Or start AI pairing: [cyan]evogitctl pair \"<task>\"[/cyan]")
-    
-
-    def _run_stage(self, description: str, operation: Callable[[], StageResult]) -> StageResult:
-        """Run a stage while emitting progress output."""
-
-        self.formatter.print_info(description)
-        return operation()
-
-    def repo_init(
-        self,
-        zip_file: Optional[str] = None,
-        git_url: Optional[str] = None,
-        name: Optional[str] = None,
-    ) -> None:
         """Initialize a new repository with simple progress output."""
 
         if not zip_file and not git_url:
@@ -240,14 +70,10 @@ class EnhancedCLI:
                 zip_path = Path(zip_file)
                 if not name:
                     name = zip_path.stem
-                archive_bytes = self._run_stage(
-                    "Loading archive",
-                    lambda: zip_path.read_bytes(),
-                )
-                repo_id = self._run_stage(
-                    "Importing repository contents",
-                    lambda: self.git_engine.init_from_zip(archive_bytes, name),
-                )
+                self.formatter.print_info("Loading archive")
+                archive_bytes = zip_path.read_bytes()
+                self.formatter.print_info("Importing repository contents")
+                repo_id = self.git_engine.init_from_zip(archive_bytes, name)
             else:
                 if not git_url:
                     raise click.BadParameter("git_url is required when no zip file is provided")
@@ -256,18 +82,26 @@ class EnhancedCLI:
                     if base.endswith(".git"):
                         base = base[:-4]
                     name = base
-                repo_id = self._run_stage(
-                    "Cloning remote repository",
-                    lambda: self.git_engine.init_from_git(git_url, name),
-                )
+                self.formatter.print_info("Cloning remote repository")
+                repo_id = self.git_engine.init_from_git(git_url, name)
 
-            repo = self._run_stage(
-                "Fetching repository metadata",
-                lambda: self.git_engine.get_repo(repo_id),
-            )
+            self.formatter.print_info("Fetching repository metadata")
+            repo = self.git_engine.get_repo(repo_id)
             if repo is None:
                 raise GitEngineError("Repository initialization did not return metadata")
 
+            # Persist repository metadata in state store
+            self.formatter.print_info("Recording repository in state store")
+            self.state_manager.create_repository(
+                repo_id=repo.id,
+                name=repo.name,
+                path=str(repo.path)
+            )
+
+            # Load initial commit history
+            self._load_initial_commit_history(repo)
+
+            # Set as active repository
             self.state_manager.set_active_context(repo_id=repo.id)
             self.formatter.print_success(
                 f"Repository {repo.name} ({repo.id}) initialized at {repo.path}"
@@ -281,6 +115,26 @@ class EnhancedCLI:
                 details=str(exc),
             )
             raise click.Abort()
+    
+    def _load_initial_commit_history(self, repo) -> None:
+        """Load initial commit history for a repository."""
+        try:
+            import git
+            self.formatter.print_info("Loading recent commit history")
+            git_repo = git.Repo(repo.path)
+            for commit in list(git_repo.iter_commits())[:20]:
+                commit_node = CommitNode(
+                    sha=commit.hexsha,
+                    short_sha=commit.hexsha[:8],
+                    message=commit.message,
+                    author=commit.author.name,
+                    timestamp=datetime.fromtimestamp(commit.committed_date).isoformat(),
+                    parent_sha=commit.parents[0].hexsha if commit.parents else None,
+                    is_trunk=True
+                )
+                self.state_manager.add_commit(repo.id, commit_node)
+        except Exception as e:
+            logger.warning(f"Could not load commit history: {e}")
 
     def repo_list(self) -> None:
         """Render repositories tracked by the Git engine."""
