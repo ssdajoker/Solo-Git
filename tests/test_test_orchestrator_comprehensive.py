@@ -160,6 +160,43 @@ async def test_parallel_invokes_callbacks(tmp_path: Path, mock_git_engine: Mock)
     assert any(stream == "stdout" for _, stream, _ in seen_lines)
 
 
+def test_get_summary_treats_skips_as_success(tmp_path: Path, mock_git_engine: Mock) -> None:
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    results = [
+        TestResult(name="passed", status=TestStatus.PASSED, duration_ms=5),
+        TestResult(name="skipped", status=TestStatus.SKIPPED, duration_ms=1, error="dependency"),
+    ]
+
+    summary = orchestrator.get_summary(results)
+
+    assert summary == {
+        "total": 2,
+        "passed": 1,
+        "failed": 0,
+        "timeout": 0,
+        "error": 0,
+        "skipped": 1,
+        "status": "green",
+    }
+
+
+def test_get_summary_marks_red_when_failures(tmp_path: Path, mock_git_engine: Mock) -> None:
+    orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
+
+    results = [
+        TestResult(name="passed", status=TestStatus.PASSED, duration_ms=5),
+        TestResult(name="failed", status=TestStatus.FAILED, duration_ms=3, exit_code=1),
+        TestResult(name="skipped", status=TestStatus.SKIPPED, duration_ms=1),
+    ]
+
+    summary = orchestrator.get_summary(results)
+
+    assert summary["failed"] == 1
+    assert summary["skipped"] == 1
+    assert summary["status"] == "red"
+
+
 @pytest.mark.asyncio
 async def test_collects_metrics(tmp_path: Path, mock_git_engine: Mock):
     orchestrator = make_orchestrator(mock_git_engine, tmp_path, mode="subprocess")
