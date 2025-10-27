@@ -293,7 +293,7 @@ def test_run_interactive_shell_no_history(cli_main, monkeypatch):
     monkeypatch.setattr(
         cli_main,
         "get_cli_history_path",
-        lambda: (_ for _ in ()).throw(AssertionError("cli history path should not be used")),
+        lambda: pytest.fail("cli history path should not be used"),
     )
 
     executed = {}
