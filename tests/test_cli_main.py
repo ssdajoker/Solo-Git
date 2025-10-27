@@ -181,7 +181,7 @@ def test_execute_cli_command_no_history(cli_main, monkeypatch):
     monkeypatch.setattr(
         cli_main,
         "get_command_history",
-        lambda: (_ for _ in ()).throw(AssertionError("history should not be accessed")),
+        lambda: pytest.fail("history should not be accessed"),
     )
 
     exit_code = cli_main._execute_cli_command(
