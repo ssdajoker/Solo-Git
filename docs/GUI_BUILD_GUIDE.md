@@ -7,7 +7,7 @@ This guide summarizes the steps taken to verify the Heaven GUI build inside the 
 - Node.js and npm (for installing the frontend dependencies).
 - Rust toolchain with Cargo (required by Tauri for native builds).
 - System packages that provide the GTK / GLib development headers required by `glib-sys`.
-  - On Debian / Ubuntu systems install them with: `apt-get update && apt-get install -y libgtk-3-dev libglib2.0-dev`.
+  - On Debian/Ubuntu systems install them with: `apt-get update && apt-get install -y libgtk-3-dev libglib2.0-dev`.
   - Ensure `pkg-config` can locate `glib-2.0.pc` (set `PKG_CONFIG_PATH` if the file is in a non-standard directory).
 - (Optional) Sample Solo-Git state data under `~/.sologit/state/*.json` for validating data loading in the UI.
 
