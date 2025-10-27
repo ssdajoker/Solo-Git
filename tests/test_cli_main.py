@@ -288,7 +288,7 @@ def test_run_interactive_shell_no_history(cli_main, monkeypatch):
     monkeypatch.setattr(
         cli_main,
         "get_command_history",
-        lambda: (_ for _ in ()).throw(AssertionError("history should not be accessed")),
+        lambda: pytest.fail("history should not be accessed"),
     )
     monkeypatch.setattr(
         cli_main,
