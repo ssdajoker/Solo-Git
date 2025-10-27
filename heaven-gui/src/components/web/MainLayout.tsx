@@ -124,7 +124,10 @@ export function MainLayout({
       } catch (error) {
         console.error(`Failed to read file ${path}:`, error);
         // Optionally show an error to the user
-        setFileContents(prev => ({ ...prev, [tabId]: `Error loading file: ${error}` }));
+        setFileContents(prev => ({
+          ...prev,
+          [tabId]: `Error loading file. Please try again.${error && error.message ? ` (${error.message})` : ''}`
+        }));
       }
     }
   }
