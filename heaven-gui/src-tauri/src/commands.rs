@@ -24,7 +24,32 @@ pub(crate) fn read_file_content(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub(crate) fn write_file_content(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, content).map_err(|e| format!("Failed to write to file {}: {}", path, e))
+    // Set maximum file size (e.g., 1MB)
+    const MAX_FILE_SIZE: usize = 1024 * 1024; // 1MB
+    if content.len() > MAX_FILE_SIZE {
+        return Err(format!("File size exceeds maximum allowed size of {} bytes", MAX_FILE_SIZE));
+    }
+
+    // Get repository root directory
+    let repo_dir = match get_state_dir() {
+        Ok(dir) => dir,
+        Err(e) => return Err(format!("Failed to get repository directory: {}", e)),
+    };
+
+    // Sanitize and resolve the path
+    let rel_path = Path::new(&path);
+    if rel_path.is_absolute() {
+        return Err("Absolute paths are not allowed".to_string());
+    }
+    let full_path = repo_dir.join(rel_path).canonicalize()
+        .map_err(|e| format!("Invalid path: {}", e))?;
+
+    // Ensure the resolved path is within the repository directory
+    if !full_path.starts_with(&repo_dir) {
+        return Err("Attempted directory traversal or write outside repository directory".to_string());
+    }
+
+    fs::write(&full_path, content).map_err(|e| format!("Failed to write to file {}: {}", full_path.display(), e))
 }
 
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
