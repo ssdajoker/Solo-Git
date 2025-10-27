@@ -19,8 +19,15 @@ from sologit import __version__
 from sologit.utils.logger import get_logger, setup_logging
 try:
     from sologit.cli import commands, config_commands
-except ModuleNotFoundError:
-    print("Could not import commands and config_commands")
+except ModuleNotFoundError as e:
+    print(
+        f"Error: Could not import 'commands' and/or 'config_commands' from 'sologit.cli'.\n"
+        f"Details: {e}\n"
+        "Possible solutions:\n"
+        "- Ensure that the 'sologit' package is installed and accessible in your Python environment.\n"
+        "- Check your PYTHONPATH and installation for missing files.\n"
+        "- If you are developing, make sure you have run the appropriate setup/install commands."
+    )
     commands = None
     config_commands = None
 try:
