@@ -11,7 +11,7 @@ import click
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completer, Completion, FuzzyCompleter
-from prompt_toolkit.history import FileHistory
+from prompt_toolkit.history import FileHistory, InMemoryHistory
 from prompt_toolkit.styles import Style
 
 from sologit.ui.history import get_cli_history_path
@@ -175,14 +175,31 @@ class CommandHistory:
 def create_enhanced_prompt(
     history_path: Optional[Path] = None,
     cli_app: Optional[click.MultiCommand] = None,
+    *,
+    use_file_history: bool = True,
 ) -> PromptSession:
-    """Create an enhanced prompt with autocomplete and history."""
-    if history_path is None:
-        history_path = get_cli_history_path()
+    """Create an enhanced prompt with autocomplete and history.
 
-    history_file = Path(history_path)
-    history_file.parent.mkdir(parents=True, exist_ok=True)
-    history_file.touch(exist_ok=True)
+    Args:
+        history_path: Optional path for the persistent history file. When
+            ``None`` the default CLI history path is used.
+        cli_app: The Click command tree used to build autocomplete suggestions.
+        use_file_history: When ``True`` (default), store history entries on
+            disk using :class:`prompt_toolkit.history.FileHistory`. When
+            ``False`` an in-memory history is used and no filesystem writes are
+            performed.
+    """
+
+    if use_file_history:
+        if history_path is None:
+            history_path = get_cli_history_path()
+
+        history_file = Path(history_path)
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+        history_file.touch(exist_ok=True)
+        history = FileHistory(str(history_file))
+    else:
+        history = InMemoryHistory()
 
     # Create style based on Heaven Interface theme
     prompt_style = Style.from_dict({
@@ -196,7 +213,7 @@ def create_enhanced_prompt(
     completer = FuzzyCompleter(SoloGitCompleter(cli_app=cli_app))
 
     session = PromptSession(
-        history=FileHistory(str(history_file)),
+        history=history,
         completer=completer,
         auto_suggest=AutoSuggestFromHistory(),
         style=prompt_style,

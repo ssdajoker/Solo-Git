@@ -59,7 +59,7 @@ This wiki serves as the central knowledge base for Solo Git, tracking the projec
   - Auto-Merge Workflow: Complete test-to-promotion automation
   - CI Orchestrator: Post-merge smoke tests with rollback
   - Rollback Handler: **62%** coverage (automatic reversion)
-  - Test Suite: 48 tests, 46 passing (2 Docker-dependent)
+  - Test Suite: 48 tests, 46 passing (2 legacy container-dependent)
   - CLI Commands: 5 new commands for Phase 3 workflows
 
 ---

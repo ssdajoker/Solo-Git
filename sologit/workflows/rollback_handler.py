@@ -10,7 +10,6 @@ from typing import Optional
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.workflows.ci_orchestrator import CIResult
 from sologit.utils.logger import get_logger
-from sologit.core.workpad import Workpad
 
 logger = get_logger(__name__)
 
@@ -103,7 +102,7 @@ class RollbackHandler:
                 # Create new workpad with "fix" prefix
                 pad_title = f"fix-ci-{commit_hash[:7]}"
                 new_pad = self.git_engine.create_workpad(repo_id, pad_title)
-                new_pad_id = new_pad.id if isinstance(new_pad, Workpad) else new_pad
+                new_pad_id = new_pad.id
                 
                 # Note: The changes are already in trunk history, so we don't
                 # need to reapply them to the workpad. The developer can cherry-pick

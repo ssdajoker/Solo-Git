@@ -21,7 +21,7 @@ All dependencies installed, CLI tested, and comprehensive documentation created.
   - ✅ Rich 13.7+ (beautiful CLI formatting)
   - ✅ Textual 0.47+ (TUI framework)
   - ✅ GitPython 3.1+ (Git operations)
-  - ✅ Docker 7.0+ (sandboxed testing)
+  - ✅ No container runtime required (sandboxing handled via subprocesses)
   - ✅ Click 8.1+ (CLI framework)
   - ✅ Prompt-toolkit 3.0+ (interactive shell)
   - ✅ PyYAML, requests, pytest, and more

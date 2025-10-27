@@ -168,12 +168,16 @@ class AbacusClient:
                 delay = self._get_retry_delay(response, attempt)
                 logger.warning(
                     "Request to %s failed with status %d. Retrying in %.2fs...",
-                    path, response.status_code, delay
+                    path,
+                    response.status_code,
+                    delay,
                 )
                 time.sleep(delay)
                 continue
 
             raise self._build_http_error(path, response)
+
+        raise AbacusAPIError(f"Request to {path} failed after {max_retries} retries.")
 
     def _get_retry_delay(self, response: requests.Response, attempt: int) -> float:
         """Calculate retry delay with exponential backoff and jitter."""

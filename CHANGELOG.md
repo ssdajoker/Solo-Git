@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Removed
-- Dropped Docker-based sandbox execution; tests now run directly via subprocesses.
+- Dropped container-based sandbox execution; tests now run directly via subprocesses.
 
 ### Changed
 - Simplified test configuration by removing `sandbox_image` and `execution_mode` options.

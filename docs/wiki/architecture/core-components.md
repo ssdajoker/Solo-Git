@@ -30,7 +30,7 @@
 │  ┌────────────────┴─────────────────────────────┐      │
 │  │         External Services                     │      │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐   │      │
-│  │  │ Abacus.ai│  │  Docker  │  │ Jenkins  │   │      │
+│  │  │ Abacus.ai│  │  (legacy container runtime)  │  │ Jenkins  │   │      │
 │  │  │ RouteLLM │  │ Sandbox  │  │   CI     │   │      │
 │  │  └──────────┘  └──────────┘  └──────────┘   │      │
 │  └──────────────────────────────────────────────┘      │
@@ -81,7 +81,7 @@
 **Purpose**: Execute tests in isolated sandboxes
 
 **Responsibilities:**
-- Docker container management
+- Subprocess sandbox orchestration (legacy container runtime removed)
 - Test configuration parsing (evogit.yaml)
 - Parallel test execution
 - Dependency graph resolution
@@ -90,7 +90,7 @@
 
 **Key Classes:**
 - `TestOrchestrator` - Main test coordinator
-- `SandboxManager` - Docker container lifecycle
+- `SandboxManager` - sandbox lifecycle (subprocess-based)
 - `TestRunner` - Individual test execution
 
 **See**: [Test Orchestrator Design](./test-orchestrator.md)
@@ -258,7 +258,7 @@ CLI → TestOrchestrator.run_tests()
 1. Load test config (evogit.yaml)
 2. Build dependency graph
 3. For each test:
-   a. Create Docker container
+   a. Spawn subprocess sandbox
    b. Mount workpad (read-only)
    c. Run test command
    d. Collect output
@@ -320,7 +320,7 @@ Return: commit_hash
 ## Security Considerations
 
 ### Sandboxing
-- **Tests run in Docker**: Isolated from host system
+- **Tests run in subprocess sandboxes**: Isolated from host system
 - **Read-only mounts**: Workpads mounted read-only
 - **Network isolation**: Containers have no network access
 - **Resource limits**: CPU, memory, and time limits enforced
@@ -369,7 +369,7 @@ Return: commit_hash
 - **API requests**: Rate limited by provider
 
 ### Future Scaling (Phase 4+)
-- **Distributed test execution**: Multiple Docker hosts
+- **Distributed test execution**: Multiple subprocess workers
 - **Shared repository storage**: Network file system
 - **Load balancing**: Multiple API endpoints
 - **Horizontal scaling**: Multiple Solo Git instances

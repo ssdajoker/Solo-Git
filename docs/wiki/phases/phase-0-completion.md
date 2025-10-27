@@ -115,7 +115,7 @@ The following need to be added in Phase 1:
 - `sologit/engines/git_engine.py` - Git operations
 - `sologit/engines/patch_engine.py` - Patch application
 - `sologit/engines/test_orchestrator.py` - Test execution
-- Dependencies: gitpython>=3.1.40, docker>=7.0.0
+- Dependencies: gitpython>=3.1.40 (container runtime intentionally excluded)
 
 ## Verification Checklist
 

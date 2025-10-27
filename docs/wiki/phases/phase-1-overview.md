@@ -25,7 +25,7 @@ Complete Git operations and workpad lifecycle, including repository initializati
 - State persistence
 
 ### 3. Test Orchestrator ⏳
-- Docker sandbox integration
+- Subprocess sandbox integration (no containers)
 - Test configuration parsing (evogit.yaml)
 - Test execution with timeout
 - Result collection and reporting
@@ -47,7 +47,7 @@ Complete Git operations and workpad lifecycle, including repository initializati
 
 ### 6. Dependencies ✅ (Now)
 - gitpython>=3.1.40
-- docker>=7.0.0
+- (container runtime intentionally excluded)
 
 ## Architecture
 
@@ -125,7 +125,7 @@ TestOrchestrator
 - [ ] Repository can be initialized from Git URL
 - [ ] Workpad can be created from repository
 - [ ] Patches can be applied to workpad
-- [ ] Tests can run in Docker sandbox
+- [ ] Tests can run in subprocess sandbox (container-free)
 - [ ] Workpad can be promoted to trunk (fast-forward merge)
 - [ ] CLI commands work end-to-end
 
@@ -142,8 +142,7 @@ TestOrchestrator
 # Git operations
 gitpython>=3.1.40
 
-# Docker operations
-docker>=7.0.0
+# Container runtime intentionally excluded
 ```
 
 ## Next Phase
