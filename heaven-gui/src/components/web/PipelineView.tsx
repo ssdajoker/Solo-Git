@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { cn } from '../shared/utils'
 
 export type PipelineStage = 'build' | 'unit' | 'integration' | 'e2e' | 'deploy'
-export type PipelineStageStatus = 'pending' | 'running' | 'success' | 'failed' | 'unstable' | 'cancelled'
+export type PipelineStageStatus = 'pending' | 'running' | 'success' | 'failed' | 'unstable'
 
 export interface PipelineStageData {
   id: PipelineStage
@@ -18,8 +18,6 @@ export interface PipelineStageData {
   duration?: number
   logs?: string[]
 }
-
-export type BuildStatus = 'success' | 'failed' | 'running' | 'pending' | 'cancelled'
 
 export interface PipelineViewProps {
   buildNumber: number
@@ -30,7 +28,7 @@ export interface PipelineViewProps {
   onCancel?: () => void
   recentBuilds?: Array<{
     number: number
-    status: BuildStatus
+    status: 'success' | 'failed' | 'running'
     timestamp: string
   }>
   className?: string
@@ -56,9 +54,7 @@ export function PipelineView({
       case 'failed': return '✗'
       case 'running': return '◉'
       case 'unstable': return '⚠'
-      case 'pending': return '○'
-      case 'cancelled': return '⊗'
-      default: return '?'
+      default: return '○'
     }
   }
   
@@ -68,8 +64,6 @@ export function PipelineView({
       case 'failed': return 'bg-heaven-accent-red/20 border-heaven-accent-red text-heaven-accent-red'
       case 'running': return 'bg-heaven-accent-cyan/20 border-heaven-accent-cyan text-heaven-accent-cyan'
       case 'unstable': return 'bg-heaven-accent-orange/20 border-heaven-accent-orange text-heaven-accent-orange'
-      case 'pending': return 'bg-heaven-bg-tertiary border-white/10 text-heaven-text-tertiary'
-      case 'cancelled': return 'bg-heaven-bg-tertiary border-white/5 text-heaven-text-secondary'
       default: return 'bg-heaven-bg-tertiary border-white/10 text-heaven-text-tertiary'
     }
   }
@@ -100,32 +94,20 @@ export function PipelineView({
             
             {/* Recent Builds */}
             <div className="flex items-center gap-1">
-              {recentBuilds.slice(0, 10).map((build) => {
-                const buildColor = build.status === 'success' 
-                  ? 'bg-heaven-accent-green/20 text-heaven-accent-green hover:bg-heaven-accent-green/30'
-                  : build.status === 'failed'
-                  ? 'bg-heaven-accent-red/20 text-heaven-accent-red hover:bg-heaven-accent-red/30'
-                  : build.status === 'running'
-                  ? 'bg-heaven-accent-cyan/20 text-heaven-accent-cyan hover:bg-heaven-accent-cyan/30'
-                  : build.status === 'pending'
-                  ? 'bg-heaven-bg-tertiary text-heaven-text-tertiary hover:bg-heaven-bg-hover'
-                  : build.status === 'cancelled'
-                  ? 'bg-heaven-bg-tertiary text-heaven-text-secondary hover:bg-heaven-bg-hover'
-                  : 'bg-heaven-bg-tertiary text-heaven-text-tertiary hover:bg-heaven-bg-hover'
-                
-                return (
-                  <button
-                    key={build.number}
-                    className={cn(
-                      'w-6 h-6 rounded flex items-center justify-center text-xs transition-colors duration-150',
-                      buildColor
-                    )}
-                    title={`Build #${build.number} - ${build.status}`}
-                  >
-                    {build.number === buildNumber ? '●' : '○'}
-                  </button>
-                )
-              })}
+              {recentBuilds.slice(0, 10).map((build) => (
+                <button
+                  key={build.number}
+                  className={cn(
+                    'w-6 h-6 rounded flex items-center justify-center text-xs transition-colors duration-150',
+                    build.status === 'success' && 'bg-heaven-accent-green/20 text-heaven-accent-green hover:bg-heaven-accent-green/30',
+                    build.status === 'failed' && 'bg-heaven-accent-red/20 text-heaven-accent-red hover:bg-heaven-accent-red/30',
+                    build.status === 'running' && 'bg-heaven-accent-cyan/20 text-heaven-accent-cyan hover:bg-heaven-accent-cyan/30'
+                  )}
+                  title={`Build #${build.number} - ${build.status}`}
+                >
+                  {build.number === buildNumber ? '●' : '○'}
+                </button>
+              ))}
             </div>
           </div>
           

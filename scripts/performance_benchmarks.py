@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
-"""Solo Git performance benchmarking utilities."""
+"""Solo Git performance benchmarking utilities.
+
+This script exercises several parts of the Solo Git stack using
+synthetic repositories and lightweight simulated workloads.  The
+results are written to both a temporary directory (for ad-hoc
+inspection) and to ``docs/performance_results.json`` inside the
+repository so they can be committed or compared over time.
+
+The benchmark intentionally avoids calling any external AI services so
+that it can run in disconnected development environments.  When the
+full AI orchestration stack is configured locally the real
+:class:`~sologit.orchestration.ai_orchestrator.AIOrchestrator` can be
+used instead by passing ``--use-real-ai``.
+"""
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
+import logging
 import os
 import platform
 import random
@@ -16,25 +31,29 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from git import Repo
 
 CURRENT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = CURRENT_DIR.parent
+
 if str(REPO_ROOT) not in os.sys.path:
     os.sys.path.insert(0, str(REPO_ROOT))
 
 from sologit.engines.git_engine import GitEngine
-from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator
-from sologit.orchestration.ai_orchestrator import AIOrchestrator
+from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator, TestExecutionMode
+from sologit.orchestration.ai_orchestrator import AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse
+from sologit.orchestration.model_router import ComplexityMetrics
 from sologit.orchestration.planning_engine import CodePlan, FileChange
 from sologit.orchestration.code_generator import GeneratedPatch
 from sologit.state.manager import JSONStateBackend, StateManager
-from sologit.ui.enhanced_tui import HeavenTUI
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
-@dataclass
+@dataclass(frozen=True)
 class RepoSpec:
     """Specification for synthetic repositories."""
 
@@ -45,7 +64,7 @@ class RepoSpec:
 
 def _write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
 
 
 def create_synthetic_repo(base_dir: Path, spec: RepoSpec) -> Path:
@@ -59,6 +78,7 @@ def create_synthetic_repo(base_dir: Path, spec: RepoSpec) -> Path:
     for i in range(spec.files):
         file_path = repo_dir / f"src/file_{i:04d}.txt"
         _write_file(file_path, f"Synthetic content for file {i}\n")
+
     files_to_add = [
         str(p.relative_to(repo_dir))
         for p in repo_dir.rglob("*")
@@ -102,12 +122,14 @@ def create_synthetic_repo(base_dir: Path, spec: RepoSpec) -> Path:
         process.stdin.write("done\n")
         process.stdin.flush()
         process.stdin.close()
-        process.wait()
+        return_code = process.wait()
+        if return_code != 0:
+            raise RuntimeError(f"git fast-import exited with {return_code}")
 
     return repo_dir
 
 
-def benchmark_repo_initialization(base_dir: Path, specs: List[RepoSpec]) -> Tuple[GitEngine, Dict[str, Any]]:
+def benchmark_repo_initialization(base_dir: Path, specs: Iterable[RepoSpec]) -> Tuple[GitEngine, Dict[str, Any]]:
     """Benchmark repository initialization times."""
 
     engine_dir = base_dir / "engine"
@@ -119,7 +141,7 @@ def benchmark_repo_initialization(base_dir: Path, specs: List[RepoSpec]) -> Tupl
     for spec in specs:
         source_repo = create_synthetic_repo(base_dir / "sources", spec)
         start = time.perf_counter()
-        repo_id = engine.init_from_git(str(source_repo))
+        repo_id = engine.init_from_git(str(source_repo), name=f"bench-{spec.name}")
         duration = time.perf_counter() - start
         repo_ids[spec.name] = repo_id
         results.append(
@@ -136,6 +158,9 @@ def benchmark_repo_initialization(base_dir: Path, specs: List[RepoSpec]) -> Tupl
 
 def benchmark_workpads(engine: GitEngine, repo_id: str, count: int = 60) -> Dict[str, Any]:
     """Benchmark workpad creation performance."""
+
+    if count <= 0:
+        return {"count": 0, "average_seconds": 0.0, "p95_seconds": 0.0, "max_seconds": 0.0, "workpad_ids": []}
 
     durations: List[float] = []
     workpad_ids: List[str] = []
@@ -175,6 +200,7 @@ def benchmark_test_execution(engine: GitEngine, repo_id: str) -> Dict[str, Any]:
 
     orchestrator = TestOrchestrator(
         git_engine=engine,
+        execution_mode=TestExecutionMode.SUBPROCESS.value,
     )
 
     pad_id = engine.create_workpad(repo_id, "Test Runner Pad")
@@ -205,18 +231,20 @@ def benchmark_test_execution(engine: GitEngine, repo_id: str) -> Dict[str, Any]:
     }
 
 
-def _simulate_sandboxed_tests(repo_path: Path, tests: List[TestConfig]) -> float:
+def _simulate_sandboxed_tests(repo_path: Path, tests: Iterable[TestConfig]) -> float:
     with tempfile.TemporaryDirectory() as tmpdir:
         sandbox_repo = Path(tmpdir) / "repo"
         shutil.copytree(repo_path, sandbox_repo)
         start = time.perf_counter()
         for test in tests:
-            subprocess.run(
+            completed = subprocess.run(
                 ["/bin/sh", "-c", test.cmd],
                 cwd=str(sandbox_repo),
                 check=True,
                 capture_output=True,
             )
+            if completed.returncode != 0:
+                raise RuntimeError(f"Sandboxed test {test.name} failed with exit code {completed.returncode}")
         return time.perf_counter() - start
 
 
@@ -248,7 +276,73 @@ def _generate_mock_patch(plan: CodePlan) -> GeneratedPatch:
     )
 
 
-def benchmark_ai_operations(concurrency: int = 12) -> Dict[str, Any]:
+class _MockAIOrchestrator:
+    """Offline-friendly stand-in for :class:`AIOrchestrator`."""
+
+    def __init__(self) -> None:
+        self.random = random.Random(42)
+
+    def _simulate_latency(self, base: float = 0.05, jitter: float = 0.02) -> float:
+        duration = base + self.random.random() * jitter
+        time.sleep(duration)
+        return duration
+
+    def plan(self, prompt: str, force_model: Optional[str] = None, **_: Any) -> PlanResponse:
+        self._simulate_latency(0.06, 0.04)
+        return PlanResponse(
+            plan=_generate_mock_plan(prompt),
+            model_used=force_model or "mock-planner",
+            cost_usd=0.0,
+            complexity=ComplexityMetrics(
+                score=0.25,
+                security_sensitive=False,
+                estimated_patch_size=10,
+                file_count=1,
+                has_tests=True,
+                requires_architecture=False,
+            ),
+        )
+
+    def generate_patch(self, plan: CodePlan, force_model: Optional[str] = None, **_: Any) -> PatchResponse:
+        self._simulate_latency(0.08, 0.05)
+        return PatchResponse(
+            patch=_generate_mock_patch(plan),
+            model_used=force_model or "mock-coder",
+            cost_usd=0.0,
+        )
+
+    def review_patch(self, patch: GeneratedPatch, **_: Any) -> ReviewResponse:
+        self._simulate_latency(0.04, 0.03)
+        return ReviewResponse(
+            approved=True,
+            issues=[],
+            suggestions=["Looks good"],
+            model_used="mock-reviewer",
+            cost_usd=0.0,
+        )
+
+
+def _create_ai_orchestrator(use_real: bool) -> Tuple[Any, str]:
+    if not use_real:
+        return _MockAIOrchestrator(), "mock"
+
+    try:
+        orchestrator = AIOrchestrator()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning("Falling back to mock AI orchestrator: %s", exc)
+        return _MockAIOrchestrator(), "mock"
+
+    api_key = getattr(getattr(orchestrator, "client", None), "api_key", None)
+    if not api_key:
+        logger.info("AI API key not configured; using offline mock orchestrator")
+        return _MockAIOrchestrator(), "mock"
+
+    return orchestrator, "real"
+
+
+def benchmark_ai_operations(concurrency: int = 12, use_real_orchestrator: bool = False) -> Dict[str, Any]:
+    orchestrator, mode = _create_ai_orchestrator(use_real_orchestrator)
+
     prompts = [
         "Fix typos in documentation",
         "Add API endpoint for batch commits",
@@ -257,8 +351,6 @@ def benchmark_ai_operations(concurrency: int = 12) -> Dict[str, Any]:
     ]
 
     sequential_timings: Dict[str, float] = {}
-    orchestrator = AIOrchestrator()
-
     model_prompts = [
         ("llama-3.1-8b-instruct", prompts[0]),
         ("gpt-4o", prompts[2]),
@@ -282,21 +374,26 @@ def benchmark_ai_operations(concurrency: int = 12) -> Dict[str, Any]:
     orchestrator.review_patch(patch)
     sequential_timings["review_planning-tier"] = time.perf_counter() - start
 
+    durations: List[float] = []
+
     def run_parallel(prompt: str) -> float:
-        local_orchestrator = AIOrchestrator()
+        local_orchestrator, _ = _create_ai_orchestrator(use_real_orchestrator)
         start_time = time.perf_counter()
         local_orchestrator.plan(prompt)
         return time.perf_counter() - start_time
 
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(run_parallel, random.choice(prompts)) for _ in range(concurrency)]
-        durations = [future.result() for future in as_completed(futures)]
+    worker_count = max(1, concurrency)
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [executor.submit(run_parallel, random.choice(prompts)) for _ in range(worker_count)]
+        for future in as_completed(futures):
+            durations.append(future.result())
 
     return {
+        "mode": mode,
         "sequential_seconds": sequential_timings,
-        "concurrency": concurrency,
-        "concurrent_average_seconds": statistics.mean(durations),
-        "concurrent_max_seconds": max(durations),
+        "concurrency": worker_count,
+        "concurrent_average_seconds": statistics.mean(durations) if durations else 0.0,
+        "concurrent_max_seconds": max(durations) if durations else 0.0,
     }
 
 
@@ -307,7 +404,6 @@ def benchmark_state_io(state_dir: Path, count: int = 500) -> Dict[str, Any]:
     repo_id = "repo-benchmark"
     manager.create_repository(repo_id, "Benchmark Repo", str(state_dir / "repo"))
 
-    workpad_ids: List[str] = []
     start_write = time.perf_counter()
     for index in range(count):
         workpad_id = f"pad-{index:05d}"
@@ -320,7 +416,6 @@ def benchmark_state_io(state_dir: Path, count: int = 500) -> Dict[str, Any]:
         )
         manager.create_test_run(workpad_id, "fast")
         manager.create_ai_operation(workpad_id, "plan", "gpt-4o", "benchmark")
-        workpad_ids.append(workpad_id)
 
     write_duration = time.perf_counter() - start_write
 
@@ -346,6 +441,7 @@ def benchmark_state_io(state_dir: Path, count: int = 500) -> Dict[str, Any]:
 
 
 async def _measure_gui_render(state_dir: Path, engine_dir: Path) -> float:
+    from sologit.ui.enhanced_tui import HeavenTUI
     from sologit.ui.enhanced_tui import (
         CommitGraphWidget,
         WorkpadStatusWidget,
@@ -355,25 +451,25 @@ async def _measure_gui_render(state_dir: Path, engine_dir: Path) -> float:
     from textual.widgets import Header, Footer, Log
 
     class BenchmarkCommitGraphWidget(CommitGraphWidget):
-        def __init__(self, git_sync, widget_id: str | None = None):
+        def __init__(self, git_sync, widget_id: Optional[str] = None):
             super().__init__(git_sync)
             if widget_id:
                 self.id = widget_id
 
     class BenchmarkWorkpadStatusWidget(WorkpadStatusWidget):
-        def __init__(self, git_sync, widget_id: str | None = None):
+        def __init__(self, git_sync, widget_id: Optional[str] = None):
             super().__init__(git_sync)
             if widget_id:
                 self.id = widget_id
 
     class BenchmarkAIActivityWidget(AIActivityWidget):
-        def __init__(self, git_sync, widget_id: str | None = None):
+        def __init__(self, git_sync, widget_id: Optional[str] = None):
             super().__init__(git_sync)
             if widget_id:
                 self.id = widget_id
 
     class BenchmarkTestOutputWidget(TestOutputWidget):
-        def __init__(self, widget_id: str | None = None):
+        def __init__(self, widget_id: Optional[str] = None):
             Log.__init__(self, highlight=True)
             self.test_run_id = None
             if widget_id:
@@ -389,7 +485,7 @@ async def _measure_gui_render(state_dir: Path, engine_dir: Path) -> float:
                 data_dir=engine_dir,
             )
 
-        def compose(self):
+        def compose(self):  # type: ignore[override]
             yield Header()
             yield BenchmarkCommitGraphWidget(self.git_sync, widget_id="commit-graph")
             yield BenchmarkWorkpadStatusWidget(self.git_sync, widget_id="workpad-status")
@@ -405,7 +501,13 @@ async def _measure_gui_render(state_dir: Path, engine_dir: Path) -> float:
 
 
 def benchmark_gui(state_dir: Path, engine_dir: Path) -> Dict[str, Any]:
-    return {"initial_render_seconds": asyncio.run(_measure_gui_render(state_dir, engine_dir))}
+    try:
+        duration = asyncio.run(_measure_gui_render(state_dir, engine_dir))
+    except Exception as exc:  # pragma: no cover - depends on terminal capabilities
+        logger.warning("GUI benchmark unavailable: %s", exc)
+        return {"initial_render_seconds": None, "error": str(exc)}
+
+    return {"initial_render_seconds": duration}
 
 
 def gather_environment() -> Dict[str, Any]:
@@ -418,8 +520,9 @@ def gather_environment() -> Dict[str, Any]:
     }
 
 
-def main() -> None:
+def run_benchmarks(use_real_ai: bool) -> Dict[str, Any]:
     base_dir = Path(tempfile.mkdtemp(prefix="sologit-bench-"))
+    logger.info("Created temporary benchmark directory: %s", base_dir)
     try:
         specs = [
             RepoSpec("small", files=120, commits=200),
@@ -434,7 +537,7 @@ def main() -> None:
 
         workpad_metrics = benchmark_workpads(engine, large_repo_id, count=60)
         test_metrics = benchmark_test_execution(engine, large_repo_id)
-        ai_metrics = benchmark_ai_operations()
+        ai_metrics = benchmark_ai_operations(use_real_orchestrator=use_real_ai)
         state_metrics = benchmark_state_io(base_dir / "state", count=300)
         gui_metrics = benchmark_gui(base_dir / "state", base_dir / "engine")
         results = {
@@ -449,17 +552,35 @@ def main() -> None:
         }
 
         output_path = base_dir / "performance_results.json"
-        output_path.write_text(json.dumps(results, indent=2))
+        output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
         repo_output = REPO_ROOT / "docs" / "performance_results.json"
         repo_output.parent.mkdir(parents=True, exist_ok=True)
-        repo_output.write_text(json.dumps(results, indent=2))
+        repo_output.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
         print(json.dumps(results, indent=2))
         print(f"\nResults written to {output_path} and {repo_output}")
 
+        return results
+
     finally:
         shutil.rmtree(base_dir, ignore_errors=True)
+        logger.info("Cleaned up temporary benchmark directory")
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run Solo Git performance benchmarks")
+    parser.add_argument(
+        "--use-real-ai",
+        action="store_true",
+        help="Use the configured AI orchestrator instead of the offline mock",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    args = parse_args(argv)
+    run_benchmarks(use_real_ai=args.use_real_ai)
 
 
 if __name__ == "__main__":

@@ -141,7 +141,6 @@ class AbacusClient:
         url = f"{self.endpoint}{path}"
         logger.debug("POST %s", url)
         for attempt in range(max_retries):
-        for attempt in range(3):
             try:
                 response = self.session.post(
                     url,
@@ -170,21 +169,16 @@ class AbacusClient:
                 delay = self._get_retry_delay(response, attempt)
                 logger.warning(
                     "Request to %s failed with status %d. Retrying in %.2fs...",
-                    path, response.status_code, delay
+                    path,
+                    response.status_code,
+                    delay,
                 )
                 time.sleep(delay)
                 continue
-                if response.status_code < 400:
-                    break
-                if response.status_code != 503:
-                    raise self._build_http_error(path, response)
-            except requests.RequestException as exc:
-                raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
-            time.sleep(1)
 
             raise self._build_http_error(path, response)
-        else:
-            raise AbacusAPIError(f"Request to {path} failed after {max_retries} retries.")
+
+        raise AbacusAPIError(f"Request to {path} failed after {max_retries} retries.")
 
     def _get_retry_delay(self, response: requests.Response, attempt: int) -> float:
         """Calculate retry delay with exponential backoff and jitter."""
