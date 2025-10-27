@@ -630,3 +630,96 @@ def test_test_run_exception_handler(mock_git_engine, mock_test_orchestrator, moc
     assert "Workpad: pad123" in result.output
     assert "Unexpected test failure" in result.output
     assert "evogitctl test run pad123" in result.output
+
+
+
+
+def test_helper_parse_test_override():
+    """Test _parse_test_override helper function."""
+    from sologit.cli.commands import _parse_test_override
+    
+    # Test with timeout
+    result = _parse_test_override("unit=pytest tests/unit/:60", 30)
+    assert result.name == "unit"
+    assert result.cmd == "pytest tests/unit/"
+    assert result.timeout == 60
+    
+    # Test without timeout (use default)
+    result = _parse_test_override("integration=pytest tests/integration/", 30)
+    assert result.name == "integration"
+    assert result.cmd == "pytest tests/integration/"
+    assert result.timeout == 30
+
+
+def test_helper_tests_from_config_entries():
+    """Test _tests_from_config_entries helper function."""
+    from sologit.cli.commands import _tests_from_config_entries
+    
+    config_entries = [
+        {"name": "unit", "cmd": "pytest tests/unit/", "timeout": 60},
+        {"name": "integration", "cmd": "pytest tests/integration/", "timeout": 120}
+    ]
+    
+    results = _tests_from_config_entries(config_entries, 30)
+    
+    assert len(results) == 2
+    assert results[0].name == "unit"
+    assert results[0].timeout == 60
+    assert results[1].name == "integration"
+    assert results[1].timeout == 120
+
+
+def test_abort_with_error_function():
+    """Test abort_with_error helper function."""
+    from sologit.cli.commands import abort_with_error
+    import click
+    
+    with pytest.raises(click.Abort):
+        abort_with_error("Test error message")
+
+
+def test_get_config_manager():
+    """Test get_config_manager helper function."""
+    from sologit.cli.commands import get_config_manager
+    
+    config = get_config_manager()
+    assert config is not None
+
+
+def test_get_git_engine():
+    """Test get_git_engine helper function."""
+    from sologit.cli.commands import get_git_engine
+    
+    with patch('sologit.cli.commands.GitEngine') as mock_engine_cls:
+        mock_engine = MagicMock()
+        mock_engine_cls.return_value = mock_engine
+        
+        engine = get_git_engine()
+        assert engine is not None
+
+
+def test_get_patch_engine():
+    """Test get_patch_engine helper function."""
+    from sologit.cli.commands import get_patch_engine
+    
+    with patch('sologit.cli.commands.PatchEngine') as mock_engine_cls:
+        mock_engine = MagicMock()
+        mock_engine_cls.return_value = mock_engine
+        
+        engine = get_patch_engine()
+        assert engine is not None
+
+
+
+
+
+def test_get_git_sync():
+    """Test get_git_sync helper function."""
+    from sologit.cli.commands import get_git_sync
+    
+    with patch('sologit.cli.commands.GitStateSync') as mock_sync_cls:
+        mock_sync = MagicMock()
+        mock_sync_cls.return_value = mock_sync
+        
+        sync = get_git_sync()
+        assert sync is not None

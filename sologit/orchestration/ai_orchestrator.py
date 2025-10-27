@@ -1,30 +1,39 @@
-"""
-AI Orchestrator - Main coordinator for AI operations.
 
-Coordinates planning, code generation, and review operations
-with intelligent model selection and cost management.
+"""
+AI Orchestrator for Solo Git.
+
+Coordinates AI-powered operations including planning, code generation,
+patch review, and failure diagnosis.
 """
 
-import time
+from __future__ import annotations
+
+import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
 from enum import Enum
+from typing import Any, Dict, Iterator, List, Optional
 
-from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
-from sologit.orchestration.model_router import ModelRouter, ModelTier, ComplexityMetrics
-from sologit.orchestration.cost_guard import CostGuard, BudgetConfig
-from sologit.orchestration.planning_engine import PlanningEngine, CodePlan
+from rich.progress import Progress, TaskID
+
+from sologit.api.client import AbacusClient, ChatResponse
+from sologit.config.manager import ConfigManager, SoloGitConfig
 from sologit.orchestration.code_generator import CodeGenerator, GeneratedPatch
-from sologit.config.manager import ConfigManager
-from sologit.utils.logger import get_logger
-from sologit.ui.formatter import RichFormatter
+from sologit.orchestration.cost_guard import CostGuard
+from sologit.orchestration.model_router import (
+    ComplexityMetrics,
+    ModelConfig,
+    ModelRouter,
+    ModelTier,
+)
+from sologit.orchestration.planning_engine import PlanningEngine
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class TaskType(Enum):
-    """Types of AI tasks."""
+    """Types of AI tasks for cost tracking."""
+
     PLANNING = "planning"
     CODING = "coding"
     REVIEW = "review"
@@ -33,570 +42,397 @@ class TaskType(Enum):
 
 @dataclass
 class PlanResponse:
-    """Response from planning operation."""
-    plan: CodePlan
+    """Response from the planning operation."""
+
+    plan: str
     model_used: str
+    tokens_used: int
     cost_usd: float
     complexity: ComplexityMetrics
 
 
 @dataclass
 class PatchResponse:
-    """Response from patch generation operation."""
+    """Response from patch generation."""
+
     patch: GeneratedPatch
     model_used: str
+    tokens_used: int
     cost_usd: float
 
 
 @dataclass
 class ReviewResponse:
-    """Response from code review operation."""
+    """Response from patch review."""
+
+    review: str
     approved: bool
-    issues: List[str]
-    suggestions: List[str]
     model_used: str
+    tokens_used: int
     cost_usd: float
 
 
 class AIOrchestrator:
     """
-    Main orchestrator for AI operations in Solo Git.
-    
-    Coordinates between model router, cost guard, planning engine,
-    and code generator to provide intelligent AI-driven workflows.
+    Orchestrates AI operations with model selection, cost tracking, and error handling.
     """
-    
-    def __init__(
-        self,
-        config_manager: Optional[ConfigManager] = None,
-        formatter: Optional[RichFormatter] = None,
-    ):
+
+    def __init__(self, config_manager: ConfigManager):
         """
-        Initialize AI orchestrator.
-        
+        Initialize the AI orchestrator.
+
         Args:
-            config_manager: Configuration manager (creates new if None)
+            config_manager: Configuration manager instance
         """
-        self.config_manager = config_manager or ConfigManager()
-        self.config = self.config_manager.config
-        self.formatter = formatter or RichFormatter()
-
-        # Initialize components
-        self.client = AbacusClient(self.config.abacus)
-        for name, creds in self.config.deployments.items():
-            if creds.deployment_id and creds.deployment_token:
-                self.client.register_deployment(name, creds.deployment_id, creds.deployment_token)
+        self.config_manager = config_manager
+        self.config: SoloGitConfig = config_manager.get_config()
+        self.cost_guard = CostGuard(self.config.budget)
         self.model_router = ModelRouter(self.config.to_dict())
-        
-        budget_config = BudgetConfig(
-            daily_usd_cap=self.config.budget.daily_usd_cap,
-            alert_threshold=self.config.budget.alert_threshold,
-            track_by_model=self.config.budget.track_by_model
-        )
-        self.cost_guard = CostGuard(budget_config)
-        
-        self.planning_engine = PlanningEngine(self.client)
-        self.code_generator = CodeGenerator(self.client)
-        
-        logger.info("AIOrchestrator initialized")
-    
-    @contextmanager
-    def _progress(self, description: str, total: float = 100.0):
-        """Provide a progress context for long-running orchestration steps."""
-        if not self.formatter:
-            yield None
-            return
-
-        with self.formatter.progress(description) as progress:
-            task_id = progress.add_task(f"{description} progress", total=total)
-            try:
-                yield (progress, task_id)
-            finally:
-                progress.stop_task(task_id)
-
-    @contextmanager
-    def _progress_stage(
-        self,
-        progress,
-        task_id: Optional[int],
-        description: str,
-        advance: float,
-    ):
-        """Context manager that renders a spinner for a single stage."""
-        if not progress or task_id is None:
-            yield
-            return
-
-        spinner_task = progress.add_task(description, total=None)
-        progress.update(task_id, description=description)
-        success = False
-        start = time.perf_counter()
-        try:
-            yield
-            success = True
-        finally:
-            progress.remove_task(spinner_task)
-            if success and advance:
-                progress.advance(task_id, advance)
-            if success:
-                duration = time.perf_counter() - start
-                logger.debug("Stage '%s' completed in %.2fs", description, duration)
+        self.planning_engine = PlanningEngine(self.config)
+        self.code_generator = CodeGenerator(self.config)
 
     def plan(
         self,
-        prompt: str,
-        repo_context: Optional[Dict[str, Any]] = None,
-        force_model: Optional[str] = None
+        task_description: str,
+        repo_context: Optional[str] = None,
+        force_model: Optional[str] = None,
+        escalate_on_failure: bool = False,
+        progress: Optional[Progress] = None,
     ) -> PlanResponse:
         """
-        Generate an implementation plan from a user prompt.
-        
+        Generate an execution plan for a task.
+
         Args:
-            prompt: User's request
-            repo_context: Context about the repository
-            force_model: Force a specific model (overrides auto-selection)
-        
+            task_description: Description of the task
+            repo_context: Optional repository context
+            force_model: Force use of a specific model
+            escalate_on_failure: Retry with a more capable model on failure
+            progress: Optional Rich progress instance
+
         Returns:
-            Planning response with plan and metadata
-        
+            PlanResponse with the generated plan
+
         Raises:
-            Exception: If planning fails or budget exceeded
+            RuntimeError: If planning fails or budget is exceeded
         """
-        logger.info("Starting planning for: %s", prompt[:100])
+        task_id = None
+        if progress:
+            task_id = progress.add_task("Planning task...", total=100)
 
-        model_config = None
-        estimated_cost = 0.0
-        complexity = None
-
-        with self._progress("AI planning workflow", total=100) as progress_ctx:
-            progress, task_id = progress_ctx or (None, None)
-
-            try:
-                with self._progress_stage(progress, task_id, "Analyzing task complexity", 20):
-                    complexity = self.model_router.analyze_complexity(prompt, repo_context)
-                    logger.debug("Complexity analysis: %s", complexity)
-
-                with self._progress_stage(progress, task_id, "Selecting optimal model", 20):
-                    if force_model:
-                        model_config = self._find_model_by_name(force_model)
-                        if not model_config:
-                            raise ValueError(f"Model {force_model} not found in configuration")
-                    else:
-                        remaining_budget = self.cost_guard.get_remaining_budget()
-                        model_config = self.model_router.select_model(
-                            prompt=prompt,
-                            context=repo_context,
-                            budget_remaining=remaining_budget,
-                        )
-
-                logger.info("Selected model: %s", model_config)
-
-                with self._progress_stage(progress, task_id, "Estimating budget", 10):
-                    estimated_tokens = len(prompt.split()) * 4
-                    estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens * 2
-
-                    if not self.cost_guard.check_budget(estimated_cost):
-                        raise Exception(
-                            f"Budget exceeded. Remaining: ${self.cost_guard.get_remaining_budget():.2f}"
-                        )
-
-                plan: CodePlan
-                with self._progress_stage(
-                    progress,
-                    task_id,
-                    f"Generating plan with {model_config.name}",
-                    40,
-                ):
-                    deployment = self._get_deployment_credentials('planning')
-                    plan = self.planning_engine.generate_plan(
-                        prompt=prompt,
-                        repo_context=repo_context,
-                        model=model_config.name,
-                        deployment_name='planning' if deployment else None,
-                        deployment_id=deployment['deployment_id'] if deployment else None,
-                        deployment_token=deployment['deployment_token'] if deployment else None,
-                    )
-
-                response = self.planning_engine.last_response
-                with self._progress_stage(progress, task_id, "Recording cost metrics", 10):
-                    if response:
-                        prompt_tokens = response.prompt_tokens or estimated_tokens
-                        completion_tokens = response.completion_tokens or max(
-                            response.total_tokens - prompt_tokens, 0
-                        )
-                        total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
-                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                        self.cost_guard.record_usage(
-                            model=response.model or model_config.name,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            cost_per_1k=model_config.cost_per_1k_tokens,
-                            task_type=TaskType.PLANNING.value,
-                        )
-                    else:
-                        prompt_tokens = estimated_tokens
-                        completion_tokens = estimated_tokens
-                        total_tokens = prompt_tokens + completion_tokens
-                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                        self.cost_guard.record_usage(
-                            model=model_config.name,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            cost_per_1k=model_config.cost_per_1k_tokens,
-                            task_type=TaskType.PLANNING.value,
-                        )
-
-                if progress and task_id is not None:
-                    progress.update(task_id, description="Plan ready", completed=100)
-
-                return PlanResponse(
-                    plan=plan,
-                    model_used=(response.model if response and response.model else model_config.name),
-                    cost_usd=actual_cost,
-                    complexity=complexity,
+        try:
+            with self._progress_stage(progress, task_id, "Analyzing task complexity", 20):
+                complexity = self.model_router.analyze_complexity(
+                    task_description, repo_context=repo_context
                 )
 
-            except AbacusAPIError as api_err:
-                logger.warning("Planning failed with Abacus error: %s", api_err)
-                if progress:
-                    progress.update(task_id, description="Retrying with base deployment")
-
-                plan = self.planning_engine.generate_plan(
-                    prompt=prompt,
-                    repo_context=repo_context,
-                    model=(model_config.name if model_config else self.config.models.planning_model),
-                )
-
-                fallback_complexity = (
-                    complexity or self.model_router.analyze_complexity(prompt, repo_context)
-                )
-
-                return PlanResponse(
-                    plan=plan,
-                    model_used=model_config.name if model_config else self.config.models.planning_model,
-                    cost_usd=0.0,
-                    complexity=fallback_complexity,
-                )
-
-            except Exception as e:
-                logger.error("Planning failed: %s", e)
-                if progress:
-                    progress.update(task_id, description="Evaluating fallback models")
-
-                if model_config is not None:
-                    escalated_model = self.model_router.get_escalated_model(
-                        model_config,
-                        reason="planning_failure",
-                    )
+            with self._progress_stage(progress, task_id, "Selecting model", 10):
+                if force_model:
+                    model_config = self._find_model_by_name(force_model)
+                    if not model_config:
+                        raise ValueError(f"Model '{force_model}' not found in configuration")
                 else:
-                    escalated_model = None
+                    model_config = self.model_router.select_model(
+                        task_description,
+                        TaskType.PLANNING.value,
+                        repo_context=repo_context,
+                    )
 
-                if (
-                    escalated_model
-                    and self.cost_guard.check_budget(max(estimated_cost * 1.5, estimated_cost or 0.0))
-                ):
-                    logger.info("Escalating to %s", escalated_model)
-                    if progress:
-                        progress.update(
-                            task_id,
-                            description=f"Escalating to {escalated_model.name}",
-                        )
-                    return self.plan(prompt, repo_context, force_model=escalated_model.name)
+            with self._progress_stage(progress, task_id, "Checking budget", 10):
+                estimated_tokens = 2000
+                estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                if not self.cost_guard.check_budget(estimated_cost):
+                    raise RuntimeError(
+                        f"Insufficient budget for planning. Estimated: ${estimated_cost:.4f}, "
+                        f"Remaining: ${self.cost_guard.get_remaining_budget():.4f}"
+                    )
 
-                raise
+            with self._progress_stage(progress, task_id, f"Generating plan with {model_config.name}", 50):
+                client = AbacusClient(self.config.abacus)
+                deployment_creds = self._get_deployment_credentials(model_config.name)
 
+                try:
+                    response = self.planning_engine.generate_plan(
+                        task_description=task_description,
+                        repo_context=repo_context,
+                        model_config=model_config,
+                        client=client,
+                        deployment_credentials=deployment_creds,
+                    )
+                except Exception as e:
+                    if escalate_on_failure:
+                        logger.warning(f"Planning failed with {model_config.name}, escalating: {e}")
+                        escalated_model = self.model_router.escalate_model(model_config)
+                        if escalated_model:
+                            escalated_cost = (estimated_tokens / 1000.0) * escalated_model.cost_per_1k_tokens
+                            if self.cost_guard.check_budget(escalated_cost):
+                                response = self.planning_engine.generate_plan(
+                                    task_description=task_description,
+                                    repo_context=repo_context,
+                                    model_config=escalated_model,
+                                    client=client,
+                                    deployment_credentials=self._get_deployment_credentials(escalated_model.name),
+                                )
+                                model_config = escalated_model
+                            else:
+                                raise RuntimeError("Insufficient budget for model escalation") from e
+                        else:
+                            raise RuntimeError("No higher-tier model available for escalation") from e
+                    else:
+                        raise
+
+            with self._progress_stage(progress, task_id, "Recording usage", 10):
+                self.cost_guard.record_usage(
+                    model=model_config.name,
+                    prompt_tokens=response.prompt_tokens,
+                    completion_tokens=response.completion_tokens,
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.PLANNING.value,
+                )
+
+            return PlanResponse(
+                plan=response.content,
+                model_used=model_config.name,
+                tokens_used=response.total_tokens,
+                cost_usd=(response.total_tokens / 1000.0) * model_config.cost_per_1k_tokens,
+                complexity=complexity,
+            )
+
+        finally:
+            if progress and task_id is not None:
+                progress.update(task_id, completed=100)
 
     def generate_patch(
         self,
-        plan: CodePlan,
+        task_description: str,
+        plan: Optional[str] = None,
         file_contents: Optional[Dict[str, str]] = None,
-        force_model: Optional[str] = None
+        force_model: Optional[str] = None,
+        escalate_on_failure: bool = False,
+        progress: Optional[Progress] = None,
     ) -> PatchResponse:
         """
-        Generate a code patch from a plan.
-        
+        Generate a code patch for a task.
+
         Args:
-            plan: Implementation plan
-            file_contents: Contents of existing files
-            force_model: Force a specific model
-        
+            task_description: Description of the task
+            plan: Optional execution plan
+            file_contents: Optional file contents for context
+            force_model: Force use of a specific model
+            escalate_on_failure: Retry with a more capable model on failure
+            progress: Optional Rich progress instance
+
         Returns:
-            Patch response with generated code
-        
+            PatchResponse with the generated patch
+
         Raises:
-            Exception: If generation fails or budget exceeded
+            RuntimeError: If patch generation fails or budget is exceeded
         """
-        logger.info("Generating patch for: %s", plan.title)
+        task_id = None
+        if progress:
+            task_id = progress.add_task("Generating patch...", total=100)
 
-        model_config = None
-        estimated_cost = 0.0
+        try:
+            with self._progress_stage(progress, task_id, "Analyzing complexity", 15):
+                complexity = self.model_router.analyze_complexity(
+                    task_description, plan=plan, file_contents=file_contents
+                )
 
-        with self._progress("AI code generation", total=100) as progress_ctx:
-            progress, task_id = progress_ctx or (None, None)
-
-            try:
-                with self._progress_stage(progress, task_id, "Selecting coding model", 20):
-                    if force_model:
-                        model_config = self._find_model_by_name(force_model)
-                        if not model_config:
-                            raise ValueError(f"Model {force_model} not found")
-                    else:
-                        if plan.estimated_complexity == 'low':
-                            tier = ModelTier.FAST
-                        elif plan.estimated_complexity == 'high':
-                            tier = ModelTier.PLANNING
-                        else:
-                            tier = ModelTier.CODING
-
-                        remaining_budget = self.cost_guard.get_remaining_budget()
-                        model_config = self.model_router._get_model_for_tier(tier, remaining_budget)
-
-                logger.info("Selected model for coding: %s", model_config)
-
-                with self._progress_stage(progress, task_id, "Estimating token usage", 15):
-                    total_file_size = sum(len(content) for content in (file_contents or {}).values())
-                    estimated_tokens = (len(plan.description) + total_file_size) // 4
-                    estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens * 1.5
-
-                    if not self.cost_guard.check_budget(estimated_cost):
-                        raise Exception(
-                            f"Budget exceeded. Remaining: ${self.cost_guard.get_remaining_budget():.2f}"
-                        )
-
-                patch: GeneratedPatch
-                with self._progress_stage(
-                    progress,
-                    task_id,
-                    f"Generating code with {model_config.name}",
-                    45,
-                ):
-                    deployment = self._get_deployment_credentials('coding')
-                    patch = self.code_generator.generate_patch(
+            with self._progress_stage(progress, task_id, "Selecting model", 10):
+                if force_model:
+                    model_config = self._find_model_by_name(force_model)
+                    if not model_config:
+                        raise ValueError(f"Model '{force_model}' not found in configuration")
+                else:
+                    model_config = self.model_router.select_model(
+                        task_description,
+                        TaskType.CODING.value,
                         plan=plan,
                         file_contents=file_contents,
-                        model=model_config.name,
-                        deployment_name='coding' if deployment else None,
-                        deployment_id=deployment['deployment_id'] if deployment else None,
-                        deployment_token=deployment['deployment_token'] if deployment else None
                     )
 
-                response = self.code_generator.last_response
-                with self._progress_stage(progress, task_id, "Recording cost metrics", 15):
-                    if response:
-                        prompt_tokens = response.prompt_tokens or estimated_tokens
-                        completion_tokens = response.completion_tokens or max(
-                            response.total_tokens - prompt_tokens, 0
-                        )
-                        total_tokens = response.total_tokens or (prompt_tokens + completion_tokens)
-                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                        self.cost_guard.record_usage(
-                            model=response.model or model_config.name,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            cost_per_1k=model_config.cost_per_1k_tokens,
-                            task_type=TaskType.CODING.value
-                        )
+            with self._progress_stage(progress, task_id, "Estimating cost", 10):
+                estimated_tokens = self.model_router.estimate_patch_size(plan or task_description)
+                estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
+                if not self.cost_guard.check_budget(estimated_cost):
+                    raise RuntimeError(
+                        f"Insufficient budget for patch generation. Estimated: ${estimated_cost:.4f}, "
+                        f"Remaining: ${self.cost_guard.get_remaining_budget():.4f}"
+                    )
+
+            with self._progress_stage(progress, task_id, f"Generating code with {model_config.name}", 55):
+                client = AbacusClient(self.config.abacus)
+                deployment_creds = self._get_deployment_credentials(model_config.name)
+
+                try:
+                    patch = self.code_generator.generate_patch(
+                        task_description=task_description,
+                        plan=plan,
+                        file_contents=file_contents,
+                        model_config=model_config,
+                        client=client,
+                        deployment_credentials=deployment_creds,
+                    )
+                except Exception as e:
+                    if escalate_on_failure:
+                        logger.warning(f"Patch generation failed with {model_config.name}, escalating: {e}")
+                        escalated_model = self.model_router.escalate_model(model_config)
+                        if escalated_model:
+                            escalated_cost = (estimated_tokens / 1000.0) * escalated_model.cost_per_1k_tokens
+                            if self.cost_guard.check_budget(escalated_cost):
+                                patch = self.code_generator.generate_patch(
+                                    task_description=task_description,
+                                    plan=plan,
+                                    file_contents=file_contents,
+                                    model_config=escalated_model,
+                                    client=client,
+                                    deployment_credentials=self._get_deployment_credentials(escalated_model.name),
+                                )
+                                model_config = escalated_model
+                            else:
+                                raise RuntimeError("Insufficient budget for model escalation") from e
+                        else:
+                            raise RuntimeError("No higher-tier model available for escalation") from e
                     else:
-                        prompt_tokens = estimated_tokens
-                        completion_tokens = int(estimated_tokens * 0.5)
-                        total_tokens = prompt_tokens + completion_tokens
-                        actual_cost = (total_tokens / 1000.0) * model_config.cost_per_1k_tokens
-                        self.cost_guard.record_usage(
-                            model=model_config.name,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            cost_per_1k=model_config.cost_per_1k_tokens,
-                            task_type=TaskType.CODING.value
-                        )
+                        raise
 
-                if progress and task_id is not None:
-                    progress.update(task_id, description="Patch ready", completed=100)
-
-                return PatchResponse(
-                    patch=patch,
-                    model_used=(response.model if response and response.model else model_config.name),
-                    cost_usd=actual_cost
+            with self._progress_stage(progress, task_id, "Recording usage", 10):
+                token_estimate = estimated_tokens
+                self.cost_guard.record_usage(
+                    model=model_config.name,
+                    prompt_tokens=int(token_estimate * 0.6),
+                    completion_tokens=int(token_estimate * 0.4),
+                    cost_per_1k=model_config.cost_per_1k_tokens,
+                    task_type=TaskType.CODING.value,
                 )
 
-            except AbacusAPIError as api_err:
-                logger.warning("Patch generation failed with Abacus error: %s", api_err)
-                if progress:
-                    progress.update(task_id, description="Retrying with base deployment")
+            return PatchResponse(
+                patch=patch,
+                model_used=model_config.name,
+                tokens_used=token_estimate,
+                cost_usd=(token_estimate / 1000.0) * model_config.cost_per_1k_tokens,
+            )
 
-                fallback_model = model_config.name if model_config else self.config.models.coding_model
-                patch = self.code_generator.generate_patch(
-                    plan=plan,
-                    file_contents=file_contents,
-                    model=fallback_model
-                )
-                return PatchResponse(
-                    patch=patch,
-                    model_used=fallback_model,
-                    cost_usd=0.0
-                )
-
-            except Exception as e:
-                logger.error("Patch generation failed: %s", e)
-                if progress:
-                    progress.update(task_id, description="Evaluating escalation options")
-
-                if model_config is not None:
-                    escalated_model = self.model_router.get_escalated_model(
-                        model_config,
-                        reason="generation_failure"
-                    )
-                else:
-                    escalated_model = None
-
-                if (
-                    escalated_model
-                    and self.cost_guard.check_budget(max(estimated_cost * 1.5, estimated_cost or 0.0))
-                ):
-                    logger.info("Escalating to %s", escalated_model)
-                    if progress:
-                        progress.update(
-                            task_id,
-                            description=f"Escalating to {escalated_model.name}",
-                        )
-                    return self.generate_patch(plan, file_contents, force_model=escalated_model.name)
-
-                raise
-
+        finally:
+            if progress and task_id is not None:
+                progress.update(task_id, completed=100)
 
     def review_patch(
         self,
         patch: GeneratedPatch,
-        context: Optional[Dict[str, Any]] = None
+        test_files: Optional[List[str]] = None,
+        progress: Optional[Progress] = None,
     ) -> ReviewResponse:
-        """AI review of a generated patch with visual progress feedback."""
+        """
+        Review a generated patch.
 
-        logger.info("Reviewing patch with %d files", len(patch.files_changed))
+        Args:
+            patch: The patch to review
+            test_files: Optional list of test files
+            progress: Optional Rich progress instance
 
-        remaining_budget = self.cost_guard.get_remaining_budget()
-        model_config = None
-        issues: List[str] = []
-        suggestions: List[str] = []
-        estimated_cost = 0.01
-        review_context = context or {}
+        Returns:
+            ReviewResponse with the review results
+        """
+        task_id = None
+        if progress:
+            task_id = progress.add_task("Reviewing patch...", total=100)
 
-        with self._progress("AI code review", total=100) as progress_ctx:
-            progress, task_id = progress_ctx or (None, None)
-
+        try:
             with self._progress_stage(progress, task_id, "Selecting review model", 20):
-                model_config = self.model_router._get_model_for_tier(
-                    ModelTier.PLANNING,
-                    remaining_budget,
+                model_config = self.model_router.select_model(
+                    f"Review patch with {len(patch.files_changed)} files",
+                    TaskType.REVIEW.value,
                 )
 
-            with self._progress_stage(progress, task_id, "Analyzing patch metadata", 45):
-                total_changes = patch.additions + patch.deletions
-                if total_changes > 200:
-                    issues.append("Large patch - consider splitting into smaller commits")
-                if total_changes == 0:
-                    issues.append("Patch contains no changes. Verify diff generation.")
+            with self._progress_stage(progress, task_id, "Analyzing patch", 60):
+                review_prompt = self._build_review_prompt(patch, test_files)
+                client = AbacusClient(self.config.abacus)
 
-                # Highlight risky files
-                risky_files = [
-                    file_name for file_name in patch.files_changed
-                    if any(keyword in file_name.lower() for keyword in ["auth", "security", "login"])
-                ]
-                if risky_files:
-                    suggestions.append(
-                        "Security sensitive files modified: "
-                        + ", ".join(sorted(set(risky_files)))
-                    )
+                response = client.chat(
+                    messages=[{"role": "user", "content": review_prompt}],
+                    model=model_config.name,
+                    max_tokens=model_config.max_tokens,
+                )
 
-                # Detect potential debugging artefacts
-                lowered_diff = (patch.diff or "").lower()
-                if "print(" in lowered_diff or "pdb.set_trace" in lowered_diff:
-                    issues.append("Debug statements detected. Remove before committing.")
-
-            with self._progress_stage(progress, task_id, "Assessing test coverage", 20):
-                has_tests = any('test' in f.lower() for f in patch.files_changed)
-                if not has_tests:
-                    suggestions.append("Consider adding tests for these changes")
-
-                if review_context.get('requires_regression_checks'):
-                    suggestions.append("Run regression suite before promotion")
-                if review_context.get('security_sensitive'):
-                    suggestions.append("Request security review due to sensitive context")
-
-            with self._progress_stage(progress, task_id, "Recording review metrics", 15):
-                if model_config is None:
-                    raise RuntimeError("Review model configuration missing")
-
-                estimated_tokens = max(total_changes * 2, 50)
-                estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
+            with self._progress_stage(progress, task_id, "Recording usage", 20):
                 self.cost_guard.record_usage(
                     model=model_config.name,
-                    prompt_tokens=int(estimated_tokens * 0.6),
-                    completion_tokens=int(estimated_tokens * 0.4),
+                    prompt_tokens=response.prompt_tokens,
+                    completion_tokens=response.completion_tokens,
                     cost_per_1k=model_config.cost_per_1k_tokens,
                     task_type=TaskType.REVIEW.value,
                 )
 
-            if progress and task_id is not None:
-                progress.update(task_id, description="Review complete", completed=100)
+            approved = "approved" in response.content.lower() or "lgtm" in response.content.lower()
 
-        return ReviewResponse(
-            approved=len(issues) == 0,
-            issues=issues,
-            suggestions=suggestions,
-            model_used=model_config.name if model_config else "unknown",
-            cost_usd=estimated_cost
-        )
+            return ReviewResponse(
+                review=response.content,
+                approved=approved,
+                model_used=model_config.name,
+                tokens_used=response.total_tokens,
+                cost_usd=(response.total_tokens / 1000.0) * model_config.cost_per_1k_tokens,
+            )
+
+        finally:
+            if progress and task_id is not None:
+                progress.update(task_id, completed=100)
 
     def diagnose_failure(
         self,
         test_output: str,
         patch: GeneratedPatch,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
+        progress: Optional[Progress] = None,
     ) -> str:
-        """Diagnose test failures and suggest fixes with progress updates."""
+        """
+        Diagnose a test failure.
 
-        logger.info("Diagnosing test failures")
+        Args:
+            test_output: The test output
+            patch: The patch that was applied
+            context: Optional additional context
+            progress: Optional Rich progress instance
 
-        remaining_budget = self.cost_guard.get_remaining_budget()
-        model_config = None
-        analysis_context = context or {}
-        trimmed_output = (test_output or "").strip()
-        insights: List[str] = []
-        recommendations: List[str] = []
-        estimated_cost = 0.0
+        Returns:
+            Diagnosis string
+        """
+        task_id = None
+        if progress:
+            task_id = progress.add_task("Diagnosing failure...", total=100)
 
-        with self._progress("AI failure diagnosis", total=100) as progress_ctx:
-            progress, task_id = progress_ctx or (None, None)
-
+        try:
             with self._progress_stage(progress, task_id, "Selecting diagnostic model", 20):
-                model_config = self.model_router._get_model_for_tier(
-                    ModelTier.PLANNING,
-                    remaining_budget,
+                model_config = self.model_router.select_model(
+                    "Diagnose test failure",
+                    TaskType.DIAGNOSIS.value,
                 )
 
-            with self._progress_stage(progress, task_id, "Analyzing failure output", 40):
-                lowered_output = trimmed_output.lower()
-                if "assert" in lowered_output:
-                    insights.append("Assertion mismatch detected. Compare expected and actual values.")
-                if "importerror" in lowered_output or "module not found" in lowered_output:
-                    insights.append("Import error observed. Ensure dependencies and PYTHONPATH are correct.")
-                if "timeout" in lowered_output:
-                    insights.append("Test timed out. Investigate long-running operations or deadlocks.")
-                if "permission" in lowered_output:
-                    insights.append("Permission issue detected. Confirm file and directory permissions.")
-                if "flake8" in lowered_output or "lint" in lowered_output:
-                    insights.append("Linting failure detected. Run lint tools locally to reproduce.")
+            with self._progress_stage(progress, task_id, "Analyzing failure", 60):
+                max_output_lines = 100
+                output_lines = test_output.split('\n')
+                if len(output_lines) > max_output_lines:
+                    trimmed_output = '\n'.join(output_lines[-max_output_lines:])
+                    truncated_output = f"[... {len(output_lines) - max_output_lines} lines omitted ...]\n{trimmed_output}"
+                else:
+                    truncated_output = test_output
 
-                if analysis_context.get('previous_failures'):
-                    insights.append(
-                        f"This suite has failed {analysis_context['previous_failures']} time(s); compare with prior runs."
-                    )
+                analysis_context = context or {}
+                insights = []
+                recommendations = []
 
-            with self._progress_stage(progress, task_id, "Compiling recommendations", 30):
+                if "AssertionError" in test_output:
+                    insights.append("Assertion failure detected - expected vs actual value mismatch")
+                if "ImportError" in test_output or "ModuleNotFoundError" in test_output:
+                    insights.append("Import error - missing dependency or incorrect module path")
+                if "timeout" in test_output.lower():
+                    insights.append("Test timeout - possible infinite loop or performance issue")
+
+                insight_section = "\n".join(f"• {item}" for item in insights) if insights else "No specific patterns detected."
+
                 base_actions = [
-                    "Review the specific error message and stack trace for clues.",
-                    "Check whether recent changes introduced syntax or import errors.",
-                    "Validate that test fixtures and setup/teardown routines execute correctly.",
-                    "Re-run the failing test locally with increased logging for additional context.",
+                    "Review the test output for specific error messages and stack traces.",
+                    "Verify that the patch changes align with the test expectations.",
+                    "Check if any test setup or teardown logic needs adjustment.",
                 ]
 
                 recommendations.extend(base_actions)
@@ -628,15 +464,13 @@ class AIOrchestrator:
                     task_type=TaskType.DIAGNOSIS.value,
                 )
 
-            if progress and task_id is not None:
-                progress.update(task_id, description="Diagnosis complete", completed=100)
+            with self._progress_stage(progress, task_id, "Formatting diagnosis", 10):
+                pass
 
-        truncated_output = trimmed_output[:500] or "No output captured"
-        insight_section = (
-            "\n".join(f"- {item}" for item in insights)
-            if insights
-            else "- No specific automated insights detected"
-        )
+        finally:
+            if progress and task_id is not None:
+                progress.update(task_id, completed=100)
+
         recommendation_section = "\n".join(
             f"{idx}. {item}" for idx, item in enumerate(dict.fromkeys(recommendations), start=1)
         )
@@ -664,6 +498,9 @@ class AIOrchestrator:
         Returns:
             Status dictionary
         """
+        api_key = self.config.abacus.api_key
+        api_configured = bool(api_key and api_key.strip())
+        
         return {
             'budget': self.cost_guard.get_status(),
             'models': {
@@ -671,7 +508,7 @@ class AIOrchestrator:
                 'coding': [m.name for m in self.model_router.models[ModelTier.CODING]],
                 'planning': [m.name for m in self.model_router.models[ModelTier.PLANNING]],
             },
-            'api_configured': bool(self.config.abacus.api_key)
+            'api_configured': api_configured
         }
     
     def _find_model_by_name(self, name: str):
@@ -689,5 +526,40 @@ class AIOrchestrator:
             return None
         return {
             'deployment_id': creds.deployment_id,
-            'deployment_token': creds.deployment_token
+            'deployment_token': creds.deployment_token,
         }
+
+    def _build_review_prompt(self, patch: GeneratedPatch, test_files: Optional[List[str]] = None) -> str:
+        """Build a prompt for patch review."""
+        prompt = f"Review the following code patch:\n\n{patch.diff}\n\n"
+        prompt += f"Files changed: {', '.join(patch.files_changed)}\n"
+        prompt += f"Additions: {patch.additions}, Deletions: {patch.deletions}\n\n"
+
+        if test_files:
+            prompt += f"Test files included: {', '.join(test_files)}\n\n"
+        else:
+            prompt += "Note: No test files were included with this patch.\n\n"
+
+        prompt += (
+            "Please review this patch for:\n"
+            "1. Code quality and best practices\n"
+            "2. Potential bugs or issues\n"
+            "3. Test coverage\n"
+            "4. Overall correctness\n\n"
+            "Provide your review and indicate if the patch is approved (LGTM) or needs changes."
+        )
+
+        return prompt
+
+    @contextmanager
+    def _progress_stage(
+        self, progress: Optional[Progress], task_id: Optional[TaskID], description: str, advance: int
+    ) -> Iterator[None]:
+        """Context manager for progress updates."""
+        if progress and task_id is not None:
+            progress.update(task_id, description=description)
+        try:
+            yield
+        finally:
+            if progress and task_id is not None:
+                progress.advance(task_id, advance)

@@ -1,4 +1,5 @@
 
+
 """
 Configuration commands for Solo Git CLI.
 """
@@ -218,6 +219,8 @@ def test_config(ctx: click.Context) -> None:
             tip="Run 'evogitctl config show' to inspect the current values.",
         )
 
+    formatter.print_info("Configuration is valid")
+
     config = config_manager.get_config()
     if not config.abacus.is_configured():
         abort_with_error(
@@ -238,6 +241,7 @@ def test_config(ctx: click.Context) -> None:
             tip="Generate a fresh API key from the Abacus.ai dashboard and try again.",
         )
 
+    formatter.print_info("API connection successful")
     formatter.print_success_panel(
         "All checks passed! Solo Git is ready to use.",
         title="Ready"
@@ -360,43 +364,20 @@ def init_config(force: bool) -> None:
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(DEFAULT_CONFIG_TEMPLATE)
-    formatter.print_success("Created configuration file at %s" % target_path)
-
-    # Write template
-    with open(config_path, 'w') as f:
-        f.write(DEFAULT_CONFIG_TEMPLATE)
-
+    
     formatter.print_success_panel(
-        f"Created configuration file at [bold]{config_path}[/bold]",
+        f"Created configuration file at [bold]{target_path}[/bold]",
         title="Config Initialized"
     )
     formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
 
 
-@config_group.command(name="env-template")
-def env_template() -> None:
-    """Generate .env template file."""
-
-    env_path = Path.cwd() / ".env.example"
-    if env_path.exists():
-        formatter.print_warning(f"{env_path} already exists; overwriting.")
-    env_path.write_text(ENV_TEMPLATE.rstrip() + "\n", encoding="utf-8")
-    formatter.print_success(f"Wrote environment template to {env_path}")
-
-@config_group.command(name='env-template')
-def env_template() -> None:
-    """Generate .env template file."""
-    env_path = Path.cwd() / '.env.example'
-    formatter.print_success(f"Created configuration file at {config_path}")
-
 @config_group.command(name="path")
 def config_path() -> None:
     """Print the resolved path to the configuration file."""
 
-    config_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
-    formatter.print_info(f"Configuration file: {config_path}")
     target_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
-    formatter.print_info(str(target_path))
+    formatter.print_info(f"Configuration file: {target_path}")
 
 
 @config_group.command(name="env-template")
