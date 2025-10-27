@@ -7,7 +7,7 @@ Configuration commands for Solo Git CLI.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, NoReturn, Optional, cast, List
+from typing import Any, cast, Dict, Iterable, List, NoReturn, Optional
 from typing import Any, Dict, Iterable, NoReturn, Optional, cast
 
 import click
