@@ -254,19 +254,12 @@ def test_post_503_retries_with_exponential_backoff(client):
     mock_response_200.status_code = 200
     mock_response_200.json.return_value = {'success': True, 'data': 'test'}
     
-    call_count = 0
-    def side_effect(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count < 2:
-            return mock_response_503
-        return mock_response_200
-    
-    with patch.object(client.session, 'post', side_effect=side_effect):
+    # Use side_effect list for sequential responses
+    with patch.object(client.session, 'post', side_effect=[mock_response_503, mock_response_200]) as mock_post:
         with patch('time.sleep'):  # Mock sleep to speed up test
             result = client._post('/test', {})
             assert result['data'] == 'test'
-            assert call_count == 2
+            assert mock_post.call_count == 2
 
 
 def test_post_max_retries_exceeded_raises_error(client):
