@@ -22,6 +22,7 @@ from sologit.ui.file_tree import FileTreeWidget
 from sologit.ui.test_runner import TestRunnerWidget, TestsCompleted, TestStatus
 from sologit.ui.shortcuts import format_help_markup, get_status_bar_summary
 from sologit.ui.history import get_command_history, undo, redo, can_undo, can_redo
+from sologit.ui.theme import theme
 from sologit.state.git_sync import GitStateSync
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
 from sologit.utils.logger import get_logger
@@ -46,7 +47,7 @@ class StatusBar(Static):
         super().__init__(**kwargs)
         self.repo_name = "No repository"
         self.workpad_name = "No workpad"
-        self.test_status = "○"
+        self.test_status = theme.icons.pending
     
     def render(self) -> str:
         """Render status bar."""
@@ -62,11 +63,11 @@ class StatusBar(Static):
             f"│  {shortcuts}"
         )
     
-    def update_context(self, repo_name: str, workpad_name: str = None, test_status: str = "○"):
+    def update_context(self, repo_name: str, workpad_name: str = None, test_status: str = None):
         """Update status bar context."""
         self.repo_name = repo_name
         self.workpad_name = workpad_name or "No workpad"
-        self.test_status = test_status
+        self.test_status = test_status if test_status is not None else theme.icons.pending
         self.refresh()
 
 
@@ -205,16 +206,16 @@ class AIActivityPanel(Static):
             
             # Status icon
             if status == 'completed':
-                icon = "✓"
+                icon = theme.icons.success
                 color = "green"
             elif status == 'failed':
-                icon = "✗"
+                icon = theme.icons.error
                 color = "red"
             elif status == 'running':
-                icon = "⟳"
+                icon = theme.icons.running
                 color = "cyan"
             else:
-                icon = "○"
+                icon = theme.icons.pending
                 color = "dim"
             
             lines.append(f"[{color}]{icon}[/] {op_type}")
@@ -674,18 +675,18 @@ class HeavenTUI(App):
             ai_ops = self.git_sync.list_ai_operations(workpad_id)
             self.query_one("#ai-panel", AIActivityPanel).update_operations(ai_ops)
 
-            test_status_icon = "○"
+            test_status_icon = theme.icons.pending
             if workpad_id:
                 runs = self.git_sync.get_test_runs(workpad_id)
                 if runs:
                     latest = runs[0]
                     status = latest.get("status")
                     if status == "passed":
-                        test_status_icon = "✓"
+                        test_status_icon = theme.icons.success
                     elif status == "failed":
-                        test_status_icon = "✗"
+                        test_status_icon = theme.icons.error
                     elif status == "running":
-                        test_status_icon = "⟳"
+                        test_status_icon = theme.icons.running
 
             self.query_one("#status-bar", StatusBar).update_context(
                 repo_name, workpad_name, test_status_icon
