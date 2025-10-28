@@ -280,9 +280,6 @@ class AIOrchestrator:
                         select_context['plan'] = plan
                     if file_contents:
                         select_context['file_contents'] = file_contents
-                    model_config = self.model_router.select_model(
-                        task_description,
-                        context=select_context,
                     context = {
                         'task_type': TaskType.CODING.value,
                         'plan': str(code_plan),
