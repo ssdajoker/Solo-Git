@@ -62,7 +62,6 @@ def abort_with_error(
     suggestions: Optional[List[str]] = None,
     docs_url: Optional[str] = None,
 ) -> NoReturn:
-) -> None:
     """Display a formatted error with rich context and abort the command."""
 
     default_help = help_text or "Use the --help flag to review available options."
@@ -227,24 +226,6 @@ def repo() -> None:
     pass
 
 
-@repo.command("init")
-@click.option("--zip", "zip_file", type=click.Path(exists=True, path_type=Path), help="Path to zip archive")
-@click.option("--git", "git_url", type=str, help="Git repository URL")
-@click.option("--empty", is_flag=True, help="Create an empty repository")
-@click.option(
-    "--path",
-    "target_path",
-    type=click.Path(path_type=Path),
-    help="Directory for empty repository (defaults to Solo Git data dir)",
-)
-@click.option("--name", type=str, help="Repository name (optional)")
-def repo_init(
-    zip_file: Optional[Path],
-    git_url: Optional[str],
-    empty: bool,
-    target_path: Optional[Path],
-    name: Optional[str],
-) -> None:
 @repo.command('init')
 @click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
 @click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
@@ -261,10 +242,6 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
         'empty': empty
     }
 
-    if len(selected) != 1:
-        abort_with_error(
-            "Invalid Source Specification",
-            "Please specify exactly one of --zip, --git, or --empty.",
     provided_sources = [name for name, value in sources.items() if value]
 
     if len(provided_sources) != 1:
@@ -287,21 +264,6 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
-            repo_info = git_sync.create_empty_repo(
-                repo_name, str(target_path) if target_path else None
-            )
-
-        formatter.print_success("Repository initialized!")
-        summary = formatter.table(headers=["Field", "Value"])
-        summary.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
-        summary.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
-        summary.add_row("Path", repo_info.get("path", "-"))
-        summary.add_row(
-            "Trunk",
-            f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]",
-        )
-        formatter.console.print(summary)
-    except GitEngineError as exc:
             repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
         elif zip_file:
             zip_path = Path(zip_file)
@@ -314,17 +276,11 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
             repo_info = git_sync.init_repo_from_git(git_url, repo_name)
 
         formatter.print_success("Repository initialized!")
-        formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
-        formatter.print_info(f"Name: {repo_info['name']}")
-        formatter.print_info(f"Path: {repo_info['path']}")
-        formatter.print_info(f"Trunk: {repo_info.get('trunk_branch', 'main')}")
-
         summary_table = formatter.table(headers=["Field", "Value"])
         summary_table.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
         summary_table.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
-        summary_table.add_row("Path", str(repo_info['path']))
+        summary_table.add_row("Path", str(repo_info.get('path', '-')))
         summary_table.add_row("Trunk", f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]")
-
         formatter.console.print(summary_table)
 
     except GitEngineError as e:
@@ -742,6 +698,7 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
                 output=(result.stdout or result.stderr or ""),
                 error=result.error,
             )
+        )
     if target == 'fast':
         tests = [
             TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),

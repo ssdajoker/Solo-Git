@@ -1,10 +1,17 @@
 import os
 import shutil
 import pytest
+from pathlib import Path
+from typing import Callable, Iterable
 from click.testing import CliRunner
 from sologit.cli.main import cli
 from sologit.core.repository import Repository
 from sologit.state.manager import StateManager
+from sologit.config.manager import ConfigManager
+from sologit.orchestration.ai_orchestrator import AIOrchestrator
+from sologit.state.git_sync import GitStateSync
+from sologit.engines.test_orchestrator import TestOrchestrator, TestResult
+from sologit.analysis.test_analyzer import TestAnalysis
 
 @pytest.fixture
 def runner(tmp_path_factory):
