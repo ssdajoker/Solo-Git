@@ -12,7 +12,7 @@ import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 from rich.progress import Progress, TaskID
 
@@ -26,7 +26,7 @@ from sologit.orchestration.model_router import (
     ModelRouter,
     ModelTier,
 )
-from sologit.orchestration.planning_engine import PlanningEngine
+from sologit.orchestration.planning_engine import CodePlan, PlanningEngine
 
 logger = logging.getLogger(__name__)
 
@@ -203,23 +203,23 @@ class AIOrchestrator:
 
     def generate_patch(
         self,
-        task_description: str,
-        plan: Optional[str] = None,
+        plan: Union[CodePlan, str],
         file_contents: Optional[Dict[str, str]] = None,
         force_model: Optional[str] = None,
         escalate_on_failure: bool = False,
         progress: Optional[Progress] = None,
+        repo_context: Optional[str] = None,
     ) -> PatchResponse:
         """
         Generate a code patch for a task.
 
         Args:
-            task_description: Description of the task
-            plan: Optional execution plan
+            plan: CodePlan object or string plan description
             file_contents: Optional file contents for context
             force_model: Force use of a specific model
             escalate_on_failure: Retry with a more capable model on failure
             progress: Optional Rich progress instance
+            repo_context: Optional repository context
 
         Returns:
             PatchResponse with the generated patch
@@ -231,10 +231,31 @@ class AIOrchestrator:
         if progress:
             task_id = progress.add_task("Generating patch...", total=100)
 
+        # Handle both CodePlan objects and string plans for backwards compatibility
+        if isinstance(plan, str):
+            # Create a minimal CodePlan from the string plan
+            # This is for backwards compatibility with string-based workflows
+            code_plan = CodePlan(
+                title="Generated patch",
+                description=plan,
+                file_changes=[],  # Unknown from string plan
+                test_strategy="Standard testing",
+                risks=[],
+            )
+            task_description = plan
+        else:
+            # Use the CodePlan object directly
+            code_plan = plan
+            task_description = f"{plan.title}\n\n{plan.description}"
+
         try:
             with self._progress_stage(progress, task_id, "Analyzing complexity", 15):
+                context = {
+                    'plan': str(code_plan),
+                    'file_contents': file_contents,
+                }
                 complexity = self.model_router.analyze_complexity(
-                    task_description, plan=plan, file_contents=file_contents
+                    task_description, context=context
                 )
 
             with self._progress_stage(progress, task_id, "Selecting model", 10):
@@ -243,15 +264,25 @@ class AIOrchestrator:
                     if not model_config:
                         raise ValueError(f"Model '{force_model}' not found in configuration")
                 else:
+                    context = {
+                        'task_type': TaskType.CODING.value,
+                        'plan': str(code_plan),
+                        'file_contents': file_contents,
+                    }
                     model_config = self.model_router.select_model(
                         task_description,
-                        TaskType.CODING.value,
-                        plan=plan,
-                        file_contents=file_contents,
+                        context=context,
                     )
 
             with self._progress_stage(progress, task_id, "Estimating cost", 10):
-                estimated_tokens = self.model_router.estimate_patch_size(plan or task_description)
+                # Estimate tokens based on plan complexity
+                context_for_estimate = {
+                    'plan': str(code_plan),
+                    'file_contents': file_contents,
+                }
+                estimated_tokens = self.model_router._estimate_patch_size(
+                    task_description, context_for_estimate
+                )
                 estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
                 if not self.cost_guard.check_budget(estimated_cost):
                     raise RuntimeError(
@@ -260,18 +291,20 @@ class AIOrchestrator:
                     )
 
             with self._progress_stage(progress, task_id, f"Generating code with {model_config.name}", 55):
-                client = AbacusClient(self.config.abacus)
                 deployment_creds = self._get_deployment_credentials(model_config.name)
 
                 try:
-                    patch = self.code_generator.generate_patch(
-                        task_description=task_description,
-                        plan=plan,
-                        file_contents=file_contents,
-                        model_config=model_config,
-                        client=client,
-                        deployment_credentials=deployment_creds,
-                    )
+                    # Prepare parameters for code_generator.generate_patch()
+                    gen_kwargs = {
+                        'plan': code_plan,
+                        'file_contents': file_contents,
+                        'model': model_config.name,
+                    }
+                    if deployment_creds:
+                        gen_kwargs['deployment_id'] = deployment_creds.get('deployment_id')
+                        gen_kwargs['deployment_token'] = deployment_creds.get('deployment_token')
+
+                    patch = self.code_generator.generate_patch(**gen_kwargs)
                 except Exception as e:
                     if escalate_on_failure:
                         logger.warning(f"Patch generation failed with {model_config.name}, escalating: {e}")
@@ -279,14 +312,18 @@ class AIOrchestrator:
                         if escalated_model:
                             escalated_cost = (estimated_tokens / 1000.0) * escalated_model.cost_per_1k_tokens
                             if self.cost_guard.check_budget(escalated_cost):
-                                patch = self.code_generator.generate_patch(
-                                    task_description=task_description,
-                                    plan=plan,
-                                    file_contents=file_contents,
-                                    model_config=escalated_model,
-                                    client=client,
-                                    deployment_credentials=self._get_deployment_credentials(escalated_model.name),
-                                )
+                                # Prepare parameters for escalated code_generator.generate_patch()
+                                escalated_creds = self._get_deployment_credentials(escalated_model.name)
+                                escalated_kwargs = {
+                                    'plan': code_plan,
+                                    'file_contents': file_contents,
+                                    'model': escalated_model.name,
+                                }
+                                if escalated_creds:
+                                    escalated_kwargs['deployment_id'] = escalated_creds.get('deployment_id')
+                                    escalated_kwargs['deployment_token'] = escalated_creds.get('deployment_token')
+
+                                patch = self.code_generator.generate_patch(**escalated_kwargs)
                                 model_config = escalated_model
                             else:
                                 raise RuntimeError("Insufficient budget for model escalation") from e
