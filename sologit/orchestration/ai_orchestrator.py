@@ -160,8 +160,8 @@ class AIOrchestrator:
                         prompt=task_description,
                         repo_context=repo_context,
                         model=model_config.name,
-                        deployment_id=deployment_creds.deployment_id if deployment_creds else None,
-                        deployment_token=deployment_creds.deployment_token if deployment_creds else None,
+                        deployment_id=deployment_creds['deployment_id'] if deployment_creds else None,
+                        deployment_token=deployment_creds['deployment_token'] if deployment_creds else None,
                     )
                 except Exception as e:
                     if escalate_on_failure:
