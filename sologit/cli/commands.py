@@ -5,15 +5,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import time
 from datetime import datetime
-import time
-from pathlib import Path
-from typing import Iterable, List, NoReturn, Optional, Union, Dict, Any, Sequence
-import asyncio
-import click
-from pathlib import Path
-from typing import List, Optional
-import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, NoReturn, Optional, Sequence, Tuple, TypeVar, Union, cast
 
@@ -23,21 +17,18 @@ from rich.console import Console
 from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
-from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
-from sologit.workflows.ci_orchestrator import CIOrchestrator
-from sologit.workflows.rollback_handler import RollbackHandler
-from sologit.state.manager import StateManager
-from sologit.state.git_sync import GitStateSync
 from sologit.engines.test_orchestrator import (
     TestConfig,
     TestOrchestrator,
     TestResult,
     TestStatus,
 )
+from sologit.state.git_sync import GitStateSync
+from sologit.state.manager import StateManager
 from sologit.state.schema import TestResult as StateTestResult
-from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
+from sologit.utils.logger import get_logger
 from sologit.workflows.ci_orchestrator import CIOrchestrator
 from sologit.workflows.rollback_handler import RollbackHandler
 
@@ -81,6 +72,21 @@ def abort_with_error(
         details=details,
     )
     raise click.Abort()
+
+
+def _require_workpad(workpad, pad_id: str):
+    """Ensure a workpad exists and raise a user-friendly error otherwise."""
+
+    if workpad is None:
+        abort_with_error(
+            f"Workpad {pad_id} not found",
+            title="Workpad Not Found",
+            suggestions=[
+                "evogitctl pad list",
+                f"evogitctl pad create 'new task' --repo <repo-id>"
+            ],
+        )
+    return workpad
 
 
 # Initialize engines (singleton pattern)
@@ -179,11 +185,19 @@ def _parse_test_override(value: str, default_timeout: int) -> TestConfig:
     return TestConfig(name=name, cmd=cmd, timeout=timeout)
 
 
+def _resolve_path_from_env(var_name: str) -> Optional[Path]:
+    value = os.environ.get(var_name)
+    if not value:
+        return None
+    return Path(value).expanduser()
+
+
 def get_git_engine() -> GitEngine:
-    """Get or create GitEngine instance."""
+    """Get or create GitEngine instance respecting environment overrides."""
     global _git_engine
     if _git_engine is None:
-        _git_engine = GitEngine()
+        data_dir = _resolve_path_from_env("SOLOGIT_DATA_PATH")
+        _git_engine = GitEngine(data_dir=data_dir)
     return _git_engine
 
 
@@ -212,11 +226,13 @@ def get_test_orchestrator() -> TestOrchestrator:
 
 
 def get_git_sync() -> GitStateSync:
-    """Get or create GitStateSync instance."""
+    """Get or create GitStateSync instance respecting environment overrides."""
 
     global _git_state_sync
     if _git_state_sync is None:
-        _git_state_sync = GitStateSync()
+        state_dir = _resolve_path_from_env("SOLOGIT_STATE_PATH")
+        data_dir = _resolve_path_from_env("SOLOGIT_DATA_PATH")
+        _git_state_sync = GitStateSync(state_dir=state_dir, data_dir=data_dir)
     return _git_state_sync
 
 
@@ -301,7 +317,8 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
 @repo.command('list')
 def repo_list() -> None:
     """List all repositories."""
-    git_engine = get_git_engine()
+    git_sync = get_git_sync()
+    git_engine = git_sync.git_engine
     repos = git_engine.list_repos()
     
     if not repos:
@@ -401,7 +418,8 @@ def pad() -> None:
 @click.option('--repo', 'repo_id', type=str, help='Repository ID (required if multiple repos)')
 def pad_create(title: str, repo_id: Optional[str]) -> None:
     """Create a new workpad."""
-    git_engine = get_git_engine()
+    git_sync = get_git_sync()
+    git_engine = git_sync.git_engine
 
     formatter.print_header("Workpad Creation")
 
@@ -440,11 +458,10 @@ def pad_create(title: str, repo_id: Optional[str]) -> None:
 
     try:
         formatter.print_info(f"Creating workpad: {title}")
-        pad_id = git_engine.create_workpad(repo_id, title)
+        pad_info = git_sync.create_workpad(repo_id, title)
+        pad_id = pad_info["workpad_id"]
 
         workpad = _require_workpad(git_engine.get_workpad(pad_id), pad_id)
-
-        workpad = git_engine.get_workpad(pad_id)
         formatter.print_success("Workpad created!")
         formatter.print_info(f"Pad ID: {workpad.id}")
         formatter.print_info(f"Title: {workpad.title}")
