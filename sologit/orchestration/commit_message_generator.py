@@ -1,3 +1,4 @@
+
 """
 Commit message generator with Abacus-first routing.
 Uses policy engine for intelligent provider selection and fallback.
@@ -5,9 +6,8 @@ Uses policy engine for intelligent provider selection and fallback.
 import asyncio
 from typing import Optional
 from dataclasses import dataclass
-
-from sologit.orchestration.routing_policy import PolicyEngine
-from sologit.orchestration.providers import ProviderType
+from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
+from sologit.orchestration.providers import ProviderResponse, ProviderType
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -60,15 +60,6 @@ class CommitMessageGenerator:
         3. Try primary provider
         4. On failure, try fallbacks in order
         5. Return result
-        
-        Args:
-            request: Commit message generation request
-        
-        Returns:
-            CommitMessageResponse with generated message and metadata
-        
-        Raises:
-            RuntimeError: If all providers fail
         """
         prompt = self._build_prompt(request)
         system_prompt = self._build_system_prompt(request)
@@ -98,12 +89,11 @@ class CommitMessageGenerator:
                 fallback_used=False,
             )
         except Exception as e:
-            logger.warning(f"Primary provider {primary.provider_type.value} failed: {e}")
+            logger.warning(f"Primary provider failed: {e}")
             
             # Try fallbacks
             for i, fallback_adapter in enumerate(fallbacks):
                 if not fallback_adapter.is_available():
-                    logger.debug(f"Fallback #{i+1} ({fallback_adapter.provider_type.value}) not available")
                     continue
                 
                 logger.info(f"Trying fallback #{i+1}: {fallback_adapter.provider_type.value}")
@@ -115,7 +105,6 @@ class CommitMessageGenerator:
                         max_tokens=200,
                     )
                     
-                    logger.info(f"Fallback #{i+1} succeeded")
                     return CommitMessageResponse(
                         message=response.content.strip(),
                         provider=response.provider,
@@ -129,11 +118,7 @@ class CommitMessageGenerator:
                     continue
             
             # All providers failed
-            raise RuntimeError(
-                "All AI providers failed. Cannot generate commit message. "
-                f"Primary: {primary.provider_type.value}, "
-                f"Fallbacks attempted: {len(fallbacks)}"
-            )
+            raise RuntimeError("All AI providers failed. Cannot generate commit message.")
     
     def _build_prompt(self, request: CommitMessageRequest) -> str:
         """Build generation prompt from request."""
@@ -144,7 +129,7 @@ class CommitMessageGenerator:
             "",
             "Diff:",
             "```",
-            request.diff[:2000],  # Limit diff size to avoid token limits
+            request.diff[:2000],  # Limit diff size
             "```",
         ]
         
@@ -179,8 +164,6 @@ Follow Conventional Commits format:
 - docs: Documentation changes
 - test: Test additions/changes
 - chore: Maintenance tasks
-- style: Code style changes
-- perf: Performance improvements
 
 Keep messages under 72 characters for the subject line.
 Add a body if needed for complex changes."""

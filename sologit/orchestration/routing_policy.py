@@ -1,3 +1,4 @@
+
 """
 Routing policy engine for provider selection.
 Implements Abacus-first architecture with intelligent fallback.
@@ -5,7 +6,6 @@ Implements Abacus-first architecture with intelligent fallback.
 from typing import List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
-
 from sologit.orchestration.providers import ProviderType, ProviderAdapter
 
 
@@ -44,13 +44,6 @@ class PolicyEngine:
     """
     
     def __init__(self, policy: RoutingPolicy, adapters: dict):
-        """
-        Initialize policy engine.
-        
-        Args:
-            policy: Routing policy configuration
-            adapters: Dictionary mapping ProviderType to ProviderAdapter instances
-        """
         self.policy = policy
         self.adapters = adapters
     
@@ -62,17 +55,10 @@ class PolicyEngine:
         """
         Select provider and fallback chain.
         
-        Args:
-            task_type: Type of task (e.g., "commit_message", "code_gen")
-            complexity: Task complexity (0.0-1.0)
-        
         Returns:
             (primary_provider, fallback_providers)
-        
-        Raises:
-            RuntimeError: If no providers are available
         """
-        # USER_SPECIFIED strategy: honor user preference
+        # User-specified strategy override
         if self.policy.strategy == RoutingStrategy.USER_SPECIFIED:
             if self.policy.user_preference:
                 primary = self.adapters.get(self.policy.user_preference)
@@ -80,8 +66,7 @@ class PolicyEngine:
                     fallbacks = self._get_fallbacks(exclude=self.policy.user_preference)
                     return primary, fallbacks
         
-        # Default: ABACUS_FIRST strategy
-        # Try each provider in fallback chain order
+        # Default: ABACUS_FIRST
         for provider_type in self.policy.fallback_chain:
             adapter = self.adapters.get(provider_type)
             if adapter and adapter.config.enabled and adapter.is_available():
@@ -89,13 +74,10 @@ class PolicyEngine:
                 return adapter, fallbacks
         
         # No providers available
-        raise RuntimeError(
-            "No AI providers available. Check API keys and network. "
-            f"Attempted providers: {[p.value for p in self.policy.fallback_chain]}"
-        )
+        raise RuntimeError("No AI providers available. Check API keys and network.")
     
     def _get_fallbacks(self, exclude: ProviderType) -> List[ProviderAdapter]:
-        """Get fallback providers in order, excluding the specified provider."""
+        """Get fallback providers in order."""
         fallbacks = []
         for provider_type in self.policy.fallback_chain:
             if provider_type == exclude:
@@ -106,28 +88,12 @@ class PolicyEngine:
         return fallbacks
     
     def should_fallback(self, error: Exception, retries: int) -> bool:
-        """
-        Determine if should fallback to next provider.
-        
-        Args:
-            error: The exception that occurred
-            retries: Number of retries attempted so far
-        
-        Returns:
-            True if should try fallback provider
-        """
+        """Determine if should fallback to next provider."""
         # Always fallback on network errors, auth errors, rate limits
         error_str = str(error).lower()
         critical_errors = [
-            "api key",
-            "unauthorized",
-            "rate limit",
-            "timeout",
-            "network",
-            "connection",
-            "503",
-            "502",
-            "429",
+            "api key", "unauthorized", "rate limit", "timeout",
+            "network", "connection", "401", "403", "429"
         ]
         
         if any(err in error_str for err in critical_errors):

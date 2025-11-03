@@ -1,3 +1,4 @@
+
 """
 Provider adapter interface for AI routing.
 Enables Abacus-first architecture with fallback support.

@@ -1,7 +1,14 @@
+
 """OpenAI provider adapter - Fallback #1."""
 import asyncio
 import time
 from typing import Optional
+
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 from sologit.orchestration.providers import (
     ProviderAdapter,
@@ -16,19 +23,14 @@ class OpenAIAdapter(ProviderAdapter):
     
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
+        if not OPENAI_AVAILABLE:
+            raise ImportError("openai package not installed. Run: pip install openai>=1.0.0")
         
-        # Lazy import to avoid dependency if not used
-        try:
-            from openai import AsyncOpenAI
-            self.client = AsyncOpenAI(
-                api_key=config.api_key,
-                base_url=config.base_url,
-                timeout=config.timeout,
-            )
-            self._available = True
-        except ImportError:
-            self._available = False
-            self.client = None
+        self.client = AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.timeout,
+        )
     
     async def generate(
         self,
@@ -39,9 +41,6 @@ class OpenAIAdapter(ProviderAdapter):
         max_tokens: int = 500,
     ) -> ProviderResponse:
         """Generate using OpenAI API."""
-        if not self._available or not self.client:
-            raise RuntimeError("OpenAI SDK not installed. Install with: pip install openai>=1.0.0")
-        
         start_time = time.time()
         
         messages = []
@@ -73,7 +72,7 @@ class OpenAIAdapter(ProviderAdapter):
             cost = (tokens / 1000) * cost_per_1k.get(model, 0.01)
             
             return ProviderResponse(
-                content=response.choices[0].message.content or "",
+                content=response.choices[0].message.content,
                 provider=ProviderType.OPENAI,
                 model=model,
                 tokens_used=tokens,
@@ -81,22 +80,18 @@ class OpenAIAdapter(ProviderAdapter):
                 cost_usd=cost,
             )
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"[OpenAIAdapter] Error: {e}")
+            print(f"[OpenAIAdapter] Error: {e}")
             raise
     
     def is_available(self) -> bool:
         """Check OpenAI API availability."""
-        if not self._available or not self.client:
+        if not OPENAI_AVAILABLE:
             return False
-        
         try:
-            # Quick check - just verify we can instantiate client
-            # Actual API check would be too slow for routing decisions
-            return bool(self.config.api_key)
+            # Lightweight check - just verify credentials work
+            return self.config.api_key is not None and len(self.config.api_key) > 0
         except:
             return False
     
     def get_default_model(self) -> str:
-        return self.config.model or "gpt-4o-mini"
+        return "gpt-4o-mini"
