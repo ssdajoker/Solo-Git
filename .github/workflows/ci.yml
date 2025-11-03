@@ -103,7 +103,7 @@ jobs:
         working-directory: heaven-gui
         run: npm run tauri build
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: heaven-gui-${{ matrix.os }}
           path: heaven-gui/src-tauri/target/release/bundle/
