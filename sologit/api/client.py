@@ -62,8 +62,22 @@ class AbacusAPIError(RuntimeError):
 class AbacusClient:
     """Client for Abacus.ai API."""
 
-    def __init__(self, config: AbacusAPIConfig):
-        """Initialise Abacus.ai client."""
+    def __init__(self, config: Optional[AbacusAPIConfig] = None, api_key: Optional[str] = None):
+        """Initialise Abacus.ai client.
+        
+        Args:
+            config: Full API configuration (optional if api_key provided)
+            api_key: API key only (uses default endpoint if config not provided)
+        """
+        if config is None:
+            if api_key is None:
+                raise ValueError("Either config or api_key must be provided")
+            # Create default config
+            config = AbacusAPIConfig(
+                api_key=api_key,
+                endpoint="https://api.abacus.ai/api/v0"
+            )
+        
         if '/v1' in config.endpoint:
             self.endpoint = config.endpoint.replace('/v1', '/api/v0')
             logger.debug("Adjusted endpoint to Abacus.ai format: %s", self.endpoint)
@@ -495,3 +509,81 @@ class AbacusClient:
         """Retrieve usage summary."""
         data = self._post('/getUsageSummary', {})
         return data.get('usageSummary', {})
+    
+    def ping(self) -> bool:
+        """Health check - test if API is reachable."""
+        try:
+            return self.test_connection()
+        except Exception:
+            return False
+    
+    def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+        deployment: Optional[str] = None,
+        deployment_id: Optional[str] = None,
+        deployment_token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Simplified chat completion interface compatible with OpenAI format.
+        
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            model: Model name (optional, for compatibility)
+            temperature: Temperature parameter
+            max_tokens: Maximum tokens to generate
+            deployment: Named deployment (if registered)
+            deployment_id: Deployment ID
+            deployment_token: Deployment token
+            
+        Returns:
+            Dict with 'content', 'model', 'usage', 'cost_usd' keys
+        """
+        # Convert dict messages to ChatMessage objects
+        chat_messages = [
+            ChatMessage(role=msg.get('role', 'user'), content=msg.get('content', ''))
+            for msg in messages
+        ]
+        
+        # Use RouteLLM if model not specified
+        model = model or 'routellm-auto'
+        
+        # Call the chat method
+        response = self.chat(
+            messages=chat_messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            deployment=deployment,
+            deployment_id=deployment_id,
+            deployment_token=deployment_token,
+        )
+        
+        # Return in simplified dict format
+        return {
+            'content': response.content,
+            'model': response.model,
+            'usage': {
+                'prompt_tokens': response.prompt_tokens,
+                'completion_tokens': response.completion_tokens,
+                'total_tokens': response.total_tokens,
+            },
+            'cost_usd': self._estimate_cost(response.total_tokens, response.model),
+        }
+    
+    def _estimate_cost(self, tokens: int, model: str) -> float:
+        """Estimate cost based on tokens and model."""
+        # Rough cost estimates per 1K tokens
+        cost_per_1k = {
+            'gpt-4o': 0.005,
+            'gpt-4': 0.03,
+            'gpt-3.5-turbo': 0.001,
+            'claude-3-5-sonnet': 0.015,
+            'deepseek-v2.5': 0.002,
+            'llama-3.1-8b': 0.0002,
+        }
+        # Default to cheap model cost
+        return (tokens / 1000) * cost_per_1k.get(model, 0.001)

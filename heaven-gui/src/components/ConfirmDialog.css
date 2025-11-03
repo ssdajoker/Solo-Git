@@ -1,0 +1,118 @@
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.confirm-dialog {
+  background: var(--heaven-bg-primary, #1a1a1a);
+  border: 1px solid var(--heaven-bg-tertiary, #333);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-width: 500px;
+  width: 90%;
+  animation: slideUp 0.3s ease-out;
+}
+
+.confirm-dialog-header {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid var(--heaven-bg-tertiary, #333);
+}
+
+.confirm-dialog-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--heaven-text-primary, #fff);
+}
+
+.confirm-dialog-body {
+  padding: 24px;
+}
+
+.confirm-dialog-body p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--heaven-text-secondary, #ccc);
+}
+
+.confirm-dialog-footer {
+  padding: 16px 24px 24px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.confirm-dialog-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.confirm-dialog-btn:focus-visible {
+  outline: 2px solid var(--heaven-blue-primary, #4A9EFF);
+  outline-offset: 2px;
+}
+
+.btn-cancel {
+  background: var(--heaven-bg-tertiary, #333);
+  color: var(--heaven-text-primary, #fff);
+}
+
+.btn-cancel:hover {
+  background: var(--heaven-bg-tertiary, #333);
+  opacity: 0.9;
+}
+
+.btn-confirm {
+  background: var(--heaven-blue-primary, #4A9EFF);
+  color: white;
+}
+
+.btn-confirm:hover {
+  background: var(--heaven-blue-hover, #3B8FEE);
+}
+
+.btn-confirm.btn-danger {
+  background: var(--heaven-accent-red, #FF4444);
+}
+
+.btn-confirm.btn-danger:hover {
+  background: var(--heaven-accent-red, #FF4444);
+  opacity: 0.9;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

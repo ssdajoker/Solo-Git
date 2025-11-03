@@ -75,7 +75,7 @@ def orchestrator(mock_config_manager, tmp_path):
 def test_orchestrator_initialization(orchestrator):
     """Test orchestrator initializes correctly."""
     assert orchestrator is not None
-    assert orchestrator.client is not None
+    assert orchestrator.config_manager is not None
     assert orchestrator.model_router is not None
     assert orchestrator.cost_guard is not None
     assert orchestrator.planning_engine is not None
@@ -134,7 +134,7 @@ def test_plan_budget_exceeded(orchestrator):
     assert orchestrator.cost_guard.get_remaining_budget() <= 0
     
     # Should raise exception
-    with pytest.raises(Exception, match="Budget exceeded"):
+    with pytest.raises(Exception, match="Insufficient budget"):
         orchestrator.plan("test prompt")
 
 
@@ -151,7 +151,11 @@ def test_generate_patch(orchestrator):
         estimated_complexity='low'
     )
     
-    response = orchestrator.generate_patch(plan)
+    # Pass task description and plan as strings (new API signature)
+    response = orchestrator.generate_patch(
+        task_description='Create test.py file',
+        plan=str(plan)
+    )
     
     assert isinstance(response, PatchResponse)
     assert isinstance(response.patch, GeneratedPatch)
@@ -175,7 +179,12 @@ def test_generate_patch_with_files(orchestrator):
         'test.py': 'def old_function():\n    pass\n'
     }
     
-    response = orchestrator.generate_patch(plan, file_contents)
+    # Pass task description, plan string, and file contents (new API signature)
+    response = orchestrator.generate_patch(
+        task_description='Update test.py file',
+        plan=str(plan),
+        file_contents=file_contents
+    )
     
     assert isinstance(response, PatchResponse)
 

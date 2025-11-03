@@ -38,17 +38,34 @@ export default function NotificationSystem({ notifications, onDismiss }: Notific
   }
 
   return (
-    <div className="notification-system">
+    <div 
+      className="notification-system" 
+      role="region" 
+      aria-label="Notifications"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       {notifications.map((notification) => (
         <div 
           key={notification.id} 
           className={`notification notification-${notification.type}`}
+          role="alert"
+          aria-live={notification.type === 'error' ? 'assertive' : 'polite'}
         >
-          <span className="notification-icon">{getIcon(notification.type)}</span>
-          <span className="notification-message">{notification.message}</span>
+          <span 
+            className="notification-icon" 
+            aria-hidden="true"
+          >
+            {getIcon(notification.type)}
+          </span>
+          <span className="notification-message">
+            {notification.message}
+          </span>
           <button 
             className="notification-dismiss" 
             onClick={() => onDismiss(notification.id)}
+            aria-label={`Dismiss ${notification.type} notification: ${notification.message}`}
+            title="Dismiss notification"
           >
             ×
           </button>

@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Heaven",
-    "version": "0.1.0"
+    "version": "1.0.0"
   },
   "tauri": {
     "allowlist": {
@@ -26,7 +26,7 @@
     },
     "bundle": {
       "active": true,
-      "targets": "all",
+      "targets": ["msi", "nsis", "deb", "appimage"],
       "identifier": "com.sologit.heaven",
       "icon": [
         "icons/32x32.png",
@@ -34,7 +34,26 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "resources": [],
+      "externalBin": [],
+      "copyright": "Copyright © 2024 Solo Git Contributors",
+      "category": "DeveloperTool",
+      "shortDescription": "Git workflow manager with AI assistance",
+      "longDescription": "Heaven is the desktop GUI for Solo-Git, a Git workflow manager with built-in AI assistance for commit messages, code generation, and test-driven development.",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": "",
+        "wix": {
+          "language": "en-US"
+        }
+      },
+      "linux": {
+        "deb": {
+          "depends": ["libwebkit2gtk-4.0-37", "libssl3"]
+        }
+      }
     },
     "security": {
       "csp": null

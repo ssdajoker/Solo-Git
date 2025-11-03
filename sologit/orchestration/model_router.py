@@ -404,6 +404,23 @@ class ModelRouter:
         
         return min(base_size, 500)  # Cap at 500 lines
     
+    def estimate_patch_size(
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> int:
+        """
+        Public wrapper for estimating patch size.
+        
+        Args:
+            prompt: Task description or plan
+            context: Optional additional context
+        
+        Returns:
+            Estimated number of tokens
+        """
+        return self._estimate_patch_size(prompt, context or {})
+    
     def _select_tier(
         self,
         complexity: ComplexityMetrics,
