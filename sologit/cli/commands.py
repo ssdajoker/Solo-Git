@@ -28,6 +28,9 @@ from sologit.state.schema import TestResult as StateTestResult
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
 from sologit.utils.logger import get_logger
+from sologit.analysis.test_analyzer import TestAnalyzer
+from sologit.workflows.auto_merge import AutoMergeWorkflow
+from sologit.workflows.promotion_gate import PromotionGate, PromotionRules
 
 logger = get_logger(__name__)
 
@@ -630,6 +633,223 @@ def pad_promote(pad_id: str, force: bool) -> None:
         abort_with_error("Promotion failed", str(exc))
 
 
+@pad.command("auto-merge")
+@click.argument("pad_id")
+@click.option("--target", type=click.Choice(["fast", "full"]), default="fast", help="Test target to run")
+@click.option("--no-auto-promote", is_flag=True, help="Don't auto-promote if tests pass")
+def pad_auto_merge(pad_id: str, target: str, no_auto_promote: bool) -> None:
+    """
+    Execute complete auto-merge workflow.
+    
+    Runs tests, analyzes results, evaluates promotion gate, and optionally
+    promotes to trunk if all checks pass.
+    """
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    workpad = git_engine.get_workpad(pad_id)
+    _require_workpad(workpad, pad_id)
+
+    formatter.print_header("Auto-Merge Workflow")
+    formatter.print_info(f"Workpad: {getattr(workpad, 'title', pad_id)}")
+    formatter.print_info(f"Target: {target}")
+    formatter.print_info(f"Auto-promote: {'disabled' if no_auto_promote else 'enabled'}")
+
+    # Get test configuration
+    config_manager = get_config_manager()
+    tests_config = getattr(config_manager.config, "tests", None)
+    default_timeout = getattr(tests_config, "timeout_seconds", 300) if tests_config else 300
+
+    tests: List[OrchestratorTestConfig]
+    if tests_config:
+        config_entries = tests_config.fast_tests if target == "fast" else tests_config.full_tests
+        tests = _tests_from_config_entries(config_entries, default_timeout)
+    else:
+        tests = []
+
+    if not tests:
+        tests = _fallback_tests(target, default_timeout)
+
+    # Initialize workflow
+    try:
+        workflow = AutoMergeWorkflow(
+            git_engine,
+            test_orchestrator,
+            state_manager=StateManager(),
+        )
+    except Exception as exc:
+        abort_with_error("Failed to initialize auto-merge workflow", str(exc))
+
+    # Execute workflow
+    try:
+        result = workflow.execute(
+            pad_id,
+            tests,
+            parallel=True,
+            auto_promote=not no_auto_promote,
+            target=target,
+        )
+    except Exception as exc:
+        logger.error(f"Auto-merge workflow failed: {exc}", exc_info=True)
+        abort_with_error("Auto-merge workflow failed", str(exc))
+
+    # Display results
+    formatted_result = workflow.format_result(result)
+    formatter.console.print(formatted_result)
+
+    if not result.success:
+        raise click.Abort()
+
+
+@pad.command("evaluate")
+@click.argument("pad_id")
+def pad_evaluate(pad_id: str) -> None:
+    """
+    Evaluate promotion readiness without promoting.
+    
+    Checks if the workpad can be promoted to trunk based on promotion
+    gate rules without actually performing the promotion.
+    """
+    git_engine = get_git_engine()
+    workpad = git_engine.get_workpad(pad_id)
+    _require_workpad(workpad, pad_id)
+
+    formatter.print_header("Promotion Gate Evaluation")
+    formatter.print_info(f"Workpad: {getattr(workpad, 'title', pad_id)}")
+
+    # Initialize promotion gate
+    promotion_gate = PromotionGate(git_engine)
+
+    # Evaluate without test analysis (checks structural requirements only)
+    try:
+        decision = promotion_gate.evaluate(pad_id, test_analysis=None)
+    except Exception as exc:
+        abort_with_error("Promotion gate evaluation failed", str(exc))
+
+    # Display decision
+    formatter.print_subheader("Decision")
+    if decision.can_promote:
+        formatter.print_success(f"✅ {decision.decision.value.upper()}: Ready to promote")
+    else:
+        formatter.print_warning(f"❌ {decision.decision.value.upper()}: Cannot promote")
+
+    # Display reasons
+    if decision.reasons:
+        formatter.print_subheader("Reasons")
+        for reason in decision.reasons:
+            formatter.print_info(f"  {reason}")
+
+    # Display warnings
+    if decision.warnings:
+        formatter.print_subheader("Warnings")
+        for warning in decision.warnings:
+            formatter.print_warning(f"  {warning}")
+
+    # Show next steps
+    if decision.can_promote:
+        formatter.print_info("\nNext steps:")
+        formatter.print_bullet_list([
+            f"evogitctl pad promote {pad_id}",
+            f"evogitctl pad auto-merge {pad_id}",
+        ])
+    else:
+        formatter.print_info("\nFix the issues and try again:")
+        formatter.print_bullet_list([
+            f"evogitctl test run {pad_id}",
+            f"evogitctl pad evaluate {pad_id}",
+        ])
+
+
+@pad.command("patch")
+@click.argument("pad_id")
+@click.argument("patch_file", type=click.Path(exists=True, path_type=Path))
+@click.option("--message", "-m", default="", help="Commit message for the patch")
+@click.option("--no-validate", is_flag=True, help="Skip patch validation")
+def pad_patch(pad_id: str, patch_file: Path, message: str, no_validate: bool) -> None:
+    """
+    Apply a patch file to a workpad.
+    
+    Reads a unified diff patch from a file and applies it to the specified workpad.
+    """
+    git_engine = get_git_engine()
+    patch_engine = get_patch_engine()
+    workpad = git_engine.get_workpad(pad_id)
+    _require_workpad(workpad, pad_id)
+
+    formatter.print_header("Apply Patch")
+    formatter.print_info(f"Workpad: {getattr(workpad, 'title', pad_id)}")
+    formatter.print_info(f"Patch file: {patch_file}")
+
+    # Read patch content
+    try:
+        patch_content = patch_file.read_text()
+    except Exception as exc:
+        abort_with_error("Failed to read patch file", str(exc))
+
+    if not patch_content.strip():
+        abort_with_error("Patch file is empty", f"File: {patch_file}")
+
+    # Apply patch
+    try:
+        checkpoint_id = patch_engine.apply_patch(
+            pad_id,
+            patch_content,
+            message=message or f"Applied patch from {patch_file.name}",
+            validate=not no_validate,
+        )
+        formatter.print_success("Patch applied successfully!")
+        formatter.print_info(f"Checkpoint ID: {checkpoint_id}")
+    except Exception as exc:
+        logger.error(f"Failed to apply patch: {exc}", exc_info=True)
+        abort_with_error("Failed to apply patch", str(exc))
+
+
+@pad.command("rebase")
+@click.argument("pad_id")
+@click.option("--force", is_flag=True, help="Force rebase even if conflicts detected")
+def pad_rebase(pad_id: str, force: bool) -> None:
+    """
+    Rebase workpad against trunk.
+    
+    Updates the workpad's base to the latest trunk commit.
+    """
+    git_engine = get_git_engine()
+    workpad = git_engine.get_workpad(pad_id)
+    _require_workpad(workpad, pad_id)
+
+    formatter.print_header("Rebase Workpad")
+    formatter.print_info(f"Workpad: {getattr(workpad, 'title', pad_id)}")
+
+    # Check if rebase is needed
+    try:
+        can_ff = git_engine.can_promote(pad_id)
+        if can_ff:
+            formatter.print_info("Workpad is already up-to-date with trunk")
+            formatter.print_success("No rebase needed")
+            return
+    except Exception as exc:
+        logger.warning(f"Could not check fast-forward status: {exc}")
+
+    # Perform rebase
+    try:
+        formatter.print_info("Rebasing against trunk...")
+        git_engine.rebase_workpad(pad_id)
+        formatter.print_success("Rebase completed successfully!")
+        formatter.print_info(f"Workpad {pad_id} is now up-to-date with trunk")
+    except GitEngineError as exc:
+        error_msg = str(exc)
+        if "conflict" in error_msg.lower() and not force:
+            abort_with_error(
+                "Rebase failed due to conflicts",
+                error_msg,
+                suggestions=[
+                    f"evogitctl pad diff {pad_id}",
+                    f"evogitctl pad rebase {pad_id} --force",
+                    "Manually resolve conflicts in the repository",
+                ],
+            )
+        abort_with_error("Rebase failed", error_msg)
+
+
 # -- Test commands ----------------------------------------------------------------------
 
 
@@ -759,6 +979,214 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
     )
 
 
+@test.command("analyze")
+@click.argument("pad_id")
+def test_analyze(pad_id: str) -> None:
+    """
+    Analyze test failures and suggest fixes.
+    
+    Examines test results to identify failure patterns, categorize errors,
+    and provide actionable suggestions for fixing issues.
+    """
+    git_engine = get_git_engine()
+    workpad = git_engine.get_workpad(pad_id)
+    _require_workpad(workpad, pad_id)
+
+    formatter.print_header("Test Failure Analysis")
+    formatter.print_info(f"Workpad: {getattr(workpad, 'title', pad_id)}")
+
+    # Get recent test run
+    state_manager = StateManager()
+    try:
+        test_runs = state_manager.get_test_runs(pad_id)
+        if not test_runs:
+            formatter.print_warning("No test runs found for this workpad")
+            formatter.print_info(f"Run tests first: evogitctl test run {pad_id}")
+            return
+
+        # Use most recent test run
+        latest_run = test_runs[0] if isinstance(test_runs, list) else test_runs
+        run_id = _extract_run_id(latest_run)
+    except Exception as exc:
+        logger.warning(f"Could not retrieve test runs: {exc}")
+        formatter.print_warning("Could not retrieve test history")
+        formatter.print_info(f"Run tests first: evogitctl test run {pad_id}")
+        return
+
+    # Get test results for analysis
+    try:
+        test_run_data = state_manager.get_test_run(run_id)
+        if not test_run_data:
+            formatter.print_warning("No test data found")
+            return
+
+        state_results = getattr(test_run_data, "tests", [])
+        if not state_results:
+            formatter.print_warning("No test results to analyze")
+            return
+
+        # Convert state results to engine results for analyzer
+        from sologit.engines.test_orchestrator import TestResult as EngineTestResult
+        
+        engine_results: List[EngineTestResult] = []
+        for state_result in state_results:
+            status_map = {
+                "passed": TestStatus.PASSED,
+                "failed": TestStatus.FAILED,
+                "error": TestStatus.ERROR,
+                "timeout": TestStatus.TIMEOUT,
+                "skipped": TestStatus.SKIPPED,
+            }
+            status = status_map.get(
+                getattr(state_result, "status", "failed").lower(),
+                TestStatus.FAILED,
+            )
+            engine_results.append(
+                EngineTestResult(
+                    name=getattr(state_result, "name", "unknown"),
+                    status=status,
+                    duration_ms=getattr(state_result, "duration_ms", 0),
+                    stdout=getattr(state_result, "output", ""),
+                    stderr="",
+                    error=getattr(state_result, "error", None),
+                    log_path=None,
+                )
+            )
+
+    except Exception as exc:
+        logger.error(f"Failed to load test results: {exc}", exc_info=True)
+        abort_with_error("Failed to load test results", str(exc))
+
+    # Analyze test results
+    try:
+        analyzer = TestAnalyzer()
+        analysis = analyzer.analyze(engine_results)
+    except Exception as exc:
+        logger.error(f"Test analysis failed: {exc}", exc_info=True)
+        abort_with_error("Test analysis failed", str(exc))
+
+    # Display analysis results
+    formatter.print_subheader("Test Summary")
+    table = formatter.table(headers=["Metric", "Value"])
+    table.add_row("Total Tests", str(analysis.total_tests))
+    table.add_row("Passed", f"[green]{analysis.passed}[/green]")
+    table.add_row("Failed", f"[red]{analysis.failed}[/red]")
+    table.add_row("Timeout", f"[yellow]{analysis.timeout}[/yellow]")
+    table.add_row("Error", f"[red]{analysis.error}[/red]")
+    table.add_row("Status", f"[bold]{analysis.status.upper()}[/bold]")
+    table.add_row("Fix Complexity", analysis.estimated_fix_complexity)
+    formatter.console.print(table)
+
+    # Display failure patterns
+    if analysis.failure_patterns:
+        formatter.print_subheader("Failure Patterns")
+        pattern_table = formatter.table(headers=["Category", "Message", "Count"])
+        for pattern in analysis.failure_patterns[:10]:  # Show top 10
+            pattern_table.add_row(
+                pattern.category.value,
+                pattern.message[:80] + ("..." if len(pattern.message) > 80 else ""),
+                str(pattern.count),
+            )
+        formatter.console.print(pattern_table)
+
+    # Display suggested actions
+    if analysis.suggested_actions:
+        formatter.print_subheader("Suggested Actions")
+        for i, action in enumerate(analysis.suggested_actions, 1):
+            formatter.print_info(f"{i}. {action}")
+
+    # Show next steps
+    formatter.print_info("\nNext steps:")
+    if analysis.status == "green":
+        formatter.print_bullet_list([
+            f"evogitctl pad promote {pad_id}",
+            f"evogitctl pad auto-merge {pad_id}",
+        ])
+    else:
+        formatter.print_bullet_list([
+            "Fix the identified issues",
+            f"evogitctl test run {pad_id}",
+            f"evogitctl test analyze {pad_id}",
+        ])
+
+
+def execute_pair_loop(
+    ctx: click.Context,
+    prompt: str,
+    repo_id: Optional[str] = None,
+    title: Optional[str] = None,
+    no_test: bool = False,
+    no_promote: bool = False,
+    target: str = "fast",
+) -> None:
+    """
+    Execute AI pair programming workflow.
+    
+    This is a simplified implementation that creates a workpad and runs
+    the auto-merge workflow. A full AI integration would involve:
+    - AI planning and code generation
+    - Patch generation
+    - Interactive refinement
+    
+    Args:
+        ctx: Click context
+        prompt: Natural language task description
+        repo_id: Repository ID (auto-selected if only one exists)
+        title: Workpad title (derived from prompt if not provided)
+        no_test: Skip test execution
+        no_promote: Disable automatic promotion
+        target: Test target (fast/full)
+    """
+    git_engine = get_git_engine()
+    
+    # Auto-select repository if not provided
+    if not repo_id:
+        repos = git_engine.list_repos()
+        if not repos:
+            abort_with_error(
+                "No repositories found",
+                "Initialize a repository first: evogitctl repo init --zip app.zip",
+            )
+        if len(repos) == 1:
+            repo = repos[0]
+            repo_id = getattr(repo, "id", None)
+            formatter.print_info(f"Using repository: {getattr(repo, 'name', repo_id)}")
+        else:
+            abort_with_error(
+                "Multiple repositories found",
+                "Please specify --repo <ID>",
+                suggestions=[f"--repo {getattr(r, 'id', 'unknown')}" for r in repos[:5]],
+            )
+    
+    # Create workpad
+    workpad_title = title or prompt[:50]
+    formatter.print_info(f"Creating workpad: {workpad_title}")
+    
+    try:
+        pad_id = git_engine.create_workpad(repo_id, workpad_title)
+        formatter.print_success(f"Created workpad: {pad_id}")
+    except Exception as exc:
+        abort_with_error("Failed to create workpad", str(exc))
+    
+    # NOTE: Full AI integration would go here:
+    # 1. Call AI to analyze prompt and plan implementation
+    # 2. Generate code patch
+    # 3. Apply patch to workpad
+    # 4. Run tests and refine if needed
+    
+    formatter.print_warning(
+        "AI pair programming is a work in progress. "
+        "The workpad has been created but AI code generation is not yet implemented."
+    )
+    formatter.print_info(f"Workpad ID: {pad_id}")
+    formatter.print_info("\nNext steps:")
+    formatter.print_bullet_list([
+        f"Manually make changes in the workpad",
+        f"evogitctl test run {pad_id}",
+        f"evogitctl pad auto-merge {pad_id}" if not no_promote else f"evogitctl pad promote {pad_id}",
+    ])
+
+
 __all__ = [
     "repo",
     "pad",
@@ -772,4 +1200,5 @@ __all__ = [
     "get_git_sync",
     "_tests_from_config_entries",
     "_parse_test_override",
+    "execute_pair_loop",
 ]
