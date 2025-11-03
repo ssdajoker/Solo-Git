@@ -252,7 +252,7 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
     git_sync = get_git_sync()
 
     try:
-        repo_info = None
+        repo_info: Optional[Dict[str, Any]] = None
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
@@ -266,6 +266,9 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
             repo_name = name or Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning from: {git_url}")
             repo_info = git_sync.init_repo_from_git(git_url, repo_name)
+
+        if repo_info is None:
+            raise GitEngineError("Repository initialization returned no metadata")
 
         formatter.print_success("Repository initialized!")
         formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
@@ -655,10 +658,10 @@ def pad_delete(pad_id: str, force: bool, output_json: bool) -> None:
             formatter.print_header("Workpad Deletion")
             formatter.print_info(f"Deleting workpad: {workpad.title}")
         
-        # Delete the branch
+        # Delete the branch and workpad metadata using the engine API
         branch_name = workpad.branch_name
-        git_engine.delete_branch(pad_id, branch_name)
-        
+        git_engine.delete_workpad(pad_id, force=force)
+
         # Remove from state
         state_manager.delete_workpad(pad_id)
         
@@ -759,9 +762,10 @@ def test_run(pad_id: str, target: str, parallel: bool, output_json: bool) -> Non
 [bold]Target:[/bold] {target}"""
             formatter.print_panel(info, title="🧪 Test Execution")
 
+        results: List[TestResult]
         if output_json:
             # For JSON mode, run without progress bar or output handlers
-            results: List[TestResult] = asyncio.run(
+            results = asyncio.run(
                 test_orchestrator.run_tests(
                     pad_id,
                     tests,
@@ -785,7 +789,7 @@ def test_run(pad_id: str, target: str, parallel: bool, output_json: bool) -> Non
                 def handle_complete(result: TestResult) -> None:
                     progress.advance(task)
 
-                results: List[TestResult] = asyncio.run(
+                results = asyncio.run(
                     test_orchestrator.run_tests(
                         pad_id,
                         tests,
