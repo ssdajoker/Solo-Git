@@ -42,13 +42,14 @@ async def test_abacus_adapter_generate(abacus_config):
     from sologit.orchestration.providers.abacus_adapter import AbacusAdapter
     
     with patch('sologit.orchestration.providers.abacus_adapter.AbacusClient') as mock_client:
-        # Mock the chat_completion response
-        mock_client.return_value.chat_completion.return_value = {
-            "content": "test response",
-            "model": "gpt-4",
-            "usage": {"total_tokens": 100},
-            "cost_usd": 0.002,
-        }
+        # Mock the chat response object
+        mock_response = Mock()
+        mock_response.content = "test response"
+        mock_response.model = "gpt-4o-mini"
+        mock_response.prompt_tokens = 50
+        mock_response.completion_tokens = 50
+        
+        mock_client.return_value.chat.return_value = mock_response
         
         adapter = AbacusAdapter(abacus_config)
         response = await adapter.generate(
@@ -79,7 +80,7 @@ def test_abacus_adapter_default_model(abacus_config):
     
     with patch('sologit.orchestration.providers.abacus_adapter.AbacusClient'):
         adapter = AbacusAdapter(abacus_config)
-        assert adapter.get_default_model() == "routellm-auto"
+        assert adapter.get_default_model() == "gpt-4o-mini"
 
 
 @pytest.mark.asyncio
