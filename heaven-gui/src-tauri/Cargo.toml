@@ -1,11 +1,11 @@
 
 [package]
 name = "heaven-gui"
-version = "0.1.0"
-description = "Heaven Interface GUI for Solo Git"
+version = "1.0.0"
+description = "Heaven Interface - Desktop GUI for Solo Git workflow manager with AI assistance"
 authors = ["Solo Git Contributors"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/ssdajoker/Solo-Git"
 edition = "2021"
 
 [build-dependencies]
