@@ -622,7 +622,7 @@ def pad_promote(pad_id: str, force: bool) -> None:
 
     try:
         formatter.print_header("Promoting workpad")
-        commit_hash = git_engine.promote_workpad(pad_id)
+        commit_hash = git_engine.promote_workpad(pad_id, force=force)
         formatter.print_success("Workpad promoted to trunk!")
         if commit_hash:
             formatter.print_info(f"Commit: {commit_hash}")
