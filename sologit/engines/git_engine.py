@@ -436,7 +436,10 @@ class GitEngine:
             if not repo.is_dirty(untracked_files=True):
                 raise GitEngineError("No changes to checkpoint")
 
-            repo.index.add('*')
+            # Stage only tracked files to avoid unintended additions
+            tracked_files = repo.git.ls_files().splitlines()
+            if tracked_files:
+                repo.index.add(tracked_files)
             checkpoint_num = len(workpad.checkpoints) + 1
             commit = repo.index.commit(message.strip())
 
