@@ -5,9 +5,11 @@ Uses policy engine for intelligent provider selection and fallback.
 import asyncio
 from typing import Optional
 from dataclasses import dataclass
+from datetime import datetime
 
 from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
 from sologit.orchestration.providers import ProviderResponse, ProviderType
+from sologit.orchestration.telemetry import TelemetryCollector, TelemetryEvent
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -47,8 +49,9 @@ class CommitMessageGenerator:
     6. Return normalized response
     """
     
-    def __init__(self, policy_engine: PolicyEngine):
+    def __init__(self, policy_engine: PolicyEngine, telemetry_collector: Optional[TelemetryCollector] = None):
         self.policy_engine = policy_engine
+        self.telemetry_collector = telemetry_collector or TelemetryCollector()
     
     async def generate(self, request: CommitMessageRequest) -> CommitMessageResponse:
         """
@@ -80,6 +83,19 @@ class CommitMessageGenerator:
                 max_tokens=200,
             )
             
+            # Record telemetry
+            self.telemetry_collector.record_event(TelemetryEvent(
+                timestamp=datetime.now(),
+                task_type="commit_message",
+                provider=response.provider,
+                model=response.model,
+                latency_ms=response.latency_ms,
+                cost_usd=response.cost_usd,
+                tokens_used=response.tokens_used,
+                fallback_used=False,
+                success=True,
+            ))
+            
             return CommitMessageResponse(
                 message=response.content.strip(),
                 provider=response.provider,
@@ -104,6 +120,19 @@ class CommitMessageGenerator:
                         temperature=0.7,
                         max_tokens=200,
                     )
+                    
+                    # Record telemetry for successful fallback
+                    self.telemetry_collector.record_event(TelemetryEvent(
+                        timestamp=datetime.now(),
+                        task_type="commit_message",
+                        provider=response.provider,
+                        model=response.model,
+                        latency_ms=response.latency_ms,
+                        cost_usd=response.cost_usd,
+                        tokens_used=response.tokens_used,
+                        fallback_used=True,
+                        success=True,
+                    ))
                     
                     return CommitMessageResponse(
                         message=response.content.strip(),

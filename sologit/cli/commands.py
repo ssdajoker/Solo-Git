@@ -1556,3 +1556,61 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
     except Exception as e:
         logger.exception("Commit message generation failed")
         abort_with_error("Error generating commit message", str(e))
+
+
+
+
+@click.command("telemetry")
+@click.option("--days", default=30, help="Number of days to analyze")
+def show_telemetry(days: int):
+    """
+    Show AI provider usage telemetry.
+    
+    Displays statistics about AI provider usage including:
+    - Total requests and costs
+    - Average latency
+    - Provider usage breakdown
+    - Fallback rate
+    
+    Examples:
+        sologit telemetry
+        sologit telemetry --days 7
+        sologit telemetry --days 90
+    """
+    from rich.table import Table
+    from sologit.orchestration.telemetry import TelemetryCollector
+    
+    try:
+        collector = TelemetryCollector()
+        summary = collector.get_summary(days=days)
+        
+        formatter.console.print(f"\n[bold cyan]AI Provider Usage (Last {days} days)[/bold cyan]\n")
+        
+        if summary["total_events"] == 0:
+            formatter.print_warning("No telemetry data available")
+            return
+        
+        # Overview
+        formatter.console.print(f"[cyan]Total Requests:[/cyan] {summary['total_events']}")
+        formatter.console.print(f"[cyan]Total Cost:[/cyan] ${summary['total_cost_usd']:.4f}")
+        formatter.console.print(f"[cyan]Avg Latency:[/cyan] {summary['avg_latency_ms']:.0f}ms")
+        formatter.console.print(f"[cyan]Fallback Rate:[/cyan] {summary['fallback_rate']:.1%}")
+        formatter.console.print(f"[cyan]Success Rate:[/cyan] {summary['success_rate']:.1%}")
+        formatter.console.print()
+        
+        # Provider breakdown
+        table = Table(title="Provider Usage", show_header=True, header_style="bold cyan")
+        table.add_column("Provider", style="cyan")
+        table.add_column("Requests", justify="right")
+        table.add_column("Percentage", justify="right")
+        
+        for provider, count in summary["provider_usage"].items():
+            pct = (count / summary["total_events"]) * 100
+            table.add_row(provider, str(count), f"{pct:.1f}%")
+        
+        formatter.console.print(table)
+        formatter.console.print()
+        
+    except Exception as e:
+        logger.exception("Failed to show telemetry")
+        abort_with_error("Error displaying telemetry", str(e))

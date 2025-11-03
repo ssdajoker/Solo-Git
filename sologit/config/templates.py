@@ -14,6 +14,22 @@ abacus:
   endpoint: https://api.abacus.ai/api/v0
   api_key: YOUR_API_KEY_HERE  # Service key (s2_...) from https://abacus.ai
 
+# Optional: Fallback Provider API Keys
+# These are used for AI-assisted commit messages when Abacus.AI is unavailable
+# Leave blank if you only want to use Abacus.AI
+openai_api_key: null  # Optional: OpenAI API key for fallback
+anthropic_api_key: null  # Optional: Anthropic API key for fallback
+
+# AI Commit Message Generation
+ai_commit_message:
+  enabled: true
+  routing_strategy: abacus_first  # Options: abacus_first, cost_optimized, latency_optimized, user_specified
+  conventional_commits: true  # Use Conventional Commits format (feat:, fix:, etc.)
+  fallback_chain:
+    - abacus
+    - openai
+    - anthropic
+
 # Model Selection Strategy
 # Solo Git automatically selects the best model for each task
 ai:
