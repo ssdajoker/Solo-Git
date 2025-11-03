@@ -96,6 +96,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Cache npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('heaven-gui/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
       - name: Install npm dependencies
         working-directory: heaven-gui
         run: npm ci
