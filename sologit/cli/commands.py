@@ -392,21 +392,35 @@ def pad() -> None:
 @pad.command('create')
 @click.argument('title')
 @click.option('--repo', 'repo_id', type=str, help='Repository ID (required if multiple repos)')
-def pad_create(title: str, repo_id: Optional[str]) -> None:
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
+def pad_create(title: str, repo_id: Optional[str], output_json: bool) -> None:
     """Create a new workpad."""
+    import json
     git_engine = get_git_engine()
 
-    formatter.print_header("Workpad Creation")
+    if not output_json:
+        formatter.print_header("Workpad Creation")
 
     # If no repo_id, try to auto-select
     if not repo_id:
         repos = git_engine.list_repos()
         if len(repos) == 0:
+            if output_json:
+                print(json.dumps({"success": False, "error": "No repositories found"}))
+                raise SystemExit(1)
             abort_with_error("No repositories found", "Initialize a repository first: evogitctl repo init --zip app.zip")
         elif len(repos) == 1:
             repo_id = repos[0].id
-            formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
+            if not output_json:
+                formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
         else:
+            if output_json:
+                print(json.dumps({
+                    "success": False, 
+                    "error": "Multiple repositories found. Use --repo to specify an ID.",
+                    "repositories": [{"id": r.id, "name": r.name} for r in repos]
+                }))
+                raise SystemExit(1)
             formatter.print_warning("Multiple repositories found. Use --repo to specify an ID.")
             repo_table = formatter.table(headers=["ID", "Name"])
             for repo in repos:
@@ -421,24 +435,45 @@ def pad_create(title: str, repo_id: Optional[str]) -> None:
             raise click.Abort()
 
     try:
-        formatter.print_info(f"Creating workpad: {title}")
+        if not output_json:
+            formatter.print_info(f"Creating workpad: {title}")
         pad_id = git_engine.create_workpad(repo_id, title)
 
         workpad = git_engine.get_workpad(pad_id)
-        formatter.print_success("Workpad created!")
-        formatter.print_info(f"Pad ID: {workpad.id}")
-        formatter.print_info(f"Title: {workpad.title}")
-        formatter.print_info(f"Branch: {workpad.branch_name}")
-        formatter.print_info("Base: main")
+        
+        if output_json:
+            # Output JSON format
+            print(json.dumps({
+                "success": True,
+                "workpad": {
+                    "workpad_id": workpad.id,
+                    "repo_id": repo_id,
+                    "title": workpad.title,
+                    "status": getattr(workpad, "status", "draft"),
+                    "branch_name": workpad.branch_name,
+                    "base_commit": getattr(workpad, "base_commit", "main"),
+                    "current_commit": getattr(workpad, "current_commit", None),
+                    "created_at": getattr(workpad, "created_at", None),
+                }
+            }))
+        else:
+            formatter.print_success("Workpad created!")
+            formatter.print_info(f"Pad ID: {workpad.id}")
+            formatter.print_info(f"Title: {workpad.title}")
+            formatter.print_info(f"Branch: {workpad.branch_name}")
+            formatter.print_info("Base: main")
 
-        details = formatter.table(headers=["Field", "Value"])
-        details.add_row("Pad ID", f"[cyan]{workpad.id}[/cyan]")
-        details.add_row("Title", f"[bold]{workpad.title}[/bold]")
-        details.add_row("Branch", workpad.branch_name)
-        details.add_row("Base", "main")
-        formatter.console.print(details)
+            details = formatter.table(headers=["Field", "Value"])
+            details.add_row("Pad ID", f"[cyan]{workpad.id}[/cyan]")
+            details.add_row("Title", f"[bold]{workpad.title}[/bold]")
+            details.add_row("Branch", workpad.branch_name)
+            details.add_row("Base", "main")
+            formatter.console.print(details)
 
     except GitEngineError as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
         abort_with_error("Failed to create workpad", str(e))
 
 
@@ -530,39 +565,126 @@ def pad_info(pad_id: str) -> None:
 
 @pad.command('promote')
 @click.argument('pad_id')
-def pad_promote(pad_id: str) -> None:
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
+def pad_promote(pad_id: str, output_json: bool) -> None:
     """Promote workpad to trunk (fast-forward merge)."""
+    import json
     git_engine = get_git_engine()
 
     workpad = git_engine.get_workpad(pad_id)
     if workpad is None:
+        if output_json:
+            print(json.dumps({"success": False, "error": f"Workpad {pad_id} not found"}))
+            raise SystemExit(1)
         abort_with_error(f"Workpad {pad_id} not found")
 
     # Check if can promote
     if not git_engine.can_promote(pad_id):
+        if output_json:
+            print(json.dumps({
+                "success": False, 
+                "error": "Cannot promote: not fast-forward-able",
+                "details": "Trunk has diverged. Manual merge required before promotion."
+            }))
+            raise SystemExit(1)
         abort_with_error(
             "Cannot promote: not fast-forward-able",
             "Trunk has diverged. Manual merge required before promotion."
         )
 
     try:
-        formatter.print_header("Workpad Promotion")
-        formatter.print_info(f"Promoting workpad: {workpad.title}")
+        if not output_json:
+            formatter.print_header("Workpad Promotion")
+            formatter.print_info(f"Promoting workpad: {workpad.title}")
+        
         commit_hash = git_engine.promote_workpad(pad_id)
 
-        formatter.print_success("Workpad promoted to trunk!")
-        formatter.print_info(f"Commit: {commit_hash}")
-        formatter.print_info(f"Branch Removed: {workpad.branch_name}")
-        formatter.print_info(f"Trunk Updated: main @ {commit_hash[:8]}")
+        if output_json:
+            print(json.dumps({
+                "success": True,
+                "workpad_id": pad_id,
+                "commit_hash": commit_hash,
+                "branch_removed": workpad.branch_name,
+                "title": workpad.title,
+                "promoted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }))
+        else:
+            formatter.print_success("Workpad promoted to trunk!")
+            formatter.print_info(f"Commit: {commit_hash}")
+            formatter.print_info(f"Branch Removed: {workpad.branch_name}")
+            formatter.print_info(f"Trunk Updated: main @ {commit_hash[:8]}")
 
-        details = formatter.table(headers=["Field", "Value"])
-        details.add_row("Commit", f"[green]{commit_hash}[/green]")
-        details.add_row("Branch Removed", workpad.branch_name)
-        details.add_row("Trunk Updated", f"main @ {commit_hash[:8]}")
-        formatter.console.print(details)
+            details = formatter.table(headers=["Field", "Value"])
+            details.add_row("Commit", f"[green]{commit_hash}[/green]")
+            details.add_row("Branch Removed", workpad.branch_name)
+            details.add_row("Trunk Updated", f"main @ {commit_hash[:8]}")
+            formatter.console.print(details)
 
     except GitEngineError as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
         abort_with_error("Promotion failed", str(e))
+
+
+@pad.command('delete')
+@click.argument('pad_id')
+@click.option('--force', is_flag=True, help='Force deletion without confirmation')
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
+def pad_delete(pad_id: str, force: bool, output_json: bool) -> None:
+    """Delete a workpad and its branch."""
+    import json
+    git_engine = get_git_engine()
+    state_manager = StateManager()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
+        if output_json:
+            print(json.dumps({"success": False, "error": f"Workpad {pad_id} not found"}))
+            raise SystemExit(1)
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    # Confirmation prompt (skip if --force or --json)
+    if not force and not output_json:
+        if not click.confirm(f"Delete workpad '{workpad.title}' ({pad_id})?"):
+            formatter.print_info("Deletion cancelled")
+            return
+
+    try:
+        if not output_json:
+            formatter.print_header("Workpad Deletion")
+            formatter.print_info(f"Deleting workpad: {workpad.title}")
+        
+        # Delete the branch
+        branch_name = workpad.branch_name
+        git_engine.delete_branch(pad_id, branch_name)
+        
+        # Remove from state
+        state_manager.delete_workpad(pad_id)
+        
+        if output_json:
+            print(json.dumps({
+                "success": True,
+                "workpad_id": pad_id,
+                "title": workpad.title,
+                "branch_deleted": branch_name,
+                "deleted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }))
+        else:
+            formatter.print_success("Workpad deleted!")
+            formatter.print_info(f"Pad ID: {pad_id}")
+            formatter.print_info(f"Branch Removed: {branch_name}")
+
+    except GitEngineError as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
+        abort_with_error("Deletion failed", str(e))
+    except Exception as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
+        abort_with_error("Deletion failed", str(e))
 
 
 @pad.command('diff')
@@ -596,14 +718,19 @@ def test() -> None:
 @click.argument('pad_id')
 @click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
 @click.option('--parallel/--sequential', default=True, help='Parallel execution')
-def test_run(pad_id: str, target: str, parallel: bool) -> None:
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
+def test_run(pad_id: str, target: str, parallel: bool, output_json: bool) -> None:
     """Run tests for a workpad with live output streaming."""
+    import json
 
     git_engine = get_git_engine()
     test_orchestrator = get_test_orchestrator()
 
     workpad = git_engine.get_workpad(pad_id)
     if workpad is None:
+        if output_json:
+            print(json.dumps({"success": False, "error": f"Workpad {pad_id} not found"}))
+            raise SystemExit(1)
         abort_with_error(f"Workpad {pad_id} not found")
 
     state_manager = StateManager()
@@ -623,40 +750,56 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
 
     try:
         orchestrator_mode = getattr(test_orchestrator.mode, "value", test_orchestrator.mode)
-        info = f"""[bold]Workpad:[/bold] {workpad.title}
+        
+        if not output_json:
+            info = f"""[bold]Workpad:[/bold] {workpad.title}
 [bold]Tests:[/bold] {len(tests)}
 [bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
 [bold]Mode:[/bold] {orchestrator_mode}
 [bold]Target:[/bold] {target}"""
-        formatter.print_panel(info, title="🧪 Test Execution")
+            formatter.print_panel(info, title="🧪 Test Execution")
 
-        with formatter.create_progress() as progress:
-            task = progress.add_task(f"Running {target} tests...", total=len(tests))
-
-            def handle_output(test_name: str, stream: str, line: str) -> None:
-                style = "cyan" if stream == "stdout" else "red"
-                prefix = "stdout" if stream == "stdout" else "stderr"
-                formatter.console.print(
-                    f"[{prefix}] {test_name}: {line}",
-                    style=style,
-                )
-
-            def handle_complete(result: TestResult) -> None:
-                progress.advance(task)
-
+        if output_json:
+            # For JSON mode, run without progress bar or output handlers
             results: List[TestResult] = asyncio.run(
                 test_orchestrator.run_tests(
                     pad_id,
                     tests,
                     parallel=parallel,
-                    on_output=handle_output,
-                    on_test_complete=handle_complete,
+                    on_output=None,
+                    on_test_complete=None,
                 )
             )
+        else:
+            with formatter.create_progress() as progress:
+                task = progress.add_task(f"Running {target} tests...", total=len(tests))
 
-        formatter.console.print()
+                def handle_output(test_name: str, stream: str, line: str) -> None:
+                    style = "cyan" if stream == "stdout" else "red"
+                    prefix = "stdout" if stream == "stdout" else "stderr"
+                    formatter.console.print(
+                        f"[{prefix}] {test_name}: {line}",
+                        style=style,
+                    )
 
-        table = formatter.table(headers=["Test", "Status", "Duration", "Mode", "Notes", "Log"])
+                def handle_complete(result: TestResult) -> None:
+                    progress.advance(task)
+
+                results: List[TestResult] = asyncio.run(
+                    test_orchestrator.run_tests(
+                        pad_id,
+                        tests,
+                        parallel=parallel,
+                        on_output=handle_output,
+                        on_test_complete=handle_complete,
+                    )
+                )
+
+        if not output_json:
+            formatter.console.print()
+
+        if not output_json:
+            table = formatter.table(headers=["Test", "Status", "Duration", "Mode", "Notes", "Log"])
 
         state_results: List[StateTestResult] = []
         total_duration = 0
@@ -664,33 +807,34 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
         for result in results:
             status_value = getattr(result.status, "value", result.status)
 
-            if status_value == TestStatus.PASSED.value:
-                status_icon = "✅"
-            elif status_value == TestStatus.SKIPPED.value:
-                status_icon = "⏭️"
-            elif status_value == TestStatus.TIMEOUT.value:
-                status_icon = "⏱️"
-            elif status_value == TestStatus.ERROR.value:
-                status_icon = "⚠️"
-            else:
-                status_icon = "❌"
+            if not output_json:
+                if status_value == TestStatus.PASSED.value:
+                    status_icon = "✅"
+                elif status_value == TestStatus.SKIPPED.value:
+                    status_icon = "⏭️"
+                elif status_value == TestStatus.TIMEOUT.value:
+                    status_icon = "⏱️"
+                elif status_value == TestStatus.ERROR.value:
+                    status_icon = "⚠️"
+                else:
+                    status_icon = "❌"
 
-            status_text = f"{status_icon} {status_value}"
-            duration_s = result.duration_ms / 1000
-            notes = result.error or result.stderr or ""
-            notes = notes.replace("\n", " ")
-            if len(notes) > 80:
-                notes = notes[:77] + "..."
-            log_display = result.log_path.name if result.log_path else "-"
+                status_text = f"{status_icon} {status_value}"
+                duration_s = result.duration_ms / 1000
+                notes = result.error or result.stderr or ""
+                notes = notes.replace("\n", " ")
+                if len(notes) > 80:
+                    notes = notes[:77] + "..."
+                log_display = result.log_path.name if result.log_path else "-"
 
-            table.add_row(
-                result.name,
-                status_text,
-                f"{duration_s:.2f}s",
-                result.mode,
-                notes,
-                log_display,
-            )
+                table.add_row(
+                    result.name,
+                    status_text,
+                    f"{duration_s:.2f}s",
+                    result.mode,
+                    notes,
+                    log_display,
+                )
 
             state_results.append(
                 StateTestResult(
@@ -704,18 +848,21 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             )
             total_duration += result.duration_ms
 
-        formatter.console.print(table)
+        if not output_json:
+            formatter.console.print(table)
 
         summary: Dict[str, Any] = test_orchestrator.get_summary(results)
-        status_color = "green" if summary['status'] == 'green' else "red"
-        summary_text = f"""[bold]Total:[/bold] {summary['total']}
+        
+        if not output_json:
+            status_color = "green" if summary['status'] == 'green' else "red"
+            summary_text = f"""[bold]Total:[/bold] {summary['total']}
 [bold]Passed:[/bold] [green]{summary['passed']}[/green]
 [bold]Failed:[/bold] [red]{summary['failed']}[/red]
 [bold]Timeout:[/bold] {summary['timeout']}
 [bold]Skipped:[/bold] {summary['skipped']}
 [bold]Status:[/bold] [{status_color}]{summary['status'].upper()}[/{status_color}]"""
 
-        formatter.print_panel(summary_text, title="📊 Test Summary")
+            formatter.print_panel(summary_text, title="📊 Test Summary")
 
         workpad.test_status = summary['status']
 
@@ -732,27 +879,54 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             tests=state_results,
         )
 
-        if summary['status'] == 'green':
-            formatter.print_success("All tests passed! Ready to promote.")
+        if output_json:
+            # Output JSON format
+            print(json.dumps({
+                "success": True,
+                "run_id": run_id,
+                "workpad_id": pad_id,
+                "target": target,
+                "status": final_status,
+                "summary": {
+                    "total": summary['total'],
+                    "passed": summary['passed'],
+                    "failed": summary['failed'],
+                    "skipped": summary['skipped'],
+                    "timeout": summary['timeout'],
+                    "duration_ms": total_duration,
+                },
+                "tests": [
+                    {
+                        "name": res.name,
+                        "status": res.status,
+                        "duration_ms": res.duration_ms,
+                        "error": res.error,
+                    }
+                    for res in state_results
+                ]
+            }))
         else:
-            formatter.print_error(
-                "Tests Require Attention",
-                "Some tests failed or timed out. Promotion has been halted until the issues are resolved.",
-                help_text="Review the failing rows in the summary table above and inspect the captured logs for each failing test.",
-                tip="Target a single test with 'evogitctl test run --only <test-name>' to iterate quickly.",
-                suggestions=[
-                    f"evogitctl test run --workpad {workpad.id}",
-                    f"evogitctl pad info {workpad.id}",
-                    "evogitctl test list",
-                ],
-                docs_url="docs/TESTING_GUIDE.md",
-            )
+            if summary['status'] == 'green':
+                formatter.print_success("All tests passed! Ready to promote.")
+            else:
+                formatter.print_error(
+                    "Tests Require Attention",
+                    "Some tests failed or timed out. Promotion has been halted until the issues are resolved.",
+                    help_text="Review the failing rows in the summary table above and inspect the captured logs for each failing test.",
+                    tip="Target a single test with 'evogitctl test run --only <test-name>' to iterate quickly.",
+                    suggestions=[
+                        f"evogitctl test run --workpad {workpad.id}",
+                        f"evogitctl pad info {workpad.id}",
+                        "evogitctl test list",
+                    ],
+                    docs_url="docs/TESTING_GUIDE.md",
+                )
 
-        log_paths = [res.log_path for res in results if res.log_path]
-        if log_paths:
-            formatter.print_info(
-                f"Detailed logs saved to {log_paths[0].parent}"
-            )
+            log_paths = [res.log_path for res in results if res.log_path]
+            if log_paths:
+                formatter.print_info(
+                    f"Detailed logs saved to {log_paths[0].parent}"
+                )
 
     except Exception as exc:
         error_result = StateTestResult(
@@ -775,19 +949,28 @@ def test_run(pad_id: str, target: str, parallel: bool) -> None:
             tests=[error_result],
         )
 
-        formatter.print_error(
-            "Test Execution Failed",
-            f"Test execution failed while processing workpad {pad_id}.",
-            help_text="Inspect the error details below and confirm the test command is valid in your repository.",
-            tip="Many failures are caused by missing dependencies—run the command locally to reproduce and install prerequisites.",
-            suggestions=[
-                f"evogitctl test run {pad_id}",
-                "Check logs in ~/.sologit/logs",
-            ],
-            docs_url="docs/TESTING_GUIDE.md",
-            details=f"Workpad: {pad_id}\n{exc}",
-        )
-        raise click.Abort()
+        if output_json:
+            print(json.dumps({
+                "success": False,
+                "error": "Test execution failed",
+                "details": str(exc),
+                "workpad_id": pad_id
+            }))
+            raise SystemExit(1)
+        else:
+            formatter.print_error(
+                "Test Execution Failed",
+                f"Test execution failed while processing workpad {pad_id}.",
+                help_text="Inspect the error details below and confirm the test command is valid in your repository.",
+                tip="Many failures are caused by missing dependencies—run the command locally to reproduce and install prerequisites.",
+                suggestions=[
+                    f"evogitctl test run {pad_id}",
+                    "Check logs in ~/.sologit/logs",
+                ],
+                docs_url="docs/TESTING_GUIDE.md",
+                details=f"Workpad: {pad_id}\n{exc}",
+            )
+            raise click.Abort()
 
 
 

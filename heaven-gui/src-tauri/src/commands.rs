@@ -201,19 +201,33 @@ pub(crate) fn create_workpad(repo_id: String, title: String) -> Result<WorkpadSt
         return Err("Workpad title cannot be empty".to_string());
     }
 
-    run_cli_command(vec![
-        "workpad-integrated".to_string(),
+    let output = run_cli_command(vec![
+        "pad".to_string(),
         "create".to_string(),
         trimmed.to_string(),
         "--repo".to_string(),
         repo_id.clone(),
+        "--json".to_string(),
     ])?;
 
-    let global = load_global_state()?;
-    let workpad_id = global
-        .active_workpad
-        .ok_or_else(|| "CLI did not report an active workpad".to_string())?;
+    // Parse JSON output
+    let json_result: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| format!("Failed to parse CLI JSON output: {}", e))?;
 
+    if !json_result["success"].as_bool().unwrap_or(false) {
+        return Err(json_result["error"]
+            .as_str()
+            .unwrap_or("Unknown error")
+            .to_string());
+    }
+
+    let workpad_data = &json_result["workpad"];
+    let workpad_id = workpad_data["workpad_id"]
+        .as_str()
+        .ok_or_else(|| "Missing workpad_id in JSON response".to_string())?
+        .to_string();
+
+    // Load the full workpad state from state files
     load_workpad(&workpad_id)
 }
 
@@ -224,73 +238,94 @@ pub(crate) fn run_tests(workpad_id: String, target: String) -> Result<TestRun, S
         return Err("Test target cannot be empty".to_string());
     }
 
-    run_cli_command(vec![
+    let output = run_cli_command(vec![
         "test".to_string(),
         "run".to_string(),
         workpad_id.clone(),
         "--target".to_string(),
         trimmed.to_string(),
+        "--json".to_string(),
     ])?;
 
-    let mut runs = list_test_runs(Some(workpad_id.clone()))?;
-    runs.into_iter()
-        .next()
-        .ok_or_else(|| "No test runs recorded".to_string())
+    // Parse JSON output
+    let json_result: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| format!("Failed to parse CLI JSON output: {}", e))?;
+
+    if !json_result["success"].as_bool().unwrap_or(false) {
+        return Err(json_result["error"]
+            .as_str()
+            .unwrap_or("Unknown error")
+            .to_string());
+    }
+
+    let run_id = json_result["run_id"]
+        .as_str()
+        .ok_or_else(|| "Missing run_id in JSON response".to_string())?
+        .to_string();
+
+    // Load the full test run from state files
+    crate::read_test_run(run_id)
 }
 
 #[tauri::command]
 pub(crate) fn promote_workpad(workpad_id: String) -> Result<PromotionRecord, String> {
-    run_cli_command(vec![
-        "workpad-integrated".to_string(),
+    let output = run_cli_command(vec![
+        "pad".to_string(),
         "promote".to_string(),
         workpad_id.clone(),
+        "--json".to_string(),
     ])?;
 
-    // Attempt to locate the most recent promotion record for this workpad
-    let promotions_dir = get_state_dir().join("promotions");
-    let mut latest: Option<PromotionRecord> = None;
+    // Parse JSON output
+    let json_result: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| format!("Failed to parse CLI JSON output: {}", e))?;
 
-    if promotions_dir.exists() {
-        for entry in fs::read_dir(&promotions_dir).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(record) = read_json::<PromotionRecord>(&path)? {
-                    if record.workpad_id == workpad_id {
-                        let is_newer = latest
-                            .as_ref()
-                            .map(|existing| record.created_at > existing.created_at)
-                            .unwrap_or(true);
-                        if is_newer {
-                            latest = Some(record);
-                        }
-                    }
-                }
-            }
-        }
+    if !json_result["success"].as_bool().unwrap_or(false) {
+        return Err(json_result["error"]
+            .as_str()
+            .unwrap_or("Unknown error")
+            .to_string());
     }
 
-    if let Some(record) = latest {
-        return Ok(record);
-    }
+    // Get data from JSON response
+    let commit_hash = json_result["commit_hash"]
+        .as_str()
+        .map(|s| s.to_string());
+    let branch_removed = json_result["branch_removed"]
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+    let title = json_result["title"]
+        .as_str()
+        .unwrap_or("Promoted workpad")
+        .to_string();
+    let promoted_at = json_result["promoted_at"]
+        .as_str()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
 
-    // Fallback: synthesize a promotion record from current state
-    let workpad = load_workpad(&workpad_id)?;
-    let now = Utc::now().to_rfc3339();
+    // Try to load workpad for repo_id
+    let workpad = load_workpad(&workpad_id).ok();
+    let repo_id = workpad
+        .as_ref()
+        .map(|w| w.repo_id.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Create promotion record
     let record = PromotionRecord {
         record_id: format!("pr-{}", Uuid::new_v4().simple()),
-        repo_id: workpad.repo_id.clone(),
-        workpad_id: workpad.workpad_id.clone(),
+        repo_id,
+        workpad_id: workpad_id.clone(),
         decision: "manual".to_string(),
         can_promote: true,
         auto_promote_requested: false,
         promoted: true,
-        commit_hash: workpad.current_commit.clone(),
-        message: format!("Workpad '{}' promoted to trunk", workpad.title),
-        test_run_id: workpad.test_runs.first().cloned(),
+        commit_hash,
+        message: format!("Workpad '{}' promoted to trunk", title),
+        test_run_id: workpad.and_then(|w| w.test_runs.first().cloned()),
         ci_status: None,
         ci_message: None,
-        created_at: now,
+        created_at: promoted_at,
     };
 
     Ok(record)
@@ -444,12 +479,25 @@ pub(crate) fn trigger_ai_operation(
 
 #[tauri::command]
 pub(crate) fn delete_workpad(workpad_id: String) -> Result<(), String> {
-    run_cli_command(vec![
-        "workpad-integrated".to_string(),
+    let output = run_cli_command(vec![
+        "pad".to_string(),
         "delete".to_string(),
-        workpad_id,
+        workpad_id.clone(),
         "--force".to_string(),
+        "--json".to_string(),
     ])?;
+
+    // Parse JSON output
+    let json_result: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| format!("Failed to parse CLI JSON output: {}", e))?;
+
+    if !json_result["success"].as_bool().unwrap_or(false) {
+        return Err(json_result["error"]
+            .as_str()
+            .unwrap_or("Unknown error")
+            .to_string());
+    }
+
     Ok(())
 }
 
