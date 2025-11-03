@@ -27,7 +27,6 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showRollbackDialog, setShowRollbackDialog] = useState(false)
   const [currentWorkpadId, setCurrentWorkpadId] = useState<string | null>(null)
-  const [patchMessage, setPatchMessage] = useState('')
 
   const loadWorkpads = useCallback(async () => {
     if (!repoId) return
@@ -169,14 +168,12 @@ export default function WorkpadList({ repoId, activeWorkpadId, onStateUpdated, n
   const handleApplyPatch = (workpadId: string) => {
     if (pendingAction) return
     setCurrentWorkpadId(workpadId)
-    setPatchMessage('')
     setShowPatchDialog(true)
   }
 
   const confirmApplyPatch = async (message: string) => {
     if (!currentWorkpadId) return
     
-    setPatchMessage(message)
     setShowPatchDialog(false)
     
     // Now ask for the diff
