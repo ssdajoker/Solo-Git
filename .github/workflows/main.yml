@@ -5,7 +5,7 @@ steps:
 - uses: actions/setup-python@v4
 with:
 python-version: '3.11'
-- run: pip install -e .[dev,test]
+- run: pip install -e .
 - name: Run E2E tests
 run: pytest tests/test_workflow_e2e.py -v
 Acceptance Criteria:
