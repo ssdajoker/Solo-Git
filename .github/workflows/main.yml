@@ -7,7 +7,7 @@ with:
 python-version: '3.11'
 - run: pip install -e .[dev,test]
 - name: Run E2E tests
-run: pytest tests/test_workflow_e2e.py -v
+run: pytest tests/test_workflows.py -v
 Acceptance Criteria:
 - ✅ Tests run on Ubuntu, macOS, Windows
 - ✅ Tests run on Python 3.9, 3.10, 3.11
