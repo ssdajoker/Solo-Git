@@ -18,7 +18,6 @@ from click.testing import CliRunner
 from git import Repo
 
 from sologit.cli.main import cli
-from sologit.config.manager import ConfigManager
 from sologit.state.manager import StateManager
 
 
