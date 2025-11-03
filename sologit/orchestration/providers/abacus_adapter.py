@@ -88,7 +88,7 @@ class AbacusAdapter(ProviderAdapter):
         try:
             # Quick health check
             return self.client.ping()
-        except:
+        except Exception:
             return False
     
     def get_default_model(self) -> str:
