@@ -7,8 +7,11 @@
 import { useState, useEffect } from 'react'
 import { cn } from '../shared/utils'
 import { useKeyboardVisibility } from '../hooks/useKeyboardVisibility'
+import { useSoloGitOperations } from '../hooks/useSoloGitOperations'
+import { notifications } from '../utils/notifications'
 
 export interface AICommitAssistantProps {
+  workpadId?: string
   gitDiff?: string
   onAccept?: (message: string) => void
   onEdit?: (message: string) => void
@@ -16,6 +19,7 @@ export interface AICommitAssistantProps {
 }
 
 export function AICommitAssistant({
+  workpadId,
   gitDiff,
   onAccept,
   onEdit,
@@ -24,34 +28,98 @@ export function AICommitAssistant({
   const [commitMessage, setCommitMessage] = useState('')
   const [confidence, setConfidence] = useState(0)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [provider, setProvider] = useState<string>('')
+  const [model, setModel] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+  
+  const { generateCommitMessage: generateFromBackend } = useSoloGitOperations()
+  
   const { isVisible, toggle } = useKeyboardVisibility('KeyA', { 
     shift: true, 
     meta: true 
   })
   
-  // Generate commit message when diff changes
+  // Generate commit message when visible and workpadId is available
   useEffect(() => {
-    if (gitDiff && isVisible) {
-      generateCommitMessage(gitDiff)
+    if (isVisible && workpadId) {
+      generateCommitMessage()
     }
-  }, [gitDiff, isVisible])
+  }, [isVisible, workpadId])
   
-  const generateCommitMessage = async (diff: string) => {
-    setIsGenerating(true)
+  const generateCommitMessage = async () => {
+    if (!workpadId) {
+      setError('No workpad selected')
+      notifications.error('AI Commit Error', 'No workpad selected')
+      return
+    }
     
-    // Simulate AI generation - in production, this would call Tauri
-    setTimeout(() => {
-      const mockMessage = 'feat: Implement AI-powered commit message generation\n\nAdd AICommitAssistant component with confidence scoring'
-      setCommitMessage(mockMessage)
-      setConfidence(92)
+    setIsGenerating(true)
+    setError(null)
+    
+    try {
+      const response = await generateFromBackend({ workpadId })
+      
+      if (!response.success) {
+        setError(response.error || 'Failed to generate commit message')
+        notifications.error('AI Commit Error', response.error || 'Failed to generate commit message')
+        setIsGenerating(false)
+        return
+      }
+      
+      if (response.message) {
+        setCommitMessage(response.message)
+        setProvider(response.provider || '')
+        setModel(response.model || '')
+        
+        // Calculate confidence based on message quality (simple heuristic)
+        const confidence = calculateConfidence(response.message, response.fallback_used)
+        setConfidence(confidence)
+        
+        notifications.success('AI Commit Generated', `Using ${response.provider || 'AI'} provider`)
+        
+        if (response.fallback_used) {
+          notifications.warning('Fallback Used', 'Primary provider failed, fallback was used')
+        }
+      }
+      
       setIsGenerating(false)
-    }, 1500)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      setError(errorMsg)
+      notifications.error('AI Commit Failed', errorMsg)
+      setIsGenerating(false)
+    }
+  }
+  
+  // Calculate confidence score based on message quality
+  const calculateConfidence = (message: string, fallbackUsed?: boolean | null): number => {
+    let score = 70 // Base score
+    
+    // Check for conventional commit format
+    if (/^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .+/.test(message)) {
+      score += 15
+    }
+    
+    // Check for descriptive message (not too short)
+    if (message.length > 30) {
+      score += 10
+    }
+    
+    // Check for body/detailed description
+    if (message.includes('\n\n')) {
+      score += 5
+    }
+    
+    // Reduce score if fallback was used
+    if (fallbackUsed) {
+      score -= 10
+    }
+    
+    return Math.min(100, Math.max(0, score))
   }
   
   const handleRegenerate = () => {
-    if (gitDiff) {
-      generateCommitMessage(gitDiff)
-    }
+    generateCommitMessage()
   }
   
   const handleAccept = () => {
@@ -126,15 +194,26 @@ export function AICommitAssistant({
             <div className="w-4 h-4 border-2 border-heaven-accent-cyan border-t-transparent rounded-full animate-spin" />
             <span className="text-sm">Analyzing changes...</span>
           </div>
-        ) : commitMessage ? (
-          <div className="bg-heaven-bg-tertiary rounded p-3">
-            <pre className="text-sm text-heaven-text-primary whitespace-pre-wrap font-mono">
-              {commitMessage}
-            </pre>
+        ) : error ? (
+          <div className="bg-heaven-accent-red/10 border border-heaven-accent-red/30 rounded p-3">
+            <p className="text-sm text-heaven-accent-red">{error}</p>
           </div>
+        ) : commitMessage ? (
+          <>
+            <div className="bg-heaven-bg-tertiary rounded p-3 mb-2">
+              <pre className="text-sm text-heaven-text-primary whitespace-pre-wrap font-mono">
+                {commitMessage}
+              </pre>
+            </div>
+            {provider && (
+              <div className="text-xs text-heaven-text-tertiary">
+                Provider: {provider} {model && `(${model})`}
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-sm text-heaven-text-tertiary py-4 text-center">
-            No changes to commit
+            No workpad selected
           </div>
         )}
       </div>

@@ -68,3 +68,16 @@ export interface PromotionRecord {
   ci_message: string | null
   created_at: string
 }
+
+export interface CommitMessageResponse {
+  success: boolean
+  message: string | null
+  provider: string | null
+  model: string | null
+  latency_ms: number | null
+  cost_usd: number | null
+  fallback_used: boolean | null
+  workpad_id: string | null
+  diff: string | null
+  error: string | null
+}
