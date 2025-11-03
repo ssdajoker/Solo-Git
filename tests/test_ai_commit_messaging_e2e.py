@@ -297,6 +297,7 @@ def test_ai_commit_message_provider_routing(runner, setup_repo):
                     # Fallback provider should not be Abacus
                     assert response.get("provider", "").lower() != "abacus"
         except json.JSONDecodeError:
+            # If output is not valid JSON, ignore and allow test to continue.
             pass
 
 
