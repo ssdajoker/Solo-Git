@@ -18,7 +18,39 @@ from sologit.config.manager import ConfigManager
 @pytest.fixture
 def mock_config_manager():
     """Mock configuration manager."""
-    return Mock(spec=ConfigManager)
+    from sologit.config.manager import SoloGitConfig
+    
+    mock_manager = Mock(spec=ConfigManager)
+    mock_config = Mock(spec=SoloGitConfig)
+    
+    # Mock config attributes
+    mock_config.budget = Mock()
+    mock_config.budget.daily_usd_cap = 10.0
+    mock_config.budget.per_request_usd_cap = 1.0
+    mock_config.budget.enable_tracking = True
+    mock_config.budget.alert_threshold = 0.8
+    
+    # Mock to_dict method
+    mock_config.to_dict = Mock(return_value={
+        'abacus': {
+            'api_key': 'test_key',
+            'endpoint': 'https://api.abacus.ai/api/v0'
+        },
+        'models': {
+            'fast': {
+                'primary': {'name': 'llama-3.1-8b-instruct', 'cost_per_1k_tokens': 0.0001}
+            },
+            'coding': {
+                'primary': {'name': 'deepseek-coder-33b-instruct', 'cost_per_1k_tokens': 0.001}
+            },
+            'planning': {
+                'primary': {'name': 'gpt-4o', 'cost_per_1k_tokens': 0.03}
+            }
+        }
+    })
+    
+    mock_manager.get_config = Mock(return_value=mock_config)
+    return mock_manager
 
 
 @pytest.fixture
@@ -29,9 +61,9 @@ def temp_storage():
 
 
 @pytest.fixture
-def orchestrator(temp_storage):
+def orchestrator(temp_storage, mock_config_manager):
     """Create AI orchestrator for testing with isolated storage."""
-    orch = AIOrchestrator()
+    orch = AIOrchestrator(mock_config_manager)
     # Use isolated storage path
     orch.cost_guard.tracker.storage_path = temp_storage
     orch.cost_guard.tracker.usage_history = {}
