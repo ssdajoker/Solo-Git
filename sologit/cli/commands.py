@@ -15,8 +15,8 @@ import click
 from rich.console import Console
 
 from sologit.config.manager import ConfigManager
-from sologit.engines.git_engine import GitEngine, GitEngineError
-from sologit.engines.patch_engine import PatchEngine
+from sologit.engines.git_engine import GitEngine, GitEngineError, RebaseConflictError, SnapshotNotFoundError
+from sologit.engines.patch_engine import PatchEngine, GistError
 from sologit.engines.test_orchestrator import (
     TestConfig,
     TestOrchestrator,
@@ -623,6 +623,36 @@ def pad_promote(pad_id: str) -> None:
         abort_with_error("Promotion failed", str(e))
 
 
+@pad.command('rebase')
+@click.argument('pad_id')
+@click.option('--interactive', is_flag=True, help='Perform an interactive rebase.')
+def pad_rebase(pad_id: str, interactive: bool) -> None:
+    """Rebase a workpad on top of the trunk branch."""
+    git_engine = get_git_engine()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    formatter.print_header("Workpad Rebase")
+    formatter.print_info(f"Rebasing workpad: {workpad.title}")
+
+    try:
+        git_engine.rebase_workpad(pad_id, interactive=interactive)
+        formatter.print_success("Rebase successful!")
+        formatter.print_info(f"Workpad '{workpad.title}' is now up to date with the trunk.")
+    except RebaseConflictError as e:
+        abort_with_error(
+            "Rebase failed due to conflicts.",
+            str(e),
+            title="Rebase Aborted",
+            help_text="Please resolve the conflicts manually in your local repository.",
+            tip="Use 'git status' to see the conflicting files, and 'git rebase --abort' to cancel the rebase.",
+        )
+    except GitEngineError as e:
+        abort_with_error("Rebase failed", str(e))
+
+
 @pad.command('diff')
 @click.argument('pad_id')
 def pad_diff(pad_id: str) -> None:
@@ -642,6 +672,89 @@ def pad_diff(pad_id: str) -> None:
             formatter.print_info("No changes between workpad and trunk.")
     except GitEngineError as e:
         abort_with_error("Failed to generate diff", str(e))
+
+
+@pad.group('snapshot')
+def pad_snapshot() -> None:
+    """Manage workpad snapshots."""
+    pass
+
+
+@pad_snapshot.command('create')
+@click.argument('pad_id')
+@click.option('-m', '--message', required=True, help='A descriptive message for the snapshot.')
+def snapshot_create(pad_id: str, message: str) -> None:
+    """Create a new snapshot for a workpad."""
+    git_engine = get_git_engine()
+    try:
+        snapshot_id = git_engine.create_snapshot(pad_id, message)
+        formatter.print_success(f"Snapshot '{snapshot_id}' created for workpad {pad_id}.")
+    except (WorkpadNotFoundError, GitEngineError) as e:
+        abort_with_error(str(e))
+
+
+@pad_snapshot.command('list')
+@click.argument('pad_id')
+def snapshot_list(pad_id: str) -> None:
+    """List all snapshots for a workpad."""
+    git_engine = get_git_engine()
+    try:
+        snapshots = git_engine.list_snapshots(pad_id)
+        if not snapshots:
+            formatter.print_info("No snapshots found for this workpad.")
+            return
+
+        table = formatter.table(headers=["ID", "Message", "Created"])
+        for snapshot in snapshots:
+            table.add_row(snapshot.id, snapshot.message, snapshot.created_at.strftime('%Y-%m-%d %H:%M'))
+        formatter.console.print(table)
+    except (WorkpadNotFoundError, GitEngineError) as e:
+        abort_with_error(str(e))
+
+
+@pad_snapshot.command('restore')
+@click.argument('pad_id')
+@click.argument('snapshot_id')
+def snapshot_restore(pad_id: str, snapshot_id: str) -> None:
+    """Restore a workpad to a specific snapshot."""
+    git_engine = get_git_engine()
+    try:
+        git_engine.restore_snapshot(pad_id, snapshot_id)
+        formatter.print_success(f"Workpad {pad_id} restored to snapshot '{snapshot_id}'.")
+    except (WorkpadNotFoundError, SnapshotNotFoundError, GitEngineError) as e:
+        abort_with_error(str(e))
+
+
+@pad_snapshot.command('delete')
+@click.argument('pad_id')
+@click.argument('snapshot_id')
+def snapshot_delete(pad_id: str, snapshot_id: str) -> None:
+    """Delete a specific snapshot."""
+    git_engine = get_git_engine()
+    try:
+        git_engine.delete_snapshot(pad_id, snapshot_id)
+        formatter.print_success(f"Snapshot '{snapshot_id}' deleted from workpad {pad_id}.")
+    except (WorkpadNotFoundError, SnapshotNotFoundError, GitEngineError) as e:
+        abort_with_error(str(e))
+
+
+@pad.command('patch')
+@click.argument('pad_id')
+@click.option('--gist', 'gist_url', help='URL of a GitHub Gist containing the patch.')
+@click.option('-m', '--message', help='Commit message for the patch.')
+def pad_patch(pad_id: str, gist_url: Optional[str], message: Optional[str]) -> None:
+    """Apply a patch to a workpad from a Gist."""
+    if not gist_url:
+        abort_with_error("You must provide a Gist URL using the --gist option.")
+
+    patch_engine = get_patch_engine()
+    commit_message = message or f"Apply patch from {gist_url}"
+
+    try:
+        checkpoint_id = patch_engine.apply_patch_from_gist(pad_id, gist_url, commit_message)
+        formatter.print_success(f"Patch from Gist applied successfully. New checkpoint: {checkpoint_id}")
+    except (GistError, WorkpadNotFoundError, GitEngineError) as e:
+        abort_with_error(str(e))
 
 
 @click.group()
