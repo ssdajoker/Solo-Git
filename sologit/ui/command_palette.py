@@ -11,7 +11,6 @@ from textual.widgets import Input, Static, Label
 from textual.binding import Binding
 from textual.screen import ModalScreen
 from typing import List, Callable, Optional, Tuple
-import re
 from dataclasses import dataclass
 
 from sologit.utils.logger import get_logger

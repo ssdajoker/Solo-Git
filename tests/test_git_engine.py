@@ -87,7 +87,7 @@ def test_list_workpads(git_engine, sample_zip):
     
     pad_id1 = git_engine.create_workpad(repo_id1, "Feature 1")
     pad_id2 = git_engine.create_workpad(repo_id1, "Feature 2")
-    pad_id3 = git_engine.create_workpad(repo_id2, "Feature 3")
+    git_engine.create_workpad(repo_id2, "Feature 3")
     
     # List all workpads
     all_pads = git_engine.list_workpads()

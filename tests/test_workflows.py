@@ -2,7 +2,6 @@
 Tests for workflows.
 """
 
-import pytest
 from sologit.workflows.auto_merge import AutoMergeResult
 
 def test_auto_merge_result_details_default():

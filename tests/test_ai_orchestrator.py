@@ -4,11 +4,9 @@ Tests for AI Orchestrator.
 """
 
 import pytest
-from unittest.mock import Mock, patch
-from pathlib import Path
 
 from sologit.orchestration.ai_orchestrator import (
-    AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse, TaskType
+    AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse
 )
 from sologit.orchestration.planning_engine import CodePlan, FileChange
 from sologit.orchestration.code_generator import GeneratedPatch

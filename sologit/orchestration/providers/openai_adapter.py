@@ -1,5 +1,4 @@
 """OpenAI provider adapter - Fallback #1."""
-import asyncio
 import time
 from typing import Optional
 
@@ -88,7 +87,7 @@ class OpenAIAdapter(ProviderAdapter):
         try:
             # Simple check - we have an API key
             return bool(self.config.api_key)
-        except:
+        except Exception:
             return False
     
     def get_default_model(self) -> str:

@@ -5,11 +5,11 @@ These tests target specific uncovered lines identified in coverage analysis.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from sologit.workflows.promotion_gate import (
-    PromotionGate, PromotionRules, PromotionDecision, PromotionDecisionType
+    PromotionGate, PromotionRules, PromotionDecisionType
 )
-from sologit.analysis.test_analyzer import TestAnalysis, FailurePattern, FailureCategory
+from sologit.analysis.test_analyzer import TestAnalysis
 from sologit.core.workpad import Workpad
 
 

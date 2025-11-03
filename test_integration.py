@@ -8,7 +8,6 @@ This validates >50% CLI integration with Solo Git core.
 
 import sys
 import tempfile
-import shutil
 from pathlib import Path
 import zipfile
 import io
@@ -44,7 +43,7 @@ def test_integration():
         state_dir = Path(tmpdir) / "state"
         data_dir = Path(tmpdir) / "data"
         
-        print(f"📁 Test directories:")
+        print("📁 Test directories:")
         print(f"   State: {state_dir}")
         print(f"   Data:  {data_dir}\n")
         
@@ -62,7 +61,7 @@ def test_integration():
         print(f"📦 Created test zip ({len(zip_data)} bytes)")
         
         repo_info = git_sync.init_repo_from_zip(zip_data, "test-repo")
-        print(f"✅ Repository initialized:")
+        print("✅ Repository initialized:")
         print(f"   ID: {repo_info['repo_id']}")
         print(f"   Name: {repo_info['name']}")
         print(f"   Path: {repo_info['path']}")
@@ -87,7 +86,7 @@ def test_integration():
         print("=" * 80)
         
         workpad_info = git_sync.create_workpad(repo_id, "add-feature")
-        print(f"✅ Workpad created:")
+        print("✅ Workpad created:")
         print(f"   ID: {workpad_info['workpad_id']}")
         print(f"   Title: {workpad_info['title']}")
         print(f"   Branch: {workpad_info['branch_name']}")
@@ -112,7 +111,7 @@ def test_integration():
         print("=" * 80)
         
         workpad = git_sync.get_workpad(workpad_id)
-        print(f"✅ Workpad details:")
+        print("✅ Workpad details:")
         print(f"   ID: {workpad['id']}")
         print(f"   Title: {workpad['title']}")
         print(f"   Branch: {workpad['branch_name']}")
@@ -125,7 +124,7 @@ def test_integration():
         print("=" * 80)
         
         status = git_sync.get_status(repo_id, workpad_id)
-        print(f"✅ Git status:")
+        print("✅ Git status:")
         print(f"   Branch: {status.get('current_branch', 'N/A')}")
         print(f"   Clean: {status.get('is_clean', 'N/A')}")
         print(f"   Modified files: {len(status.get('modified_files', []))}")
@@ -150,7 +149,7 @@ def test_integration():
         print("=" * 80)
         
         test_run = git_sync.create_test_run(workpad_id, 'fast')
-        print(f"✅ Test run created:")
+        print("✅ Test run created:")
         print(f"   ID: {test_run['run_id']}")
         print(f"   Workpad: {test_run['workpad_id']}")
         print(f"   Target: {test_run['target']}")
@@ -167,7 +166,7 @@ def test_integration():
             output='All tests passed',
             exit_code=0
         )
-        print(f"✅ Test run updated to 'passed'\n")
+        print("✅ Test run updated to 'passed'\n")
         
         # Test 10: Create AI operation
         print("=" * 80)
@@ -180,7 +179,7 @@ def test_integration():
             model='gpt-4',
             prompt='Add user authentication'
         )
-        print(f"✅ AI operation created:")
+        print("✅ AI operation created:")
         print(f"   ID: {ai_op['operation_id']}")
         print(f"   Type: {ai_op['operation_type']}")
         print(f"   Model: {ai_op['model']}")
@@ -197,7 +196,7 @@ def test_integration():
             response='Plan generated successfully',
             cost_usd=0.05
         )
-        print(f"✅ AI operation updated to 'completed'\n")
+        print("✅ AI operation updated to 'completed'\n")
         
         # Test 12: Get active context
         print("=" * 80)
@@ -205,7 +204,7 @@ def test_integration():
         print("=" * 80)
         
         context = git_sync.get_active_context()
-        print(f"✅ Active context:")
+        print("✅ Active context:")
         print(f"   Repo ID: {context.get('repo_id', 'None')}")
         print(f"   Workpad ID: {context.get('workpad_id', 'None')}\n")
         
@@ -215,7 +214,7 @@ def test_integration():
         print("=" * 80)
         
         stats = git_sync.sync_all()
-        print(f"✅ State synced:")
+        print("✅ State synced:")
         print(f"   Repos: {stats['repos']}")
         print(f"   Workpads: {stats['workpads']}")
         print(f"   Commits: {stats['commits']}\n")
@@ -225,13 +224,13 @@ def test_integration():
         print("✅ ALL INTEGRATION TESTS PASSED")
         print("=" * 80)
         print("\nIntegration Summary:")
-        print(f"   ✅ Repository operations: WORKING")
-        print(f"   ✅ Workpad operations: WORKING")
-        print(f"   ✅ Git operations (status, history): WORKING")
-        print(f"   ✅ Test tracking: WORKING")
-        print(f"   ✅ AI operation tracking: WORKING")
-        print(f"   ✅ State synchronization: WORKING")
-        print(f"\n🎉 CLI Integration: >50% ACHIEVED!\n")
+        print("   ✅ Repository operations: WORKING")
+        print("   ✅ Workpad operations: WORKING")
+        print("   ✅ Git operations (status, history): WORKING")
+        print("   ✅ Test tracking: WORKING")
+        print("   ✅ AI operation tracking: WORKING")
+        print("   ✅ State synchronization: WORKING")
+        print("\n🎉 CLI Integration: >50% ACHIEVED!\n")
         
         return True
 

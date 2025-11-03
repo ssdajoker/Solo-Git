@@ -6,8 +6,7 @@ Handles patch application, conflict detection, and validation.
 """
 
 import requests
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from git import Repo, GitCommandError
 

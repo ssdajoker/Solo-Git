@@ -8,13 +8,13 @@ This test suite covers:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
 from sologit.workflows.auto_merge import AutoMergeWorkflow, AutoMergeResult
-from sologit.workflows.promotion_gate import PromotionGate, PromotionRules, PromotionDecision, PromotionDecisionType
+from sologit.workflows.promotion_gate import PromotionDecision, PromotionDecisionType
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig, TestResult, TestStatus
-from sologit.analysis.test_analyzer import TestAnalyzer, TestAnalysis, FailurePattern, FailureCategory
+from sologit.analysis.test_analyzer import TestAnalysis, FailurePattern, FailureCategory
 from sologit.core.workpad import Workpad
 
 

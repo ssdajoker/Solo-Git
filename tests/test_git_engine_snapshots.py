@@ -4,9 +4,8 @@ from pathlib import Path
 import tempfile
 from zipfile import ZipFile
 from io import BytesIO
-from git import Repo
 
-from sologit.engines.git_engine import GitEngine, WorkpadNotFoundError, SnapshotNotFoundError
+from sologit.engines.git_engine import GitEngine, SnapshotNotFoundError
 
 @pytest.fixture
 def git_engine():

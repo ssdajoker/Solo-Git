@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 from datetime import datetime
-import uuid
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Optional
 
 import click
 
@@ -51,11 +49,11 @@ class EnhancedCLI:
     
     # Repository Commands
 
-    def _run_stage(self, description: str, operation: Callable[[], StageResult]) -> StageResult:
+    def _run_stage(self, description: str, operation: Callable[[], None]) -> None:
         """Run a stage while emitting progress output."""
 
         self.formatter.print_info(description)
-        return operation()
+        operation()
 
     # Repository Commands
 
@@ -158,6 +156,7 @@ class EnhancedCLI:
             )
         self.formatter.console.print(table)
 
+        active_repo = self.state_manager.get_active_context().get("repo_id")
         if active_repo:
             self.formatter.console.print(f"\n* Active repository: [bold]{active_repo}[/bold]")
 

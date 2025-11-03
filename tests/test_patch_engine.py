@@ -10,7 +10,7 @@ from zipfile import ZipFile
 from io import BytesIO
 
 from sologit.engines.git_engine import GitEngine
-from sologit.engines.patch_engine import PatchEngine, PatchConflictError
+from sologit.engines.patch_engine import PatchEngine
 
 
 @pytest.fixture

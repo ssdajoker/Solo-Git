@@ -2,8 +2,6 @@
 Tests for AI routing system with Abacus-first architecture.
 """
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
 from sologit.orchestration.providers import (
     ProviderType,

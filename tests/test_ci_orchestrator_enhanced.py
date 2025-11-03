@@ -4,7 +4,7 @@ Enhanced tests for CI orchestrator to achieve >90% coverage.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from sologit.workflows.ci_orchestrator import CIOrchestrator, CIResult, CIStatus
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig, TestResult, TestStatus

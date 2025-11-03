@@ -9,7 +9,7 @@ from sologit.orchestration.code_generator import (
     CodeGenerator, GeneratedPatch
 )
 from sologit.orchestration.planning_engine import CodePlan, FileChange
-from sologit.api.client import AbacusClient, ChatResponse
+from sologit.api.client import AbacusClient
 
 
 @pytest.fixture

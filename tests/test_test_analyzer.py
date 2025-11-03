@@ -4,7 +4,7 @@ Tests for test failure analyzer (Phase 3).
 
 import pytest
 from sologit.analysis.test_analyzer import (
-    TestAnalyzer, TestAnalysis, FailurePattern, FailureCategory
+    TestAnalyzer, TestAnalysis, FailureCategory
 )
 from sologit.engines.test_orchestrator import TestResult, TestStatus
 

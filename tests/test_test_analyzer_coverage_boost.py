@@ -6,7 +6,7 @@ These tests target specific uncovered lines identified in coverage analysis.
 
 import pytest
 from sologit.analysis.test_analyzer import (
-    TestAnalyzer, TestAnalysis, FailurePattern, FailureCategory
+    TestAnalyzer, FailureCategory
 )
 from sologit.engines.test_orchestrator import TestResult, TestStatus
 

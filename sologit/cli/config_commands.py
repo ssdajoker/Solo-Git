@@ -1,5 +1,3 @@
-
-
 """
 Configuration commands for Solo Git CLI.
 """
@@ -7,7 +5,6 @@ Configuration commands for Solo Git CLI.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast, Dict, Iterable, List, NoReturn, Optional
 from typing import Any, Dict, Iterable, NoReturn, Optional, cast
 
 import click
@@ -57,8 +54,6 @@ def abort_with_error(
     suggestions: Optional[Iterable[str]] = None,
     docs_url: Optional[str] = None,
 ) -> NoReturn:
-    """Render a formatted error panel and abort the command."""
-
     """Display a formatted error panel with context and abort the command."""
     formatter.print_error(
         title or "Configuration Error",

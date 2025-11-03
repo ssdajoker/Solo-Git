@@ -5,8 +5,7 @@ These tests target specific uncovered lines identified in coverage analysis.
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from sologit.workflows.ci_orchestrator import (
     CIOrchestrator, CIResult, CIStatus
 )

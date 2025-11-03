@@ -12,15 +12,11 @@ This demo shows the complete Phase 3 workflow:
 """
 
 import tempfile
-import shutil
 from pathlib import Path
 
 # Solo Git imports
 from sologit.engines.git_engine import GitEngine
-from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
-from sologit.workflows.auto_merge import AutoMergeWorkflow
-from sologit.workflows.ci_orchestrator import CIOrchestrator
-from sologit.workflows.rollback_handler import RollbackHandler
+from sologit.engines.test_orchestrator import TestConfig
 from sologit.workflows.promotion_gate import PromotionRules
 from sologit.utils.logger import setup_logging
 
@@ -297,8 +293,8 @@ def demo_promotion_rules():
     )
     print(f"   • Require tests: {rules2.require_tests}")
     print(f"   • All tests must pass: {rules2.require_all_tests_pass}")
-    print(f"   • Max files: unlimited")
-    print(f"   • Max lines: unlimited")
+    print("   • Max files: unlimited")
+    print("   • Max lines: unlimited")
     print()
     
     # Example 3: Review on large changes
@@ -313,7 +309,7 @@ def demo_promotion_rules():
     )
     print(f"   • Max files before review: {rules3.max_files_changed}")
     print(f"   • Max lines before review: {rules3.max_lines_changed}")
-    print(f"   • Large changes → Manual review required")
+    print("   • Large changes → Manual review required")
     print()
     
     print("✅ Demo 4 Complete: Flexible policies for different needs")
@@ -330,7 +326,7 @@ def main():
     print()
     
     # Setup logger
-    setup_logger(level="INFO")
+    setup_logging()
     
     # Run demos
     try:
