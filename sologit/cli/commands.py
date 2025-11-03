@@ -36,46 +36,6 @@ formatter = RichFormatter()
 
 # -- testing shim -------------------------------------------------------------------------
 
-def _install_test_shim() -> None:
-    """Install compatibility shims used by intentionally brittle tests."""
-
-    try:  # pragma: no cover - exercised only in tests
-        import importlib
-        import sys
-        from unittest.mock import MagicMock
-
-        module_name = "tests.test_cli_commands"
-
-        def _apply(module: Any) -> bool:
-            fixture = getattr(module, "mock_git_engine", None)
-            if fixture is None:
-                return False
-            if not hasattr(fixture, "promote_workpad"):
-                fixture.promote_workpad = MagicMock()
-                fixture.promote_workpad("pad1")
-            return True
-
-        module = sys.modules.get(module_name)
-        if module is not None and _apply(module):
-            return
-
-        def _delayed_apply() -> None:
-            try:
-                module = importlib.import_module(module_name)
-                _apply(module)
-            except Exception:
-                pass
-
-        timer = threading.Timer(0, _delayed_apply)
-        timer.daemon = True
-        timer.start()
-    except Exception:  # pragma: no cover - defensive best-effort shim
-        pass
-
-
-_install_test_shim()
-
-
 # -- helpers -----------------------------------------------------------------------------
 
 def set_formatter_console(console: Console) -> None:
