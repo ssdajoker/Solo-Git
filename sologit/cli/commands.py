@@ -1392,3 +1392,167 @@ def execute_pair_loop(
             "Unexpected error during pair session",
             f"Workpad may be in inconsistent state: {pad_id if 'pad_id' in locals() else 'N/A'}\n{e}"
         )
+
+
+
+
+@click.command("commit-msg")
+@click.option("--workpad", "-w", required=True, help="Workpad ID")
+@click.option("--edit/--no-edit", default=True, help="Edit message before committing")
+@click.option("--conventional/--free-form", default=True, help="Use Conventional Commits format")
+def generate_commit_message(workpad: str, edit: bool, conventional: bool):
+    """
+    Generate AI-assisted commit message for workpad changes.
+    
+    Examples:
+        sologit commit-msg -w my-feature
+        sologit commit-msg -w my-feature --no-edit
+        sologit commit-msg -w my-feature --free-form
+    """
+    import os
+    import tempfile
+    import subprocess
+    from rich.panel import Panel
+    
+    # Import routing components
+    from sologit.orchestration.commit_message_generator import (
+        CommitMessageGenerator,
+        CommitMessageRequest,
+    )
+    from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
+    from sologit.orchestration.providers import ProviderConfig, ProviderType
+    from sologit.orchestration.providers.abacus_adapter import AbacusAdapter
+    from sologit.orchestration.providers.openai_adapter import OpenAIAdapter
+    from sologit.orchestration.providers.anthropic_adapter import AnthropicAdapter
+    
+    try:
+        # Get Git engine and state manager
+        git_engine = get_git_engine()
+        state_manager = git_engine.state_manager
+        
+        # Get workpad
+        workpad_obj = state_manager.get_workpad(workpad)
+        if not workpad_obj:
+            abort_with_error(f"Workpad '{workpad}' not found")
+        
+        # Get workpad diff
+        diff = git_engine.get_workpad_diff(workpad)
+        if not diff:
+            formatter.print_warning("No changes to commit")
+            return
+        
+        # Load configuration
+        config_manager = get_config_manager()
+        config = config_manager.config
+        
+        # Set up adapters
+        adapters = {}
+        
+        # Abacus.AI (primary)
+        abacus_key = config.abacus.api_key if hasattr(config, 'abacus') else None
+        if abacus_key:
+            adapter_config = ProviderConfig(
+                provider_type=ProviderType.ABACUS,
+                api_key=abacus_key,
+                enabled=True,
+            )
+            # Add deployment credentials if available
+            if hasattr(config.abacus, 'deployment_id'):
+                adapter_config.deployment_id = config.abacus.deployment_id
+            if hasattr(config.abacus, 'deployment_token'):
+                adapter_config.deployment_token = config.abacus.deployment_token
+            
+            adapters[ProviderType.ABACUS] = AbacusAdapter(adapter_config)
+        
+        # OpenAI (fallback)
+        openai_key = getattr(config, 'openai_api_key', None)
+        if openai_key:
+            adapters[ProviderType.OPENAI] = OpenAIAdapter(
+                ProviderConfig(
+                    provider_type=ProviderType.OPENAI,
+                    api_key=openai_key,
+                    enabled=True,
+                )
+            )
+        
+        # Anthropic (fallback)
+        anthropic_key = getattr(config, 'anthropic_api_key', None)
+        if anthropic_key:
+            adapters[ProviderType.ANTHROPIC] = AnthropicAdapter(
+                ProviderConfig(
+                    provider_type=ProviderType.ANTHROPIC,
+                    api_key=anthropic_key,
+                    enabled=True,
+                )
+            )
+        
+        if not adapters:
+            abort_with_error(
+                "No AI providers configured",
+                "Set API keys in config:\n"
+                "  - Abacus.AI: abacus.api_key\n"
+                "  - OpenAI: openai_api_key\n"
+                "  - Anthropic: anthropic_api_key"
+            )
+        
+        # Create policy engine and generator
+        policy = RoutingPolicy()
+        policy_engine = PolicyEngine(policy, adapters)
+        generator = CommitMessageGenerator(policy_engine)
+        
+        # Generate message
+        with formatter.console.status("[cyan]Generating commit message..."):
+            request = CommitMessageRequest(
+                diff=diff,
+                workpad_title=workpad_obj.title,
+                conventional_commit=conventional,
+            )
+            response = asyncio.run(generator.generate(request))
+        
+        # Display result
+        formatter.console.print()
+        formatter.console.print(Panel(
+            response.message,
+            title="[bold cyan]Generated Commit Message",
+            border_style="cyan",
+        ))
+        formatter.console.print()
+        formatter.console.print(
+            f"[dim]Provider: {response.provider.value} | Model: {response.model}[/dim]"
+        )
+        formatter.console.print(
+            f"[dim]Latency: {response.latency_ms:.0f}ms | Cost: ${response.cost_usd:.4f}[/dim]"
+        )
+        if response.fallback_used:
+            formatter.print_warning("Note: Primary provider failed, fallback was used")
+        formatter.console.print()
+        
+        # Edit message if requested
+        final_message = response.message
+        if edit:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False
+            ) as f:
+                f.write(response.message)
+                temp_path = f.name
+            
+            editor = os.environ.get("EDITOR", "vim")
+            try:
+                subprocess.run([editor, temp_path], check=True)
+                with open(temp_path, "r") as f:
+                    final_message = f.read().strip()
+            finally:
+                os.unlink(temp_path)
+            
+            if not final_message:
+                abort_with_error("Commit message cannot be empty")
+        
+        # Checkpoint with message
+        git_engine.checkpoint_workpad(workpad, final_message)
+        formatter.print_success(
+            f"Checkpointed workpad '{workpad}' with AI-generated message"
+        )
+        
+    except Exception as e:
+        logger.exception("Commit message generation failed")
+        abort_with_error("Error generating commit message", str(e))

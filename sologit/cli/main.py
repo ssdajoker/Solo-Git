@@ -337,6 +337,10 @@ cli.add_command(test)
 from sologit.cli.commands import ci
 cli.add_command(ci)
 
+# AI-assisted commit message generation (v1.0)
+from sologit.cli.commands import generate_commit_message
+cli.add_command(generate_commit_message)
+
 def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
     """Shared launcher for the Heaven TUI."""
     try:
