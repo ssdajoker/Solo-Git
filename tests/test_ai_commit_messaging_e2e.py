@@ -187,7 +187,7 @@ def test_ai_commit_message_no_changes(runner, setup_repo):
 
 def test_ai_commit_message_invalid_workpad(runner, setup_repo):
     """Test AI commit message generation with invalid workpad ID."""
-    test_repo_path, state_path, repo_id = setup_repo
+    _, state_path, repo_id = setup_repo
     
     # Try to generate commit message for non-existent workpad
     result = runner.invoke(
