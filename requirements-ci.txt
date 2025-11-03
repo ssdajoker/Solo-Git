@@ -1,0 +1,9 @@
+# CI/CD Pipeline Dependencies
+# These tools are used in the GitHub Actions workflow for linting, security scanning, and type checking
+
+# Linting tools
+ruff>=0.1.0
+
+# Security scanning tools
+bandit>=1.7.0
+safety>=2.3.0
