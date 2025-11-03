@@ -184,19 +184,36 @@ class AIOrchestrator:
                         raise
 
             with self._progress_stage(progress, task_id, "Recording usage", 10):
+                # Get token info from planning engine's last response (if available)
+                api_response = self.planning_engine.last_response
+                if api_response:
+                    prompt_tokens = api_response.prompt_tokens
+                    completion_tokens = api_response.completion_tokens
+                    total_tokens = api_response.total_tokens
+                else:
+                    # No API call was made (mock response), use estimates
+                    prompt_tokens = 500
+                    completion_tokens = 1500
+                    total_tokens = 2000
+                
                 self.cost_guard.record_usage(
                     model=model_config.name,
-                    prompt_tokens=response.prompt_tokens,
-                    completion_tokens=response.completion_tokens,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
                     cost_per_1k=model_config.cost_per_1k_tokens,
                     task_type=TaskType.PLANNING.value,
                 )
 
+            # Convert CodePlan to string for PlanResponse
+            plan_content = f"# {response.title}\n\n{response.description}\n\n## File Changes\n"
+            for fc in response.file_changes:
+                plan_content += f"- {fc.path}: {fc.action}\n"
+            
             return PlanResponse(
-                plan=response.content,
+                plan=plan_content,
                 model_used=model_config.name,
-                tokens_used=response.total_tokens,
-                cost_usd=(response.total_tokens / 1000.0) * model_config.cost_per_1k_tokens,
+                tokens_used=total_tokens,
+                cost_usd=(total_tokens / 1000.0) * model_config.cost_per_1k_tokens,
                 complexity=complexity,
             )
 

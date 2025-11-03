@@ -134,7 +134,7 @@ def test_plan_budget_exceeded(orchestrator):
     assert orchestrator.cost_guard.get_remaining_budget() <= 0
     
     # Should raise exception
-    with pytest.raises(Exception, match="Budget exceeded"):
+    with pytest.raises(Exception, match="Insufficient budget"):
         orchestrator.plan("test prompt")
 
 
