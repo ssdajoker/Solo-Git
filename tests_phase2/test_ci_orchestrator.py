@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from sologit.workflows.ci_orchestrator import CIOrchestrator, CIResult, CIStatus
+from sologit.workflows.ci_orchestrator import CIOrchestrator, CIStatus
 from sologit.engines.test_orchestrator import TestResult, TestStatus, TestConfig
 
 
