@@ -1,4 +1,3 @@
-
 """
 Provider adapter interface for AI routing.
 Enables Abacus-first architecture with fallback support.
@@ -15,7 +14,7 @@ class ProviderType(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
-    LOCAL = "local"
+    LOCAL = "local"  # Future: Ollama
 
 
 @dataclass
@@ -69,11 +68,3 @@ class ProviderAdapter(ABC):
     def get_default_model(self) -> str:
         """Get default model for this provider."""
         pass
-
-
-__all__ = [
-    "ProviderType",
-    "ProviderConfig",
-    "ProviderResponse",
-    "ProviderAdapter",
-]

@@ -1,4 +1,3 @@
-
 """
 Routing policy engine for provider selection.
 Implements Abacus-first architecture with intelligent fallback.
@@ -6,15 +5,16 @@ Implements Abacus-first architecture with intelligent fallback.
 from typing import List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
 from sologit.orchestration.providers import ProviderType, ProviderAdapter
 
 
 class RoutingStrategy(Enum):
     """Routing strategy types."""
-    ABACUS_FIRST = "abacus_first"
-    COST_OPTIMIZED = "cost_optimized"
-    LATENCY_OPTIMIZED = "latency_optimized"
-    USER_SPECIFIED = "user_specified"
+    ABACUS_FIRST = "abacus_first"  # Default: Abacus → OpenAI → Anthropic
+    COST_OPTIMIZED = "cost_optimized"  # Cheapest available
+    LATENCY_OPTIMIZED = "latency_optimized"  # Fastest available
+    USER_SPECIFIED = "user_specified"  # User picks provider
 
 
 @dataclass
@@ -58,7 +58,7 @@ class PolicyEngine:
         Returns:
             (primary_provider, fallback_providers)
         """
-        # USER_SPECIFIED strategy
+        # User-specified strategy
         if self.policy.strategy == RoutingStrategy.USER_SPECIFIED:
             if self.policy.user_preference:
                 primary = self.adapters.get(self.policy.user_preference)

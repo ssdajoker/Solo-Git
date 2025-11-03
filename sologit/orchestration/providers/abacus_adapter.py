@@ -1,11 +1,12 @@
-
 """
 Abacus.AI provider adapter - PRIMARY router for Solo-Git.
+Uses RouteLLM API for intelligent model routing.
 """
 import asyncio
 import time
 from typing import Optional
 
+from sologit.api.client import AbacusClient, ChatMessage
 from sologit.orchestration.providers import (
     ProviderAdapter,
     ProviderConfig,
@@ -15,13 +16,14 @@ from sologit.orchestration.providers import (
 
 
 class AbacusAdapter(ProviderAdapter):
-    """Abacus.AI adapter with intelligent routing."""
+    """Abacus.AI adapter with RouteLLM support."""
     
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
-        self.api_key = config.api_key
-        self._available = None
-        self._last_check = 0
+        # Store deployment credentials if provided
+        self.deployment_id = getattr(config, 'deployment_id', None)
+        self.deployment_token = getattr(config, 'deployment_token', None)
+        self.client = AbacusClient(api_key=config.api_key)
     
     async def generate(
         self,
@@ -31,82 +33,64 @@ class AbacusAdapter(ProviderAdapter):
         temperature: float = 0.7,
         max_tokens: int = 500,
     ) -> ProviderResponse:
-        """Generate using Abacus.AI."""
+        """
+        Generate using Abacus.AI RouteLLM.
+        RouteLLM automatically selects the best model based on:
+        - Complexity estimation
+        - Cost optimization
+        - User preferences
+        """
         start_time = time.time()
         
         try:
-            # Import here to avoid dependency issues
-            import requests
-            
-            # Construct messages
+            # Construct messages using ChatMessage
             messages = []
             if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
+                messages.append(ChatMessage(role="system", content=system_prompt))
+            messages.append(ChatMessage(role="user", content=prompt))
             
-            # Call Abacus.AI API
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
+            # Use default model if not specified
+            model_name = model or self.get_default_model()
             
-            payload = {
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            
-            if model:
-                payload["model"] = model
-            
+            # Call Abacus.AI chat API
             response = await asyncio.to_thread(
-                requests.post,
-                "https://api.abacus.ai/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=self.config.timeout,
+                self.client.chat,
+                messages=messages,
+                model=model_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                deployment_id=self.deployment_id,
+                deployment_token=self.deployment_token,
             )
-            response.raise_for_status()
             
-            data = response.json()
             latency_ms = (time.time() - start_time) * 1000
             
+            # Calculate total tokens and estimate cost
+            total_tokens = response.prompt_tokens + response.completion_tokens
+            # Rough cost estimate: $0.001 per 1K tokens
+            cost_usd = (total_tokens / 1000) * 0.001
+            
             return ProviderResponse(
-                content=data["choices"][0]["message"]["content"],
+                content=response.content,
                 provider=ProviderType.ABACUS,
-                model=data.get("model", model or "abacus-auto"),
-                tokens_used=data.get("usage", {}).get("total_tokens", 0),
+                model=response.model,
+                tokens_used=total_tokens,
                 latency_ms=latency_ms,
-                cost_usd=data.get("cost_usd", 0.0),
+                cost_usd=cost_usd,
             )
-        
         except Exception as e:
+            # Log error and re-raise for policy engine to handle
             print(f"[AbacusAdapter] Error: {e}")
             raise
     
     def is_available(self) -> bool:
         """Check if Abacus.AI API is reachable."""
-        # Cache availability check for 60 seconds
-        current_time = time.time()
-        if self._available is not None and (current_time - self._last_check) < 60:
-            return self._available
-        
         try:
-            import requests
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            response = requests.get(
-                "https://api.abacus.ai/v1/models",
-                headers=headers,
-                timeout=5,
-            )
-            self._available = response.status_code == 200
-            self._last_check = current_time
-            return self._available
+            # Quick health check
+            return self.client.ping()
         except:
-            self._available = False
-            self._last_check = current_time
             return False
     
     def get_default_model(self) -> str:
-        """Default: Let Abacus.AI decide."""
-        return "abacus-auto"
+        """Default: gpt-4o-mini for cost-effective routing."""
+        return "gpt-4o-mini"

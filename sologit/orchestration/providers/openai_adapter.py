@@ -1,8 +1,13 @@
-
 """OpenAI provider adapter - Fallback #1."""
 import asyncio
 import time
 from typing import Optional
+
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 from sologit.orchestration.providers import (
     ProviderAdapter,
@@ -17,8 +22,14 @@ class OpenAIAdapter(ProviderAdapter):
     
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
-        self.api_key = config.api_key
-        self.base_url = config.base_url
+        if not OPENAI_AVAILABLE:
+            raise ImportError("openai package not installed. Run: pip install openai")
+        
+        self.client = AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.timeout,
+        )
     
     async def generate(
         self,
@@ -31,19 +42,15 @@ class OpenAIAdapter(ProviderAdapter):
         """Generate using OpenAI API."""
         start_time = time.time()
         
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        model = model or self.get_default_model()
+        
         try:
-            from openai import AsyncOpenAI
-            
-            client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
-            
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
-            
-            model = model or self.get_default_model()
-            
-            response = await client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
@@ -52,10 +59,10 @@ class OpenAIAdapter(ProviderAdapter):
             
             latency_ms = (time.time() - start_time) * 1000
             
-            # Cost estimation
+            # Estimate cost (rough approximations)
             cost_per_1k = {
                 "gpt-4o": 0.005,
-                "gpt-4o-mini": 0.0005,
+                "gpt-4o-mini": 0.0001,
                 "gpt-4": 0.03,
                 "gpt-3.5-turbo": 0.001
             }
@@ -70,18 +77,17 @@ class OpenAIAdapter(ProviderAdapter):
                 latency_ms=latency_ms,
                 cost_usd=cost,
             )
-        
         except Exception as e:
             print(f"[OpenAIAdapter] Error: {e}")
             raise
     
     def is_available(self) -> bool:
         """Check OpenAI API availability."""
+        if not OPENAI_AVAILABLE:
+            return False
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-            client.models.list()
-            return True
+            # Simple check - we have an API key
+            return bool(self.config.api_key)
         except:
             return False
     

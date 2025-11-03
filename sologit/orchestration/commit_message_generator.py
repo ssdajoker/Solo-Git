@@ -1,4 +1,3 @@
-
 """
 Commit message generator with Abacus-first routing.
 Uses policy engine for intelligent provider selection and fallback.
@@ -9,6 +8,9 @@ from dataclasses import dataclass
 
 from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
 from sologit.orchestration.providers import ProviderResponse, ProviderType
+from sologit.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -69,7 +71,7 @@ class CommitMessageGenerator:
         )
         
         # Try primary provider
-        print(f"[CommitMessageGenerator] Using {primary.provider_type.value}")
+        logger.info(f"Generating commit message with {primary.provider_type.value}")
         try:
             response = await primary.generate(
                 prompt=prompt,
@@ -86,16 +88,15 @@ class CommitMessageGenerator:
                 cost_usd=response.cost_usd,
                 fallback_used=False,
             )
-        
         except Exception as e:
-            print(f"[CommitMessageGenerator] Primary provider failed: {e}")
+            logger.warning(f"Primary provider failed: {e}")
             
             # Try fallbacks
             for i, fallback_adapter in enumerate(fallbacks):
                 if not fallback_adapter.is_available():
                     continue
                 
-                print(f"[CommitMessageGenerator] Trying fallback #{i+1}: {fallback_adapter.provider_type.value}")
+                logger.info(f"Trying fallback #{i+1}: {fallback_adapter.provider_type.value}")
                 try:
                     response = await fallback_adapter.generate(
                         prompt=prompt,
@@ -112,9 +113,8 @@ class CommitMessageGenerator:
                         cost_usd=response.cost_usd,
                         fallback_used=True,
                     )
-                
                 except Exception as fallback_error:
-                    print(f"[CommitMessageGenerator] Fallback #{i+1} failed: {fallback_error}")
+                    logger.warning(f"Fallback #{i+1} failed: {fallback_error}")
                     continue
             
             # All providers failed

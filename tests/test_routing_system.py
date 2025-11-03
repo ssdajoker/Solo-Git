@@ -374,7 +374,7 @@ class TestProviderIntegration:
         
         assert adapter.provider_type == ProviderType.ABACUS
         assert adapter.config.api_key == "test_key"
-        assert adapter.get_default_model() == "routellm-auto"
+        assert adapter.get_default_model() == "gpt-4o-mini"
     
     def test_openai_adapter_initialization(self):
         """Test OpenAI adapter can be initialized if SDK available."""
