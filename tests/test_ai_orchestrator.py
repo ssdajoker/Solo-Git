@@ -75,7 +75,7 @@ def orchestrator(mock_config_manager, tmp_path):
 def test_orchestrator_initialization(orchestrator):
     """Test orchestrator initializes correctly."""
     assert orchestrator is not None
-    assert orchestrator.client is not None
+    assert orchestrator.config_manager is not None
     assert orchestrator.model_router is not None
     assert orchestrator.cost_guard is not None
     assert orchestrator.planning_engine is not None
