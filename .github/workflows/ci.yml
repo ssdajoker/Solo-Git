@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install mypy types-PyYAML types-requests
-      - run: mypy sologit --strict
+      - run: mypy
 
   # Job 3: Linting
   lint:
