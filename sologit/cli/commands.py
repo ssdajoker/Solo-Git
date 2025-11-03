@@ -1581,7 +1581,8 @@ def execute_pair_loop(
 @click.option("--workpad", "-w", required=True, help="Workpad ID")
 @click.option("--edit/--no-edit", default=True, help="Edit message before committing")
 @click.option("--conventional/--free-form", default=True, help="Use Conventional Commits format")
-def generate_commit_message(workpad: str, edit: bool, conventional: bool):
+@click.option("--json", "json_output", is_flag=True, default=False, help="Output in JSON format")
+def generate_commit_message(workpad: str, edit: bool, conventional: bool, json_output: bool):
     """
     Generate AI-assisted commit message for workpad changes.
     
@@ -1589,8 +1590,11 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
         sologit commit-msg -w my-feature
         sologit commit-msg -w my-feature --no-edit
         sologit commit-msg -w my-feature --free-form
+        sologit commit-msg -w my-feature --json
     """
     import os
+    import sys
+    import json
     import tempfile
     import subprocess
     from rich.panel import Panel
@@ -1609,6 +1613,14 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
     try:
         # Get Git engine and state manager
         git_engine = get_git_engine()
+        state_manager = git_engine.state_manager
+        
+        # Get workpad
+        workpad_obj = state_manager.get_workpad(workpad)
+        if not workpad_obj:
+            if json_output:
+                print(json.dumps({"success": False, "error": f"Workpad '{workpad}' not found"}))
+                sys.exit(1)
 
         workpad_obj = git_engine.get_workpad(workpad)
         if workpad_obj is None:
@@ -1617,6 +1629,9 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
         # Get workpad diff
         diff = git_engine.get_diff(workpad)
         if not diff:
+            if json_output:
+                print(json.dumps({"success": False, "error": "No changes to commit"}))
+                sys.exit(0)
             formatter.print_warning("No changes to commit")
             return
         
@@ -1666,6 +1681,12 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
             )
         
         if not adapters:
+            if json_output:
+                print(json.dumps({
+                    "success": False, 
+                    "error": "No AI providers configured. Set API keys in config (abacus.api_key, openai_api_key, or anthropic_api_key)"
+                }))
+                sys.exit(1)
             abort_with_error(
                 "No AI providers configured",
                 "Set API keys in config:\n"
@@ -1680,35 +1701,45 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
         generator = CommitMessageGenerator(policy_engine)
         
         # Generate message
-        with formatter.console.status("[cyan]Generating commit message..."):
+        if json_output:
+            # Silent generation for JSON output
             request = CommitMessageRequest(
                 diff=diff,
                 workpad_title=workpad_obj.title,
                 conventional_commit=conventional,
             )
             response = asyncio.run(generator.generate(request))
+        else:
+            # Pretty console output
+            with formatter.console.status("[cyan]Generating commit message..."):
+                request = CommitMessageRequest(
+                    diff=diff,
+                    workpad_title=workpad_obj.title,
+                    conventional_commit=conventional,
+                )
+                response = asyncio.run(generator.generate(request))
+            
+            # Display result
+            formatter.console.print()
+            formatter.console.print(Panel(
+                response.message,
+                title="[bold cyan]Generated Commit Message",
+                border_style="cyan",
+            ))
+            formatter.console.print()
+            formatter.console.print(
+                f"[dim]Provider: {response.provider.value} | Model: {response.model}[/dim]"
+            )
+            formatter.console.print(
+                f"[dim]Latency: {response.latency_ms:.0f}ms | Cost: ${response.cost_usd:.4f}[/dim]"
+            )
+            if response.fallback_used:
+                formatter.print_warning("Note: Primary provider failed, fallback was used")
+            formatter.console.print()
         
-        # Display result
-        formatter.console.print()
-        formatter.console.print(Panel(
-            response.message,
-            title="[bold cyan]Generated Commit Message",
-            border_style="cyan",
-        ))
-        formatter.console.print()
-        formatter.console.print(
-            f"[dim]Provider: {response.provider.value} | Model: {response.model}[/dim]"
-        )
-        formatter.console.print(
-            f"[dim]Latency: {response.latency_ms:.0f}ms | Cost: ${response.cost_usd:.4f}[/dim]"
-        )
-        if response.fallback_used:
-            formatter.print_warning("Note: Primary provider failed, fallback was used")
-        formatter.console.print()
-        
-        # Edit message if requested
+        # Edit message if requested (skip in JSON mode)
         final_message = response.message
-        if edit:
+        if edit and not json_output:
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".txt", delete=False
             ) as f:
@@ -1726,13 +1757,31 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
             if not final_message:
                 abort_with_error("Commit message cannot be empty")
         
-        # Checkpoint with message
+        # In JSON mode, return the message without checkpointing (let caller decide)
+        if json_output:
+            print(json.dumps({
+                "success": True,
+                "message": response.message,
+                "provider": response.provider.value,
+                "model": response.model,
+                "latency_ms": response.latency_ms,
+                "cost_usd": response.cost_usd,
+                "fallback_used": response.fallback_used,
+                "workpad_id": workpad,
+                "diff": diff
+            }))
+            sys.exit(0)
+        
+        # Checkpoint with message (interactive mode only)
         git_engine.checkpoint_workpad(workpad, final_message)
         formatter.print_success(
             f"Checkpointed workpad '{workpad}' with AI-generated message"
         )
         
     except Exception as e:
+        if json_output:
+            print(json.dumps({"success": False, "error": str(e)}))
+            sys.exit(1)
         logger.exception("Commit message generation failed")
         abort_with_error("Error generating commit message", str(e))
 

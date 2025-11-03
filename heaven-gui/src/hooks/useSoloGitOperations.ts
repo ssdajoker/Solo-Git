@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import type {
+  CommitMessageResponse,
   PromotionRecord,
   RepositoryState,
   TestRun,
@@ -47,6 +48,10 @@ interface CreateRepositoryOptions {
 
 interface DeleteRepositoryOptions {
   repoId: string
+}
+
+interface GenerateCommitMessageOptions {
+  workpadId: string
 }
 
 const toError = (error: unknown): Error => {
@@ -157,6 +162,16 @@ export function useSoloGitOperations({ onStateUpdated }: UseSoloGitOperationsOpt
     }
   }, [refreshState])
 
+  const generateCommitMessage = useCallback(async ({ workpadId }: GenerateCommitMessageOptions): Promise<CommitMessageResponse> => {
+    try {
+      const response = await invoke<CommitMessageResponse>('generate_commit_message', { workpadId })
+      // No state refresh needed since this is a read-only operation
+      return response
+    } catch (error) {
+      throw toError(error)
+    }
+  }, [])
+
   return {
     createRepository,
     deleteRepository,
@@ -166,6 +181,7 @@ export function useSoloGitOperations({ onStateUpdated }: UseSoloGitOperationsOpt
     applyPatch,
     rollbackWorkpad,
     deleteWorkpad,
+    generateCommitMessage,
   }
 }
 

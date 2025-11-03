@@ -630,3 +630,70 @@ pub(crate) fn delete_repository(repo_id: String) -> Result<(), String> {
     run_cli_command(vec!["repo".to_string(), "delete".to_string(), repo_id])?;
     Ok(())
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct CommitMessageResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub latency_ms: Option<f64>,
+    pub cost_usd: Option<f64>,
+    pub fallback_used: Option<bool>,
+    pub workpad_id: Option<String>,
+    pub diff: Option<String>,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub(crate) fn generate_commit_message(workpad_id: String) -> Result<CommitMessageResponse, String> {
+    let trimmed = workpad_id.trim();
+    if trimmed.is_empty() {
+        return Err("Workpad ID cannot be empty".to_string());
+    }
+
+    let output = run_cli_command(vec![
+        "commit-msg".to_string(),
+        "-w".to_string(),
+        trimmed.to_string(),
+        "--no-edit".to_string(),
+        "--json".to_string(),
+    ])?;
+
+    // Parse JSON output
+    let json_result: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| format!("Failed to parse CLI JSON output: {}", e))?;
+
+    if !json_result["success"].as_bool().unwrap_or(false) {
+        return Ok(CommitMessageResponse {
+            success: false,
+            message: None,
+            provider: None,
+            model: None,
+            latency_ms: None,
+            cost_usd: None,
+            fallback_used: None,
+            workpad_id: Some(trimmed.to_string()),
+            diff: None,
+            error: Some(
+                json_result["error"]
+                    .as_str()
+                    .unwrap_or("Unknown error")
+                    .to_string(),
+            ),
+        });
+    }
+
+    Ok(CommitMessageResponse {
+        success: true,
+        message: json_result["message"].as_str().map(|s| s.to_string()),
+        provider: json_result["provider"].as_str().map(|s| s.to_string()),
+        model: json_result["model"].as_str().map(|s| s.to_string()),
+        latency_ms: json_result["latency_ms"].as_f64(),
+        cost_usd: json_result["cost_usd"].as_f64(),
+        fallback_used: json_result["fallback_used"].as_bool(),
+        workpad_id: Some(trimmed.to_string()),
+        diff: json_result["diff"].as_str().map(|s| s.to_string()),
+        error: None,
+    })
+}
