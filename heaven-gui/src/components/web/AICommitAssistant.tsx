@@ -4,7 +4,7 @@
  * Cmd+Shift+A to toggle
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { cn } from '../shared/utils'
 import { useKeyboardVisibility } from '../hooks/useKeyboardVisibility'
 import { useSoloGitOperations } from '../hooks/useSoloGitOperations'
@@ -12,7 +12,6 @@ import { notifications } from '../utils/notifications'
 
 export interface AICommitAssistantProps {
   workpadId?: string
-  gitDiff?: string
   onAccept?: (message: string) => void
   onEdit?: (message: string) => void
   className?: string
@@ -39,14 +38,7 @@ export function AICommitAssistant({
     meta: true 
   })
   
-  // Generate commit message when visible and workpadId is available
-  useEffect(() => {
-    if (isVisible && workpadId) {
-      generateCommitMessage()
-    }
-  }, [isVisible, workpadId])
-  
-  const generateCommitMessage = async () => {
+  const generateCommitMessage = useCallback(async () => {
     if (!workpadId) {
       setError('No workpad selected')
       notifications.error('AI Commit Error', 'No workpad selected')
@@ -89,7 +81,14 @@ export function AICommitAssistant({
       notifications.error('AI Commit Failed', errorMsg)
       setIsGenerating(false)
     }
-  }
+  }, [workpadId, generateFromBackend])
+  
+  // Generate commit message when visible and workpadId is available
+  useEffect(() => {
+    if (isVisible && workpadId) {
+      generateCommitMessage()
+    }
+  }, [isVisible, workpadId, generateCommitMessage])
   
   // Calculate confidence score based on message quality
   const calculateConfidence = (message: string, fallbackUsed?: boolean | null): number => {

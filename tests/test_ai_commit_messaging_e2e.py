@@ -18,7 +18,6 @@ from click.testing import CliRunner
 from git import Repo
 
 from sologit.cli.main import cli
-from sologit.config.manager import ConfigManager
 from sologit.state.manager import StateManager
 
 
@@ -187,7 +186,7 @@ def test_ai_commit_message_no_changes(runner, setup_repo):
 
 def test_ai_commit_message_invalid_workpad(runner, setup_repo):
     """Test AI commit message generation with invalid workpad ID."""
-    test_repo_path, state_path, repo_id = setup_repo
+    _, state_path, repo_id = setup_repo
     
     # Try to generate commit message for non-existent workpad
     result = runner.invoke(
@@ -298,6 +297,7 @@ def test_ai_commit_message_provider_routing(runner, setup_repo):
                     # Fallback provider should not be Abacus
                     assert response.get("provider", "").lower() != "abacus"
         except json.JSONDecodeError:
+            # If output is not valid JSON, ignore and allow test to continue.
             pass
 
 
