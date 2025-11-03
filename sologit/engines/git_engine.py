@@ -18,7 +18,7 @@ from zipfile import ZipFile
 from git import Repo, GitCommandError
 
 from sologit.core.repository import Repository
-from sologit.core.workpad import Workpad, Checkpoint
+from sologit.core.workpad import Workpad, Checkpoint, Snapshot, SnapshotNotFoundError
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,6 +41,16 @@ class WorkpadNotFoundError(GitEngineError):
 
 class CannotPromoteError(GitEngineError):
     """Workpad cannot be promoted."""
+    pass
+
+
+class RebaseConflictError(GitEngineError):
+    """A rebase operation resulted in conflicts."""
+    pass
+
+
+class SnapshotMismatchError(GitEngineError):
+    """Snapshot does not belong to the specified workpad."""
     pass
 
 
@@ -517,6 +527,146 @@ class GitEngine:
             logger.error(f"Failed to promote workpad: {e}")
             raise GitEngineError(f"Failed to promote workpad: {e}")
     
+    def rebase_workpad(self, pad_id: str, interactive: bool = False) -> None:
+        """
+        Rebase a workpad on top of the trunk branch.
+
+        Args:
+            pad_id: The ID of the workpad to rebase.
+            interactive: If True, performs an interactive rebase.
+
+        Raises:
+            WorkpadNotFoundError: If the workpad is not found.
+            RebaseConflictError: If the rebase operation fails due to conflicts.
+            GitEngineError: For other Git-related errors.
+        """
+        logger.info(f"Rebasing workpad {pad_id}")
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+
+        repository = self.repo_db[workpad.repo_id]
+        repo = Repo(repository.path)
+
+        try:
+            # Checkout the workpad branch
+            workpad_branch = repo.heads[workpad.branch_name]
+            workpad_branch.checkout()
+
+            # Start the rebase
+            trunk_branch = repository.trunk_branch
+            if interactive:
+                repo.git.rebase('-i', trunk_branch)
+            else:
+                repo.git.rebase(trunk_branch)
+
+            workpad.last_activity = datetime.now()
+            self._save_metadata()
+            logger.info(f"Workpad {pad_id} successfully rebased onto {trunk_branch}")
+
+        except GitCommandError as e:
+            # Check for rebase conflicts in the error message
+            if "Merge conflict" in str(e) or "could not apply" in str(e):
+                repo.git.rebase('--abort')
+                logger.error(f"Rebase conflict for workpad {pad_id}: {e}")
+                raise RebaseConflictError(f"Rebase failed for workpad {pad_id} due to conflicts. The rebase has been aborted.")
+            else:
+                logger.error(f"Failed to rebase workpad {pad_id}: {e}")
+                raise GitEngineError(f"An unexpected error occurred during rebase: {e}")
+
+    def create_snapshot(self, pad_id: str, message: str) -> str:
+        """
+        Create a snapshot of the workpad's current state, including uncommitted changes.
+
+        Args:
+            pad_id: The ID of the workpad.
+            message: A description for the snapshot.
+
+        Returns:
+            The ID of the created snapshot.
+        """
+        logger.info(f"Creating snapshot for workpad {pad_id}: {message}")
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+
+        repo = Repo(self.repo_db[workpad.repo_id].path)
+        self.switch_workpad(pad_id)
+
+        snapshot_id = f"snap_{uuid4().hex[:8]}"
+        stash_message = f"sologit-snapshot:{pad_id}:{snapshot_id}:{message}"
+
+        repo.git.stash('push', '-u', '-m', stash_message)
+
+        snapshot = Snapshot(id=snapshot_id, message=message)
+        workpad.snapshots[snapshot_id] = snapshot
+        self._save_metadata()
+
+        logger.info(f"Snapshot '{snapshot_id}' created for workpad {pad_id}")
+        return snapshot_id
+
+    def list_snapshots(self, pad_id: str) -> List[Snapshot]:
+        """List all snapshots for a workpad."""
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+        return list(workpad.snapshots.values())
+
+    def restore_snapshot(self, pad_id: str, snapshot_id: str) -> None:
+        """Restore a workpad to a previously created snapshot."""
+        logger.info(f"Restoring snapshot '{snapshot_id}' for workpad {pad_id}")
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+        if snapshot_id not in workpad.snapshots:
+            raise SnapshotNotFoundError(f"Snapshot '{snapshot_id}' not found in workpad {pad_id}")
+
+        repo = Repo(self.repo_db[workpad.repo_id].path)
+        self.switch_workpad(pad_id)
+
+        stashes = repo.git.stash('list').splitlines()
+        stash_index = -1
+        for i, line in enumerate(stashes):
+            if f"sologit-snapshot:{pad_id}:{snapshot_id}" in line:
+                stash_index = i
+                break
+
+        if stash_index == -1:
+            raise SnapshotNotFoundError(f"Stash for snapshot '{snapshot_id}' not found.")
+
+        # Reset the workpad to a clean state before applying the stash
+        repo.git.reset('--hard')
+        repo.git.clean('-fd')
+
+        repo.git.stash('pop', f'stash@{{{stash_index}}}')
+        logger.info(f"Snapshot '{snapshot_id}' restored for workpad {pad_id}")
+
+    def delete_snapshot(self, pad_id: str, snapshot_id: str) -> None:
+        """Delete a snapshot from a workpad."""
+        logger.info(f"Deleting snapshot '{snapshot_id}' from workpad {pad_id}")
+        workpad = self.workpad_db.get(pad_id)
+        if not workpad:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+        if snapshot_id not in workpad.snapshots:
+            raise SnapshotNotFoundError(f"Snapshot '{snapshot_id}' not found in workpad {pad_id}")
+
+        repo = Repo(self.repo_db[workpad.repo_id].path)
+        self.switch_workpad(pad_id)
+
+        stashes = repo.git.stash('list').splitlines()
+        stash_index = -1
+        for i, line in enumerate(stashes):
+            if f"sologit-snapshot:{pad_id}:{snapshot_id}" in line:
+                stash_index = i
+                break
+
+        if stash_index != -1:
+            repo.git.stash('drop', f'stash@{{{stash_index}}}')
+
+        del workpad.snapshots[snapshot_id]
+        self._save_metadata()
+        logger.info(f"Snapshot '{snapshot_id}' deleted from workpad {pad_id}")
+
     def revert_last_commit(self, repo_id: str) -> None:
         """
         Revert last commit on trunk (for Jenkins rollback).

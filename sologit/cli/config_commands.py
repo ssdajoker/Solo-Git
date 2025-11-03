@@ -7,6 +7,7 @@ Configuration commands for Solo Git CLI.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast, Dict, Iterable, List, NoReturn, Optional
 from typing import Any, Dict, Iterable, NoReturn, Optional, cast
 
 import click
@@ -56,6 +57,8 @@ def abort_with_error(
     suggestions: Optional[Iterable[str]] = None,
     docs_url: Optional[str] = None,
 ) -> NoReturn:
+    """Render a formatted error panel and abort the command."""
+
     """Display a formatted error panel with context and abort the command."""
     formatter.print_error(
         title or "Configuration Error",
@@ -97,13 +100,14 @@ def config_group() -> None:
 @click.option("--api-key", help="Abacus.ai API key")
 @click.option("--endpoint", help="Abacus.ai API endpoint", default="https://api.abacus.ai/v1")
 @click.option("--interactive/--no-interactive", default=True, help="Interactive setup mode")
-def setup_config(api_key: Optional[str], endpoint: Optional[str], interactive: bool) -> None:
+@click.pass_context
+def setup_config(ctx: click.Context, api_key: Optional[str], endpoint: Optional[str], interactive: bool) -> None:
     """Guided Abacus.ai configuration setup."""
 
     formatter.print_header("Solo Git Configuration Setup")
     formatter.print_info("Guiding you through Abacus.ai credential setup.")
 
-    config_manager = ConfigManager()
+    config_manager = _get_config_manager(ctx)
 
     if config_manager.has_abacus_credentials() and interactive:
         formatter.print_warning("Existing configuration detected.")
@@ -263,7 +267,6 @@ def budget_status(ctx: click.Context) -> None:
 
     budget_config = config.budget if isinstance(config.budget, BudgetConfig) else None
     if budget_config is None:
-        # Try to create a default BudgetConfig if possible
         try:
             budget_config = BudgetConfig()
         except Exception:
@@ -279,16 +282,6 @@ def budget_status(ctx: click.Context) -> None:
 
     formatter.print_header("Solo Git Budget Status")
 
-    if not isinstance(config.budget, BudgetConfig):
-        abort_with_error(
-            "Invalid budget configuration",
-            "The 'budget' section of your configuration is missing or malformed.",
-            help_text="Please check your configuration file and ensure the 'budget' section is correctly specified.",
-            tip="Run 'evogitctl config setup' to regenerate a fresh configuration.",
-        )
-
-    guard = CostGuard(config.budget)
-    status = guard.get_status()
     summary_table = formatter.table(headers=["Metric", "Value"])
     summary_table.add_row("Daily Cap", f"${status['daily_cap']:.2f}")
     summary_table.add_row("Used Today", f"${status['current_cost']:.2f}")
@@ -298,11 +291,6 @@ def budget_status(ctx: click.Context) -> None:
     budget_color = theme.colors.success if status['within_budget'] else theme.colors.warning
     summary_table.add_row("Within Budget", f"[{budget_color}]{budget_icon} {'Yes' if status['within_budget'] else 'Check alerts'}[/{budget_color}]")
     formatter.console.print(summary_table)
-
-    formatter.print_info(f"Daily Cap:       ${status['daily_cap']:.2f}")
-    formatter.print_info(f"Used Today:     ${status['current_cost']:.2f}")
-    formatter.print_info(f"Remaining:      ${status['remaining']:.2f}")
-    formatter.print_info(f"Usage:          {status['percentage_used']:.1f}%")
 
     if status.get('alerts'):
         alerts_panel = "\n".join(
@@ -339,19 +327,6 @@ def budget_status(ctx: click.Context) -> None:
         formatter.print_info_panel(last_panel, title="Most Recent Usage")
 
 
-    within_budget = status.get("within_budget", True)
-    icon = theme.icons.success if within_budget else theme.icons.warning
-    color = theme.colors.success if within_budget else theme.colors.warning
-
-    formatter.console.print(
-        f"[{color}]{icon}[/{color}] Budget status: {'Within budget' if within_budget else 'Over budget'}"
-    )
-    formatter.console.print(f"Daily Cap:      {_format_currency(status.get('daily_cap'))}")
-    formatter.console.print(f"Used Today:     {_format_currency(status.get('current_cost'))}")
-    formatter.console.print(f"Remaining:      {_format_currency(status.get('remaining'))}")
-    formatter.console.print(f"Usage:          {status.get('percentage_used', 0)}%")
-
-
 @config_group.command(name="init")
 @click.option("--force", is_flag=True, help="Overwrite existing configuration file")
 def init_config(force: bool) -> None:
@@ -364,6 +339,22 @@ def init_config(force: bool) -> None:
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(DEFAULT_CONFIG_TEMPLATE)
+    formatter.print_success("Created configuration file at %s" % target_path)
+
+    formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
+
+
+@config_group.command(name="env-template")
+def env_template() -> None:
+    """Generate .env template file."""
+
+    env_path = Path.cwd() / ".env.example"
+    if env_path.exists():
+        formatter.print_warning(f"{env_path} already exists; overwriting.")
+    env_path.write_text(ENV_TEMPLATE.rstrip() + "\n", encoding="utf-8")
+    formatter.print_success(f"Wrote environment template to {env_path}")
+
+
     
     formatter.print_success_panel(
         f"Created configuration file at [bold]{target_path}[/bold]",
@@ -377,6 +368,7 @@ def config_path() -> None:
     """Print the resolved path to the configuration file."""
 
     target_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
+    formatter.print_info(str(target_path))
     formatter.print_info(f"Configuration file: {target_path}")
 
 

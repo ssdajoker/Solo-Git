@@ -8,7 +8,34 @@ branches. They are automatically named, tracked, and cleaned up.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+class SnapshotNotFoundError(Exception):
+    """Raised when a snapshot is not found."""
+    pass
+
+
+@dataclass
+class Snapshot:
+    """Represents a snapshot of a workpad's state."""
+    id: str
+    message: str
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'message': self.message,
+            'created_at': self.created_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Snapshot":
+        return cls(
+            id=data['id'],
+            message=data['message'],
+            created_at=datetime.fromisoformat(data['created_at']),
+        )
 
 
 @dataclass
@@ -44,6 +71,9 @@ class Workpad:
     
     last_commit: Optional[str] = None
     """Last commit hash in workpad"""
+
+    snapshots: Dict[str, Snapshot] = field(default_factory=dict)
+    """A dictionary of snapshots, with snapshot ID as the key."""
     
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -58,11 +88,14 @@ class Workpad:
             "status": self.status,
             "test_status": self.test_status,
             "last_commit": self.last_commit,
+            "snapshots": {sid: s.to_dict() for sid, s in self.snapshots.items()},
         }
     
     @classmethod
     def from_dict(cls, data: dict) -> "Workpad":
         """Create from dictionary."""
+        snapshots_data = data.get("snapshots", {})
+        snapshots = {sid: Snapshot.from_dict(sdata) for sid, sdata in snapshots_data.items()}
         return cls(
             id=data["id"],
             repo_id=data["repo_id"],
@@ -76,6 +109,7 @@ class Workpad:
             status=data.get("status", "active"),
             test_status=data.get("test_status"),
             last_commit=data.get("last_commit"),
+            snapshots=snapshots,
         )
 
 

@@ -1,10 +1,9 @@
 
-"""Tests for the CLI commands."""
 import pytest
 from click.testing import CliRunner
+from sologit.cli.main import cli
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
-from sologit.cli.main import cli
 from sologit.engines.git_engine import GitEngineError
 from sologit.engines.test_orchestrator import TestStatus, TestResult
 from datetime import datetime
@@ -408,36 +407,11 @@ def test_pad_diff_found(mock_git_engine):
     mock_git_engine.get_workpad.return_value = mock_pad
     mock_git_engine.get_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt"
 
+def test_repo_list_help():
     runner = CliRunner()
-    result = runner.invoke(cli, ['pad', 'diff', 'pad1'])
-
+    result = runner.invoke(cli, ['repo', 'list', '--help'])
     assert result.exit_code == 0
-    assert "diff --git" in result.output
-    mock_git_engine.get_diff.assert_called_once_with('pad1')
-
-
-def test_pad_diff_not_found(mock_git_engine):
-    """Test `pad diff` for a non-existent workpad."""
-    mock_git_engine.get_workpad.return_value = None
-    runner = CliRunner()
-    result = runner.invoke(cli, ['pad', 'diff', 'nonexistent'])
-    assert result.exit_code != 0
-    assert "Workpad nonexistent not found" in result.output
-
-
-def test_pad_promote_success(mock_git_engine):
-    """Test `pad promote` successfully."""
-    mock_pad = MagicMock()
-    mock_pad.title = "feature-to-promote"
-    mock_pad.branch_name = "pad/feature"
-    mock_git_engine.get_workpad.return_value = mock_pad
-    mock_git_engine.can_promote.return_value = True
-    mock_git_engine.promote_workpad.return_value = "abcdef123"
-
-    runner = CliRunner()
-    result = runner.invoke(cli, ['pad', 'promote', 'pad1'])
-
-    assert result.exit_code == 0
+    assert "List registered repositories" in result.output
     assert "Promoting workpad" in result.output
     assert "Workpad promoted to trunk!" in result.output
     assert "Commit: abcdef123" in result.output

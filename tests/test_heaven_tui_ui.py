@@ -11,6 +11,7 @@ from textual.widgets import Input
 from sologit.state.git_sync import GitStateSync
 from sologit.ui.heaven_tui import HeavenTUI, StatusBar
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
+from sologit.config.manager import ConfigManager
 from sologit.ui.test_runner import TestRunner, TestResult, TestStatus
 from sologit.ui.theme import theme
 
@@ -67,10 +68,38 @@ async def test_heaven_tui_workpad_flow(tmp_path, monkeypatch):
 
     monkeypatch.setattr(TestRunner, "run_tests", fake_run_tests, raising=False)
 
+    # Create minimal config for AIOrchestrator
+    config_file = tmp_path / "config.yaml"
+    config_content = """
+abacus:
+  endpoint: "https://api.abacus.ai/api/v0"
+  api_key: "test_key_123"
+
+ai:
+  models:
+    fast:
+      primary:
+        name: "llama-3.1-8b-instruct"
+        cost_per_1k_tokens: 0.0001
+    coding:
+      primary:
+        name: "deepseek-coder-33b"
+        cost_per_1k_tokens: 0.0005
+    planning:
+      primary:
+        name: "gpt-4o"
+        cost_per_1k_tokens: 0.03
+
+budget:
+  daily_usd_cap: 10.0
+"""
+    config_file.write_text(config_content)
+    config_manager = ConfigManager(config_path=config_file)
+
     app = HeavenTUI(
         repo_path=str(repo_path),
         git_sync=git_sync,
-        ai_orchestrator=AIOrchestrator(),
+        ai_orchestrator=AIOrchestrator(config_manager),
     )
 
     async with app.run_test() as pilot:
