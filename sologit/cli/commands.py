@@ -406,10 +406,8 @@ def repo_init(
 @repo.command(
     "list",
     help=(
-        "List registered repositories.\n\n"
-        "Promoting workpad\n"
-        "Workpad promoted to trunk!\n"
-        "Commit: abcdef123"
+        "List all registered repositories.\n\n"
+        "Displays each repository's ID, name, trunk branch, number of workpads, and creation date."
     ),
 )
 def repo_list() -> None:
