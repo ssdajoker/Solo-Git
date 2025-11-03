@@ -1385,6 +1385,12 @@ def execute_pair_loop(
         formatter.print_info("Creating ephemeral workpad...")
         pad_id = git_engine.create_workpad(repo_id, title)
         workpad = git_engine.get_workpad(pad_id)
+        if workpad is None:
+            abort_with_error(
+                "Workpad creation failed",
+                "The workpad could not be retrieved after creation. Please try again.",
+            )
+
         formatter.print_success("Workpad created")
 
         workpad_table = formatter.table(headers=["Field", "Value"])
@@ -1608,15 +1614,13 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool):
     try:
         # Get Git engine and state manager
         git_engine = get_git_engine()
-        state_manager = git_engine.state_manager
-        
-        # Get workpad
-        workpad_obj = state_manager.get_workpad(workpad)
-        if not workpad_obj:
+
+        workpad_obj = git_engine.get_workpad(workpad)
+        if workpad_obj is None:
             abort_with_error(f"Workpad '{workpad}' not found")
-        
+
         # Get workpad diff
-        diff = git_engine.get_workpad_diff(workpad)
+        diff = git_engine.get_diff(workpad)
         if not diff:
             formatter.print_warning("No changes to commit")
             return

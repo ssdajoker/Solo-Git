@@ -399,6 +399,56 @@ class GitEngine:
             logger.error(f"Failed to apply patch: {e}")
             raise GitEngineError(f"Failed to apply patch: {e}")
 
+    def checkpoint_workpad(self, pad_id: str, message: str) -> str:
+        """Create a checkpoint for the current workpad state."""
+
+        self._validate_pad_id(pad_id)
+        if not message or not message.strip():
+            raise GitEngineError("Commit message cannot be empty")
+
+        workpad = self.workpad_db.get(pad_id)
+        if workpad is None:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+
+        repository = self.repo_db.get(workpad.repo_id)
+        if repository is None:
+            raise RepositoryNotFoundError(f"Repository {workpad.repo_id} not found")
+
+        repo = Repo(repository.path)
+
+        try:
+            branch = getattr(repo.heads, workpad.branch_name)
+            branch.checkout()
+
+            if not repo.is_dirty(untracked_files=True):
+                raise GitEngineError("No changes to checkpoint")
+
+            repo.index.add('*')
+            checkpoint_num = len(workpad.checkpoints) + 1
+            commit = repo.index.commit(message.strip())
+
+            checkpoint_id = f"t{checkpoint_num}"
+            tag_name = f"{workpad.branch_name}@{checkpoint_id}"
+            repo.create_tag(tag_name)
+
+            workpad.checkpoints.append(checkpoint_id)
+            workpad.last_activity = datetime.now()
+            workpad.last_commit = commit.hexsha
+            repository.last_activity = datetime.now()
+            self._save_metadata()
+
+            logger.info(
+                "Checkpoint %s created for workpad %s with commit %s",
+                checkpoint_id,
+                pad_id,
+                commit.hexsha,
+            )
+
+            return checkpoint_id
+        except GitCommandError as exc:
+            logger.error("Failed to create checkpoint: %s", exc)
+            raise GitEngineError(f"Failed to create checkpoint: {exc}") from exc
+
     def delete_repository(self, repo_id: str, remove_files: bool = False) -> None:
         """Delete a repository and associated metadata."""
 
