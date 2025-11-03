@@ -5,6 +5,7 @@ Patch Engine for Solo Git.
 Handles patch application, conflict detection, and validation.
 """
 
+import requests
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -28,6 +29,11 @@ class PatchConflictError(PatchEngineError):
 
 class PatchValidationError(PatchEngineError):
     """Patch validation failed."""
+    pass
+
+
+class GistError(PatchEngineError):
+    """Could not fetch or process a GitHub Gist."""
     pass
 
 
@@ -83,6 +89,44 @@ class PatchEngine:
         except GitEngineError as e:
             logger.error(f"Failed to apply patch: {e}")
             raise PatchEngineError(f"Failed to apply patch: {e}")
+
+    def apply_patch_from_gist(self, pad_id: str, gist_url: str, message: str = "") -> str:
+        """
+        Fetches a patch from a GitHub Gist URL and applies it to the workpad.
+
+        Args:
+            pad_id: The ID of the workpad.
+            gist_url: The URL of the GitHub Gist.
+            message: The commit message for the patch.
+
+        Returns:
+            The ID of the created checkpoint.
+
+        Raises:
+            GistError: If the Gist cannot be fetched or processed.
+        """
+        logger.info(f"Applying patch from Gist: {gist_url}")
+
+        if "github.com" not in gist_url:
+            raise GistError("Invalid Gist URL. Must be a github.com URL.")
+
+        try:
+            # Convert the Gist URL to the raw content URL
+            if not gist_url.endswith('/raw'):
+                gist_url += '/raw'
+
+            response = requests.get(gist_url, timeout=10)
+            response.raise_for_status()
+            patch_content = response.text
+
+            if not patch_content.strip():
+                raise GistError("Gist is empty.")
+
+            return self.apply_patch(pad_id, patch_content, message)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch Gist: {e}")
+            raise GistError(f"Could not fetch Gist from URL: {gist_url}") from e
     
     def validate_patch(self, pad_id: str, patch: str) -> bool:
         """
