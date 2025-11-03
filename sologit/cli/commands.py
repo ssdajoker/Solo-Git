@@ -1412,7 +1412,7 @@ def execute_pair_loop(
         }
 
         plan_response = orchestrator.plan(
-            prompt=prompt,
+            task_description=prompt,
             repo_context=context
         )
 
