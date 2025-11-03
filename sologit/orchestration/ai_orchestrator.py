@@ -252,16 +252,6 @@ class AIOrchestrator:
             task_id = progress.add_task("Generating patch...", total=100)
 
         try:
-            with self._progress_stage(progress, task_id, "Analyzing complexity", 15):
-                context = {}
-                if plan:
-                    context["plan"] = plan
-                if file_contents:
-                    context["file_contents"] = file_contents
-                complexity = self.model_router.analyze_complexity(
-                    task_description, context=context if context else None
-                )
-
             with self._progress_stage(progress, task_id, "Selecting model", 10):
                 if force_model:
                     model_config = self._find_model_by_name(force_model)
