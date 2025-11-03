@@ -112,6 +112,7 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf || {
+              echo "apt-get install failed; dumping apt-cache policy for diagnosis"
               echo "apt install failed; dumping apt-cache policy for diagnosis"
               sudo apt-cache policy libwebkit2gtk-4.0-dev || true
               sudo apt-cache search libwebkit2gtk || true
