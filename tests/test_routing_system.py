@@ -19,7 +19,6 @@ from sologit.orchestration.routing_policy import (
 from sologit.orchestration.commit_message_generator import (
     CommitMessageGenerator,
     CommitMessageRequest,
-    CommitMessageResponse,
 )
 
 
