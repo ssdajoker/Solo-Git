@@ -121,8 +121,9 @@ class AIOrchestrator:
 
         try:
             with self._progress_stage(progress, task_id, "Analyzing task complexity", 20):
+                context = {"repo_context": repo_context} if repo_context else None
                 complexity = self.model_router.analyze_complexity(
-                    task_description, repo_context=repo_context
+                    task_description, context=context
                 )
 
             with self._progress_stage(progress, task_id, "Selecting model", 10):
@@ -131,10 +132,12 @@ class AIOrchestrator:
                     if not model_config:
                         raise ValueError(f"Model '{force_model}' not found in configuration")
                 else:
+                    select_context = {"task_type": TaskType.PLANNING.value}
+                    if repo_context:
+                        select_context["repo_context"] = repo_context
                     model_config = self.model_router.select_model(
                         task_description,
-                        TaskType.PLANNING.value,
-                        repo_context=repo_context,
+                        context=select_context,
                     )
 
             with self._progress_stage(progress, task_id, "Checking budget", 10):
@@ -147,16 +150,15 @@ class AIOrchestrator:
                     )
 
             with self._progress_stage(progress, task_id, f"Generating plan with {model_config.name}", 50):
-                client = AbacusClient(self.config.abacus)
                 deployment_creds = self._get_deployment_credentials(model_config.name)
 
                 try:
                     response = self.planning_engine.generate_plan(
-                        task_description=task_description,
-                        repo_context=repo_context,
-                        model_config=model_config,
-                        client=client,
-                        deployment_credentials=deployment_creds,
+                        prompt=task_description,
+                        repo_context={"description": task_description, "context": repo_context} if repo_context else None,
+                        model=model_config.name,
+                        deployment_id=getattr(deployment_creds, 'deployment_id', None) if deployment_creds else None,
+                        deployment_token=getattr(deployment_creds, 'deployment_token', None) if deployment_creds else None,
                     )
                 except Exception as e:
                     if escalate_on_failure:
@@ -165,12 +167,13 @@ class AIOrchestrator:
                         if escalated_model:
                             escalated_cost = (estimated_tokens / 1000.0) * escalated_model.cost_per_1k_tokens
                             if self.cost_guard.check_budget(escalated_cost):
+                                escalated_creds = self._get_deployment_credentials(escalated_model.name)
                                 response = self.planning_engine.generate_plan(
-                                    task_description=task_description,
-                                    repo_context=repo_context,
-                                    model_config=escalated_model,
-                                    client=client,
-                                    deployment_credentials=self._get_deployment_credentials(escalated_model.name),
+                                    prompt=task_description,
+                                    repo_context={"description": task_description, "context": repo_context} if repo_context else None,
+                                    model=escalated_model.name,
+                                    deployment_id=getattr(escalated_creds, 'deployment_id', None) if escalated_creds else None,
+                                    deployment_token=getattr(escalated_creds, 'deployment_token', None) if escalated_creds else None,
                                 )
                                 model_config = escalated_model
                             else:
@@ -233,8 +236,13 @@ class AIOrchestrator:
 
         try:
             with self._progress_stage(progress, task_id, "Analyzing complexity", 15):
+                context = {}
+                if plan:
+                    context["plan"] = plan
+                if file_contents:
+                    context["file_contents"] = file_contents
                 complexity = self.model_router.analyze_complexity(
-                    task_description, plan=plan, file_contents=file_contents
+                    task_description, context=context if context else None
                 )
 
             with self._progress_stage(progress, task_id, "Selecting model", 10):
@@ -243,11 +251,14 @@ class AIOrchestrator:
                     if not model_config:
                         raise ValueError(f"Model '{force_model}' not found in configuration")
                 else:
+                    select_context = {"task_type": TaskType.CODING.value}
+                    if plan:
+                        select_context["plan"] = plan
+                    if file_contents:
+                        select_context["file_contents"] = file_contents
                     model_config = self.model_router.select_model(
                         task_description,
-                        TaskType.CODING.value,
-                        plan=plan,
-                        file_contents=file_contents,
+                        context=select_context,
                     )
 
             with self._progress_stage(progress, task_id, "Estimating cost", 10):
@@ -339,9 +350,15 @@ class AIOrchestrator:
 
         try:
             with self._progress_stage(progress, task_id, "Selecting review model", 20):
+                context = {
+                    "task_type": TaskType.REVIEW.value,
+                    "files_changed": len(patch.files_changed)
+                }
+                if test_files:
+                    context["test_files"] = test_files
                 model_config = self.model_router.select_model(
                     f"Review patch with {len(patch.files_changed)} files",
-                    TaskType.REVIEW.value,
+                    context=context,
                 )
 
             with self._progress_stage(progress, task_id, "Analyzing patch", 60):
@@ -402,9 +419,15 @@ class AIOrchestrator:
 
         try:
             with self._progress_stage(progress, task_id, "Selecting diagnostic model", 20):
+                diag_context = {
+                    "task_type": TaskType.DIAGNOSIS.value,
+                    "patch": patch,
+                }
+                if context:
+                    diag_context.update(context)
                 model_config = self.model_router.select_model(
                     "Diagnose test failure",
-                    TaskType.DIAGNOSIS.value,
+                    context=diag_context,
                 )
 
             with self._progress_stage(progress, task_id, "Analyzing failure", 60):

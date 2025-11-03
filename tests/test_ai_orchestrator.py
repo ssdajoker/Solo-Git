@@ -151,7 +151,11 @@ def test_generate_patch(orchestrator):
         estimated_complexity='low'
     )
     
-    response = orchestrator.generate_patch(plan)
+    # Pass task description and plan as strings (new API signature)
+    response = orchestrator.generate_patch(
+        task_description='Create test.py file',
+        plan=str(plan)
+    )
     
     assert isinstance(response, PatchResponse)
     assert isinstance(response.patch, GeneratedPatch)
@@ -175,7 +179,12 @@ def test_generate_patch_with_files(orchestrator):
         'test.py': 'def old_function():\n    pass\n'
     }
     
-    response = orchestrator.generate_patch(plan, file_contents)
+    # Pass task description, plan string, and file contents (new API signature)
+    response = orchestrator.generate_patch(
+        task_description='Update test.py file',
+        plan=str(plan),
+        file_contents=file_contents
+    )
     
     assert isinstance(response, PatchResponse)
 
