@@ -400,8 +400,21 @@ class GitEngine:
             raise GitEngineError(f"Failed to apply patch: {e}")
 
     def checkpoint_workpad(self, pad_id: str, message: str) -> str:
-        """Create a checkpoint for the current workpad state."""
+        """
+        Create a checkpoint for the current workpad state.
 
+        Args:
+            pad_id: Workpad ID
+            message: Commit message
+
+        Returns:
+            Checkpoint ID
+
+        Raises:
+            GitEngineError: If commit message is empty or no changes to checkpoint, or if Git command fails.
+            WorkpadNotFoundError: If the workpad does not exist.
+            RepositoryNotFoundError: If the repository does not exist.
+        """
         self._validate_pad_id(pad_id)
         if not message or not message.strip():
             raise GitEngineError("Commit message cannot be empty")
