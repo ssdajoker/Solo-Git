@@ -3,7 +3,6 @@
 Tests for core abstractions (Repository and Workpad).
 """
 
-import pytest
 from datetime import datetime
 from pathlib import Path
 

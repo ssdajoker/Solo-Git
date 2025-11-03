@@ -8,7 +8,7 @@ from textual.widgets import Tree, Static
 from textual.reactive import reactive
 from textual import events
 from pathlib import Path
-from typing import Dict, Optional, Set, List
+from typing import Dict, Optional
 from dataclasses import dataclass
 
 from sologit.utils.logger import get_logger

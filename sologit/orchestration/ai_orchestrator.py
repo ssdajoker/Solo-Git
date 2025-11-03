@@ -16,13 +16,12 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from rich.progress import Progress, TaskID
 
-from sologit.api.client import AbacusClient, ChatResponse
+from sologit.api.client import AbacusClient
 from sologit.config.manager import ConfigManager, SoloGitConfig
 from sologit.orchestration.code_generator import CodeGenerator, GeneratedPatch
 from sologit.orchestration.cost_guard import CostGuard
 from sologit.orchestration.model_router import (
     ComplexityMetrics,
-    ModelConfig,
     ModelRouter,
     ModelTier,
 )

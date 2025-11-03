@@ -41,13 +41,22 @@ REPO_ROOT = CURRENT_DIR.parent
 if str(REPO_ROOT) not in os.sys.path:
     os.sys.path.insert(0, str(REPO_ROOT))
 
-from sologit.engines.git_engine import GitEngine
-from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator, TestExecutionMode
-from sologit.orchestration.ai_orchestrator import AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse
-from sologit.orchestration.model_router import ComplexityMetrics
-from sologit.orchestration.planning_engine import CodePlan, FileChange
-from sologit.orchestration.code_generator import GeneratedPatch
-from sologit.state.manager import JSONStateBackend, StateManager
+from sologit.engines.git_engine import GitEngine  # noqa: E402
+from sologit.engines.test_orchestrator import (  # noqa: E402
+    TestConfig,
+    TestOrchestrator,
+    TestExecutionMode,
+)
+from sologit.orchestration.ai_orchestrator import (  # noqa: E402
+    AIOrchestrator,
+    PlanResponse,
+    PatchResponse,
+    ReviewResponse,
+)
+from sologit.orchestration.model_router import ComplexityMetrics  # noqa: E402
+from sologit.orchestration.planning_engine import CodePlan, FileChange  # noqa: E402
+from sologit.orchestration.code_generator import GeneratedPatch  # noqa: E402
+from sologit.state.manager import JSONStateBackend, StateManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")

@@ -6,10 +6,8 @@ import click
 from pathlib import Path
 from typing import List, Optional
 import time
-from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, NoReturn, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Any, Dict, Sequence, Tuple, Union, cast
 
-import click
 from rich.console import Console
 
 from sologit.config.manager import ConfigManager
@@ -21,8 +19,6 @@ from sologit.workflows.rollback_handler import RollbackHandler
 from sologit.state.manager import StateManager
 from sologit.state.git_sync import GitStateSync
 from sologit.engines.test_orchestrator import (
-    TestConfig,
-    TestOrchestrator,
     TestResult,
     TestStatus,
 )
@@ -30,8 +26,6 @@ from sologit.state.schema import TestResult as StateTestResult
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
-from sologit.workflows.ci_orchestrator import CIOrchestrator
-from sologit.workflows.rollback_handler import RollbackHandler
 
 logger = get_logger(__name__)
 
@@ -252,7 +246,7 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
     git_sync = get_git_sync()
 
     try:
-        repo_info = None
+        repo_info: Optional[Dict[str, Any]] = None
         if empty:
             repo_name = name or (target_path.name if target_path else "solo-git-repo")
             formatter.print_info(f"Creating empty repository: {repo_name}")
@@ -266,6 +260,9 @@ def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, targ
             repo_name = name or Path(git_url).stem.replace('.git', '')
             formatter.print_info(f"Cloning from: {git_url}")
             repo_info = git_sync.init_repo_from_git(git_url, repo_name)
+
+        if repo_info is None:
+            raise GitEngineError("Repository initialization returned no metadata")
 
         formatter.print_success("Repository initialized!")
         formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
@@ -655,10 +652,10 @@ def pad_delete(pad_id: str, force: bool, output_json: bool) -> None:
             formatter.print_header("Workpad Deletion")
             formatter.print_info(f"Deleting workpad: {workpad.title}")
         
-        # Delete the branch
+        # Delete the branch and workpad metadata using the engine API
         branch_name = workpad.branch_name
-        git_engine.delete_branch(pad_id, branch_name)
-        
+        git_engine.delete_workpad(pad_id, force=force)
+
         # Remove from state
         state_manager.delete_workpad(pad_id)
         
@@ -759,9 +756,10 @@ def test_run(pad_id: str, target: str, parallel: bool, output_json: bool) -> Non
 [bold]Target:[/bold] {target}"""
             formatter.print_panel(info, title="🧪 Test Execution")
 
+        results: List[TestResult]
         if output_json:
             # For JSON mode, run without progress bar or output handlers
-            results: List[TestResult] = asyncio.run(
+            results = asyncio.run(
                 test_orchestrator.run_tests(
                     pad_id,
                     tests,
@@ -785,7 +783,7 @@ def test_run(pad_id: str, target: str, parallel: bool, output_json: bool) -> Non
                 def handle_complete(result: TestResult) -> None:
                     progress.advance(task)
 
-                results: List[TestResult] = asyncio.run(
+                results = asyncio.run(
                     test_orchestrator.run_tests(
                         pad_id,
                         tests,
@@ -1322,9 +1320,6 @@ def execute_pair_loop(
         target: Test target (fast/full)
     """
     from sologit.orchestration.ai_orchestrator import AIOrchestrator
-    from sologit.engines.patch_engine import PatchEngine
-    from sologit.workflows.auto_merge import AutoMergeWorkflow
-    from sologit.workflows.promotion_gate import PromotionRules
     
     import time
     
@@ -1385,6 +1380,12 @@ def execute_pair_loop(
         formatter.print_info("Creating ephemeral workpad...")
         pad_id = git_engine.create_workpad(repo_id, title)
         workpad = git_engine.get_workpad(pad_id)
+        if workpad is None:
+            abort_with_error(
+                "Workpad creation failed",
+                "The workpad could not be retrieved after creation. Please try again.",
+            )
+
         formatter.print_success("Workpad created")
 
         workpad_table = formatter.table(headers=["Field", "Value"])
@@ -1620,10 +1621,13 @@ def generate_commit_message(workpad: str, edit: bool, conventional: bool, json_o
             if json_output:
                 print(json.dumps({"success": False, "error": f"Workpad '{workpad}' not found"}))
                 sys.exit(1)
+
+        workpad_obj = git_engine.get_workpad(workpad)
+        if workpad_obj is None:
             abort_with_error(f"Workpad '{workpad}' not found")
-        
+
         # Get workpad diff
-        diff = git_engine.get_workpad_diff(workpad)
+        diff = git_engine.get_diff(workpad)
         if not diff:
             if json_output:
                 print(json.dumps({"success": False, "error": "No changes to commit"}))

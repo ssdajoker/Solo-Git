@@ -1,6 +1,5 @@
 import os
 import py_compile
-import sys
 
 errors = []
 

@@ -6,13 +6,11 @@ of auto-merge workflow and CI orchestrator.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from pathlib import Path
+from unittest.mock import Mock
 
 from sologit.workflows.auto_merge import AutoMergeWorkflow, AutoMergeResult
 from sologit.workflows.ci_orchestrator import CIOrchestrator, CIResult, CIStatus
-from sologit.workflows.promotion_gate import PromotionGate, PromotionRules, PromotionDecisionType
-from sologit.analysis.test_analyzer import TestAnalyzer, TestAnalysis, FailureCategory
+from sologit.workflows.promotion_gate import PromotionRules
 from sologit.engines.test_orchestrator import TestConfig, TestResult, TestStatus
 from sologit.core.workpad import Workpad
 from sologit.core.repository import Repository

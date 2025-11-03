@@ -120,7 +120,6 @@ class CIOrchestrator:
             history = self.git_engine.get_history(repo_id, limit=1)
             if not history:
                 raise ValueError("No commits found in repository")
-                raise Exception("No commits found in repository")
             
             if on_progress:
                 on_progress(f"Running {len(smoke_tests)} smoke tests...")
@@ -138,7 +137,6 @@ class CIOrchestrator:
                 
                 # Determine status
                 all_passed = all(r.status == TestStatus.PASSED for r in results)
-                any_failed = any(r.status == TestStatus.FAILED for r in results)
                 any_timeout = any(r.status == TestStatus.TIMEOUT for r in results)
                 
                 if all_passed:
@@ -169,7 +167,7 @@ class CIOrchestrator:
                 # Clean up temp workpad
                 try:
                     self.git_engine.delete_workpad(temp_pad.id)
-                except:
+                except Exception:
                     pass
         
         except Exception as e:

@@ -6,7 +6,7 @@ from zipfile import ZipFile
 from io import BytesIO
 from git import Repo
 
-from sologit.engines.git_engine import GitEngine, RebaseConflictError, WorkpadNotFoundError
+from sologit.engines.git_engine import GitEngine, RebaseConflictError
 
 @pytest.fixture
 def git_engine():

@@ -3,9 +3,7 @@ Enhanced tests for Code Generator to achieve >95% coverage.
 """
 
 import pytest
-import json
 from unittest.mock import Mock
-from pathlib import Path
 
 from sologit.orchestration.code_generator import (
     CodeGenerator, GeneratedPatch

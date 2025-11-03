@@ -11,9 +11,8 @@ from io import BytesIO
 from datetime import datetime, timedelta
 
 from sologit.engines.git_engine import (
-    GitEngine, 
-    RepositoryNotFoundError, 
-    WorkpadNotFoundError,
+    GitEngine,
+    RepositoryNotFoundError,
     GitEngineError
 )
 

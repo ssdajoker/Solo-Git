@@ -18,7 +18,7 @@ from zipfile import ZipFile
 from git import Repo, GitCommandError
 
 from sologit.core.repository import Repository
-from sologit.core.workpad import Workpad, Checkpoint, Snapshot, SnapshotNotFoundError
+from sologit.core.workpad import Workpad, Snapshot, SnapshotNotFoundError
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -398,6 +398,72 @@ class GitEngine:
         except GitCommandError as e:
             logger.error(f"Failed to apply patch: {e}")
             raise GitEngineError(f"Failed to apply patch: {e}")
+
+    def checkpoint_workpad(self, pad_id: str, message: str) -> str:
+        """
+        Create a checkpoint for the current workpad state.
+
+        Args:
+            pad_id: Workpad ID
+            message: Commit message
+
+        Returns:
+            Checkpoint ID
+
+        Raises:
+            GitEngineError: If commit message is empty or no changes to checkpoint, or if Git command fails.
+            WorkpadNotFoundError: If the workpad does not exist.
+            RepositoryNotFoundError: If the repository does not exist.
+        """
+        self._validate_pad_id(pad_id)
+        if not message or not message.strip():
+            raise GitEngineError("Commit message cannot be empty")
+
+        workpad = self.workpad_db.get(pad_id)
+        if workpad is None:
+            raise WorkpadNotFoundError(f"Workpad {pad_id} not found")
+
+        repository = self.repo_db.get(workpad.repo_id)
+        if repository is None:
+            raise RepositoryNotFoundError(f"Repository {workpad.repo_id} not found")
+
+        repo = Repo(repository.path)
+
+        try:
+            branch = getattr(repo.heads, workpad.branch_name)
+            branch.checkout()
+
+            if not repo.is_dirty(untracked_files=True):
+                raise GitEngineError("No changes to checkpoint")
+
+            # Stage only tracked files to avoid unintended additions
+            tracked_files = repo.git.ls_files().splitlines()
+            if tracked_files:
+                repo.index.add(tracked_files)
+            checkpoint_num = len(workpad.checkpoints) + 1
+            commit = repo.index.commit(message.strip())
+
+            checkpoint_id = f"t{checkpoint_num}"
+            tag_name = f"{workpad.branch_name}@{checkpoint_id}"
+            repo.create_tag(tag_name)
+
+            workpad.checkpoints.append(checkpoint_id)
+            workpad.last_activity = datetime.now()
+            workpad.last_commit = commit.hexsha
+            repository.last_activity = datetime.now()
+            self._save_metadata()
+
+            logger.info(
+                "Checkpoint %s created for workpad %s with commit %s",
+                checkpoint_id,
+                pad_id,
+                commit.hexsha,
+            )
+
+            return checkpoint_id
+        except GitCommandError as exc:
+            logger.error("Failed to create checkpoint: %s", exc)
+            raise GitEngineError(f"Failed to create checkpoint: {exc}") from exc
 
     def delete_repository(self, repo_id: str, remove_files: bool = False) -> None:
         """Delete a repository and associated metadata."""
@@ -1013,8 +1079,6 @@ class GitEngine:
             )
 
             files_changed = []
-            total_insertions = 0
-            total_deletions = 0
 
             for diff_item in diff_index:
                 stats = {
@@ -1265,9 +1329,6 @@ class GitEngine:
         try:
             repo = Repo(repository.path)
             
-            trunk_commit = getattr(repo.heads, repository.trunk_branch).commit
-            pad_commit = getattr(repo.heads, workpad.branch_name).commit
-            
             # Commits in workpad but not in trunk (ahead)
             ahead = list(repo.iter_commits(
                 f"{repository.trunk_branch}..{workpad.branch_name}"
@@ -1513,8 +1574,6 @@ class GitEngine:
             )
             
             files_changed = []
-            total_additions = 0
-            total_deletions = 0
             
             for diff_item in diff_index:
                 # Count changes if possible

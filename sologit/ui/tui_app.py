@@ -7,16 +7,10 @@ Provides a full-screen, keyboard-driven interface for Solo Git operations.
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Static, Tree, Log, Button, Input, Label
+from textual.widgets import Header, Footer, Static, Log, Input
 from textual.binding import Binding
-from textual.reactive import reactive
-from textual import work
-from datetime import datetime
-from pathlib import Path
-import asyncio
 
 from sologit.state.manager import StateManager
-from sologit.ui.theme import theme
 
 
 class CommitGraphWidget(Static):
