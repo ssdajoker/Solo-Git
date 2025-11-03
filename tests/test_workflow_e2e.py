@@ -13,9 +13,7 @@ from zipfile import ZipFile
 from io import BytesIO
 
 from sologit.engines.git_engine import (
-    GitEngine, 
-    RepositoryNotFoundError, 
-    WorkpadNotFoundError,
+    GitEngine,
     CannotPromoteError
 )
 from sologit.engines.patch_engine import PatchEngine
@@ -250,8 +248,8 @@ def test_revert_last_commit(engines, sample_project_zip):
      return f"Hello, {name}!"
 """
     patch_engine.apply_patch(pad_id, patch, "Add comment")
-    commit_hash = git_engine.promote_workpad(pad_id)
-    
+    git_engine.promote_workpad(pad_id)
+
     # Verify the change is in trunk
     repo = git_engine.get_repo(repo_id)
     hello_file = repo.path / "hello.py"

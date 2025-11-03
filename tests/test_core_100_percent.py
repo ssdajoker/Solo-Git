@@ -2,11 +2,10 @@
 Tests to achieve 100% coverage for core classes (Repository and Workpad).
 """
 
-import pytest
 from datetime import datetime
 from pathlib import Path
 from sologit.core.repository import Repository
-from sologit.core.workpad import Workpad, Checkpoint
+from sologit.core.workpad import Checkpoint
 
 
 class TestRepositoryComplete:

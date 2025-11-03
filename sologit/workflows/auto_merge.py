@@ -221,7 +221,7 @@ class AutoMergeWorkflow:
                 commit_hash = self.git_engine.promote_workpad(pad_id)
                 result.commit_hash = commit_hash
                 result.success = True
-                result.message = f"Successfully promoted to trunk"
+                result.message = "Successfully promoted to trunk"
                 result.details.append(f"✅ Promoted to trunk: {commit_hash[:8]}")
 
                 logger.info(f"Auto-merge successful: {commit_hash}")

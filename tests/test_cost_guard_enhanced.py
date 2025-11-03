@@ -6,7 +6,6 @@ import pytest
 import tempfile
 from pathlib import Path
 from datetime import date, datetime, timedelta
-import json
 
 from sologit.orchestration.cost_guard import (
     CostGuard, CostTracker, BudgetConfig, TokenUsage, DailyUsage

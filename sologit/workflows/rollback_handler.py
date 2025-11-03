@@ -94,11 +94,8 @@ class RollbackHandler:
         
         if recreate_workpad:
             logger.info("Recreating workpad for fixes")
-            
+
             try:
-                # Get the diff from the reverted commit
-                repo = self.git_engine.get_repo(repo_id)
-                
                 # Create new workpad with "fix" prefix
                 pad_title = f"fix-ci-{commit_hash[:7]}"
                 new_pad = self.git_engine.create_workpad(repo_id, pad_title)

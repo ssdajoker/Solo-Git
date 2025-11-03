@@ -75,8 +75,8 @@ def test_list_workpads_filtered(git_engine, test_repo):
     """Test filtered workpad listing."""
     # Create workpads
     pad1 = git_engine.create_workpad(test_repo, "AAA Feature")
-    pad2 = git_engine.create_workpad(test_repo, "BBB Feature")
-    pad3 = git_engine.create_workpad(test_repo, "CCC Feature")
+    git_engine.create_workpad(test_repo, "BBB Feature")
+    git_engine.create_workpad(test_repo, "CCC Feature")
     
     # Promote one workpad
     git_engine.promote_workpad(pad1)
@@ -239,8 +239,6 @@ def test_cleanup_workpads_with_filters(git_engine, test_repo):
 
 def test_switch_workpad_updates_activity(git_engine, test_repo):
     """Test that switching workpad updates last_activity."""
-    from datetime import datetime
-    
     pad = git_engine.create_workpad(test_repo, "Test")
     workpad_before = git_engine.get_workpad(pad)
     original_activity = workpad_before.last_activity

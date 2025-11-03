@@ -3,12 +3,12 @@ Additional tests for Planning Engine to improve coverage to 90%+.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 from sologit.orchestration.planning_engine import (
     PlanningEngine, CodePlan, FileChange
 )
-from sologit.api.client import AbacusClient, ChatResponse
+from sologit.api.client import AbacusClient
 
 
 @pytest.fixture

@@ -13,9 +13,8 @@ from typing import Optional, Dict, Any, List
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Static, Label, Input
+from textual.widgets import Header, Footer, Static, Input
 from textual.screen import Screen, ModalScreen
-from textual import events
 
 from sologit.ui.command_palette import show_command_palette, Command, get_command_registry
 from sologit.ui.file_tree import FileTreeWidget
@@ -105,7 +104,7 @@ class CommitGraphPanel(Static):
             
             # Graph line
             if i < len(self.commits) - 1:
-                lines.append(f"  │")
+                lines.append("  │")
             
             # Commit node
             lines.append(f"  ● [yellow]{sha_short}[/] {message}")

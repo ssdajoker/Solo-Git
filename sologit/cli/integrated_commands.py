@@ -13,7 +13,7 @@ import json
 
 from sologit.state.git_sync import GitStateSync
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
-from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
+from sologit.engines.test_orchestrator import TestOrchestrator
 from sologit.config.manager import ConfigManager
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
@@ -489,9 +489,6 @@ def ai_commit_message(ctx, workpad_id: Optional[str]):
         if not diff:
             abort_with_error("No changes to commit")
 
-        # Use AI to generate message
-        orchestrator = get_ai_orchestrator(config_manager)
-
         prompt = f"Generate a concise commit message for these changes:\n\n{diff[:2000]}"
         
         # Track AI operation
@@ -568,8 +565,8 @@ def ai_review(ctx, workpad_id: Optional[str]):
         
         # For Phase 4, provide basic review
         lines = diff.split('\n')
-        additions = len([l for l in lines if l.startswith('+')])
-        deletions = len([l for l in lines if l.startswith('-')])
+        additions = len([line for line in lines if line.startswith('+')])
+        deletions = len([line for line in lines if line.startswith('-')])
         
         review = {
             'approved': True,
@@ -895,7 +892,7 @@ def ai_refactor(ctx, file_path: str, workpad_id: Optional[str], instruction: Opt
             current_code = f.read()
         
         # Create prompt
-        prompt = f"Refactor this code"
+        prompt = "Refactor this code"
         if instruction:
             prompt += f": {instruction}"
         prompt += f"\n\n```\n{current_code[:3000]}\n```"

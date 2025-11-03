@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 from zipfile import ZipFile
 from io import BytesIO
-from datetime import datetime, timedelta
 
 from sologit.engines.git_engine import GitEngine
 
@@ -204,7 +203,7 @@ def test_multiple_workpad_operations(git_engine, sample_zip):
     assert repo.workpad_count == 2
     
     # Create another
-    pad4 = git_engine.create_workpad(repo_id, "Feature 4")
+    git_engine.create_workpad(repo_id, "Feature 4")
     repo = git_engine.get_repo(repo_id)
     assert repo.workpad_count == 3
     

@@ -4,7 +4,7 @@ Enhanced tests for promotion gate to achieve >90% coverage.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from sologit.workflows.promotion_gate import (
     PromotionGate, 
     PromotionRules, 

@@ -5,7 +5,7 @@ Tests for Model Router.
 
 import pytest
 from sologit.orchestration.model_router import (
-    ModelRouter, ModelTier, ModelConfig, ComplexityMetrics
+    ModelRouter, ModelTier
 )
 
 

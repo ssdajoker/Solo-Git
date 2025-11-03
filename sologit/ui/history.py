@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Callable
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 
 from sologit.utils.logger import get_logger

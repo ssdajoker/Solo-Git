@@ -3,9 +3,19 @@ import pytest
 from click.testing import CliRunner
 from unittest.mock import MagicMock, patch
 from sologit.cli.main import cli as sologit_cli
-from sologit.config.manager import ConfigManager
 from pathlib import Path
-from sologit.config.manager import ConfigManager, SoloGitConfig, AbacusAPIConfig, ModelConfig, BudgetConfig, TestConfig, CISmokeConfig, DeploymentCredentials, TierModelConfig, ModelVariantConfig
+from sologit.config.manager import (
+    ConfigManager,
+    SoloGitConfig,
+    AbacusAPIConfig,
+    ModelConfig,
+    BudgetConfig,
+    TestConfig,
+    CISmokeConfig,
+    DeploymentCredentials,
+    TierModelConfig,
+    ModelVariantConfig,
+)
 
 @pytest.fixture
 def mock_config_manager():

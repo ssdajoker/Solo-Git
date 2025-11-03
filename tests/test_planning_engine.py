@@ -4,12 +4,12 @@ Tests for Planning Engine.
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from sologit.orchestration.planning_engine import (
     PlanningEngine, CodePlan, FileChange
 )
-from sologit.api.client import AbacusClient, ChatResponse
+from sologit.api.client import AbacusClient
 
 
 @pytest.fixture

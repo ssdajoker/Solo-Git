@@ -1,0 +1,181 @@
+runs-on: ubuntu-latest
+needs: [python-tests]
+steps:
+- uses: actions/checkout@v3
+- uses: actions/setup-python@v4
+with:
+python-version: '3.11'
+- run: pip install -e .
+- name: Run E2E tests
+run: pytest tests/test_workflows.py -v
+Acceptance Criteria:
+- ✅ Tests run on Ubuntu, macOS, Windows
+- ✅ Tests run on Python 3.9, 3.10, 3.11
+- ✅ Type checking (mypy)
+- ✅ Linting (ruff, black)
+- ✅ Security scanning (bandit, safety)
+- ✅ GUI builds on all platforms
+- ✅ Integration tests pass
+Timeline: 1 day
+2.2.2 Release Automation
+File: .github/workflows/release.yml (NEW)
+46
+47
+name: Release
+on:
+push:
+tags:
+- 'v*.*.*'
+jobs:
+# Job 1: Create GitHub Release
+create-release:
+name: Create Release
+runs-on: ubuntu-latest
+outputs:
+upload_url: ${{ steps.create_release.outputs.upload_url }}
+steps:
+- name: Create Release
+id: create_release
+uses: actions/create-release@v1
+env:
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+with:
+tag_name: ${{ github.ref }}
+release_name: Solo-Git ${{ github.ref }}
+draft: false
+prerelease: false
+# Job 2: Build and Upload macOS
+build-macos:
+name: Build macOS
+runs-on: macos-latest
+needs: create-release
+steps:
+- uses: actions/checkout@v3
+- uses: actions/setup-node@v3
+with:
+node-version: '20'
+- uses: actions-rs/toolchain@v1
+with:
+toolchain: stable
+- name: Install dependencies
+working-directory: heaven-gui
+run: npm ci
+- name: Build
+working-directory: heaven-gui
+run: npm run tauri build
+- name: Sign app (if certificates available)
+if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+run: |
+# Code signing steps (see Phase 3)
+echo "Code signing not yet configured"
+- name: Notarize app (if certificates available)
+if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+run: |
+# Notarization steps (see Phase 3)
+echo "Notarization not yet configured"
+- name: Upload .dmg
+uses: actions/upload-release-asset@v1
+48
+env:
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+with:
+upload_url: ${{ needs.create-release.outputs.upload_url }}
+asset_path: ./heaven-gui/src-tauri/target/release/bundle/dmg/Heaven_*.dmg
+asset_name: Heaven-macOS.dmg
+asset_content_type: application/octet-stream
+# Job 3: Build and Upload Windows
+build-windows:
+name: Build Windows
+runs-on: windows-latest
+needs: create-release
+steps:
+- uses: actions/checkout@v3
+- uses: actions/setup-node@v3
+with:
+node-version: '20'
+- uses: actions-rs/toolchain@v1
+with:
+toolchain: stable
+- name: Install dependencies
+working-directory: heaven-gui
+run: npm ci
+- name: Build
+working-directory: heaven-gui
+run: npm run tauri build
+- name: Sign .msi (if certificate available)
+if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+run: |
+# Code signing steps (see Phase 3)
+echo "Code signing not yet configured"
+- name: Upload .msi
+uses: actions/upload-release-asset@v1
+env:
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+with:
+upload_url: ${{ needs.create-release.outputs.upload_url }}
+asset_path: ./heaven-gui/src-tauri/target/release/bundle/msi/Heaven_*.msi
+asset_name: Heaven-Windows.msi
+asset_content_type: application/octet-stream
+# Job 4: Build and Upload Linux
+build-linux:
+name: Build Linux
+runs-on: ubuntu-latest
+needs: create-release
+steps:
+- uses: actions/checkout@v3
+- uses: actions/setup-node@v3
+with:
+node-version: '20'
+- uses: actions-rs/toolchain@v1
+with:
+toolchain: stable
+- name: Install dependencies
+run: |
+sudo apt-get update
+49
+sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-
+dev librsvg2-dev patchelf
+- name: Install npm dependencies
+working-directory: heaven-gui
+run: npm ci
+- name: Build
+working-directory: heaven-gui
+run: npm run tauri build
+- name: Upload .deb
+uses: actions/upload-release-asset@v1
+env:
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+with:
+upload_url: ${{ needs.create-release.outputs.upload_url }}
+asset_path: ./heaven-gui/src-tauri/target/release/bundle/deb/heaven_*.deb
+asset_name: Heaven-Linux.deb
+asset_content_type: application/octet-stream
+- name: Upload .AppImage
+uses: actions/upload-release-asset@v1
+env:
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+with:
+upload_url: ${{ needs.create-release.outputs.upload_url }}
+asset_path: ./heaven-gui/src-tauri/target/release/bundle/appimage/heav‐
+en_*.AppImage
+asset_name: Heaven-Linux.AppImage
+asset_content_type: application/octet-stream
+# Job 5: Publish to PyPI
+publish-pypi:
+name: Publish to PyPI
+runs-on: ubuntu-latest
+needs: create-release
+steps:
+- uses: actions/checkout@v3
+- uses: actions/setup-python@v4
+with:
+python-version: '3.11'
+- run: pip install build twine
+- run: python -m build
+- run: twine upload dist/* --username __token__ --password $
+{{ secrets.PYPI_TOKEN }}
+Acceptance Criteria:
+- ✅ Release triggered on version tags ( v1.0.0 )
+- ✅ Builds for macOS, Windows, Linux
+- ✅ Uploads artifacts to GitHub Release
+- ✅ Publishes Python package to PyPI
