@@ -88,7 +88,7 @@ jobs:
         with:
           node-version: '20'
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
       - name: Install dependencies (Ubuntu)
