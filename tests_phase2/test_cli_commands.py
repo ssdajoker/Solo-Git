@@ -1,9 +1,9 @@
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+import io
 
 import click
-import io
 from click.testing import CliRunner
 from rich.console import Console
 
