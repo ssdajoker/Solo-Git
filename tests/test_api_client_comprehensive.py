@@ -1,7 +1,6 @@
 """Comprehensive tests for the Abacus.ai API client error handling - 100% coverage target."""
-import json
 import pytest
-from unittest.mock import MagicMock, patch, Mock
+from unittest.mock import MagicMock, patch
 from sologit.api.client import (
     AbacusClient, 
     AbacusAPIError, 
@@ -759,8 +758,10 @@ def test_chat_with_custom_parameters(client):
     }
     
     captured_payload = {}
-    def capture_post(url, json=None, **kwargs):
-        captured_payload.update(json)
+
+    def capture_post(url, payload=None, **kwargs):
+        if payload is not None:
+            captured_payload.update(payload)
         return mock_response
     
     with patch.object(client.session, 'post', side_effect=capture_post):
@@ -787,8 +788,10 @@ def test_chat_with_kwargs(client):
     }
     
     captured_payload = {}
-    def capture_post(url, json=None, **kwargs):
-        captured_payload.update(json)
+
+    def capture_post(url, payload=None, **kwargs):
+        if payload is not None:
+            captured_payload.update(payload)
         return mock_response
     
     with patch.object(client.session, 'post', side_effect=capture_post):

@@ -380,17 +380,19 @@ def test_complexity_score_components():
     # Test medium size (50-100 lines)
     prompt_medium = " ".join(["add"] * 30)  # Should estimate ~45-90 lines
     complexity_medium = router.analyze_complexity(prompt_medium, {})
-    
+
     # Test large size (100-200 lines)
     prompt_large = " ".join(["implement"] * 50)
     complexity_large = router.analyze_complexity(prompt_large, {})
-    
+
     # Test very large size (>200 lines)
     prompt_xlarge = "refactor " + " ".join(["complex"] * 100)
     complexity_xlarge = router.analyze_complexity(prompt_xlarge, {})
-    
+
     # Scores should generally increase with size
-    assert complexity_xlarge.score > 0
+    assert complexity_medium.score >= complexity_small.score
+    assert complexity_large.score >= complexity_medium.score
+    assert complexity_xlarge.score >= complexity_large.score
 
 
 def test_all_security_keywords():

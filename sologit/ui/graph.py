@@ -5,7 +5,7 @@ ASCII commit graph renderer for Heaven Interface CLI/TUI.
 Renders commit history as an ASCII art graph with test indicators.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from rich.console import Console
 from rich.text import Text
 from sologit.ui.theme import theme

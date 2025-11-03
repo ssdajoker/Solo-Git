@@ -18,7 +18,7 @@ from zipfile import ZipFile
 from git import Repo, GitCommandError
 
 from sologit.core.repository import Repository
-from sologit.core.workpad import Workpad, Checkpoint, Snapshot, SnapshotNotFoundError
+from sologit.core.workpad import Workpad, Snapshot, SnapshotNotFoundError
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -1013,8 +1013,6 @@ class GitEngine:
             )
 
             files_changed = []
-            total_insertions = 0
-            total_deletions = 0
 
             for diff_item in diff_index:
                 stats = {
@@ -1265,9 +1263,6 @@ class GitEngine:
         try:
             repo = Repo(repository.path)
             
-            trunk_commit = getattr(repo.heads, repository.trunk_branch).commit
-            pad_commit = getattr(repo.heads, workpad.branch_name).commit
-            
             # Commits in workpad but not in trunk (ahead)
             ahead = list(repo.iter_commits(
                 f"{repository.trunk_branch}..{workpad.branch_name}"
@@ -1513,8 +1508,6 @@ class GitEngine:
             )
             
             files_changed = []
-            total_additions = 0
-            total_deletions = 0
             
             for diff_item in diff_index:
                 # Count changes if possible

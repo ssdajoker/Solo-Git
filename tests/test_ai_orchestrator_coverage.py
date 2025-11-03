@@ -3,15 +3,14 @@ Additional tests for AI Orchestrator to improve coverage to 90%+.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import patch
 
 from sologit.orchestration.ai_orchestrator import (
-    AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse, TaskType
+    AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse
 )
 from sologit.orchestration.planning_engine import CodePlan, FileChange
 from sologit.orchestration.code_generator import GeneratedPatch
-from sologit.orchestration.model_router import ModelConfig, ModelTier
+from sologit.orchestration.model_router import ModelTier
 from sologit.config.manager import ConfigManager
 
 

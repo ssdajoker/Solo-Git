@@ -8,18 +8,16 @@ import asyncio
 import subprocess
 import re
 from pathlib import Path
-from typing import Optional, List, Dict, Callable
+from typing import Optional, List, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from textual.widgets import Static, ProgressBar, Label
-from textual.containers import Container, Vertical
+from textual.widgets import Static
+from textual.containers import Container
 from textual.reactive import reactive
 from textual import events, work
 from rich.text import Text
-from rich.console import Console
-from rich.syntax import Syntax
 
 from sologit.utils.logger import get_logger
 

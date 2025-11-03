@@ -6,11 +6,14 @@ Generates code patches from implementation plans.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from pathlib import Path
 
 from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
-from sologit.orchestration.planning_engine import CodePlan, FileChange
+
+if TYPE_CHECKING:
+    from sologit.api.client import ChatResponse
+from sologit.orchestration.planning_engine import CodePlan
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -124,7 +127,6 @@ Only output the patch itself, no explanatory text outside the diff."""
                 context_parts.append(f"\nPlan:\n{plan}")
         else:
             # Legacy API: first parameter is actually a CodePlan object
-            from sologit.orchestration.planning_engine import CodePlan
             plan_obj = task_description  # It's actually a CodePlan
             logger.info("Generating patch for: %s", plan_obj.title)
             context_parts = [
@@ -330,7 +332,7 @@ Only output the patch itself, no explanatory text outside the diff."""
                     '',
                 ]
                 
-                patch = f"--- /dev/null\n"
+                patch = "--- /dev/null\n"
                 patch += f"+++ b/{fc.path}\n"
                 patch += f"@@ -0,0 +1,{len(content_lines)} @@\n"
                 patch += '\n'.join(f'+{line}' for line in content_lines)
@@ -362,7 +364,7 @@ Only output the patch itself, no explanatory text outside the diff."""
     def _create_fallback_patch(self, plan: CodePlan) -> GeneratedPatch:
         """Create a minimal fallback patch when generation fails."""
         # Create a simple TODO patch
-        diff = f"--- a/TODO.md\n"
+        diff = "--- a/TODO.md\n"
         diff += "+++ b/TODO.md\n"
         diff += "@@ -1,1 +1,3 @@\n"
         diff += f"+# TODO: {plan.title}\n"
@@ -400,21 +402,6 @@ Only output the patch itself, no explanatory text outside the diff."""
             Refined patch
         """
         logger.info("Refining patch based on feedback")
-        
-        context = f"""Original patch:
-```diff
-{original_patch.diff}
-```
-
-Feedback/Errors:
-{feedback}
-
-Please generate an improved patch that addresses this feedback."""
-        
-        messages = [
-            ChatMessage(role="system", content=self.CODING_SYSTEM_PROMPT),
-            ChatMessage(role="user", content=context)
-        ]
         
         # For Phase 2, return the original patch (no refinement yet)
         logger.warning("Patch refinement not fully implemented in Phase 2")

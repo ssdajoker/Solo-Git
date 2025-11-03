@@ -1,6 +1,5 @@
 """Tests for commit message generator."""
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
 
 from sologit.orchestration.commit_message_generator import (
     CommitMessageGenerator,

@@ -19,7 +19,6 @@ from rich.progress import (
 )
 from rich.syntax import Syntax
 from rich.tree import Tree
-from rich.live import Live
 from rich import box
 from datetime import datetime
 
@@ -304,7 +303,7 @@ class ProgressContext:
         try:
             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except:
+        except Exception:
             return timestamp
     
     def format_duration(self, ms: int) -> str:

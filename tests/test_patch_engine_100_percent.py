@@ -12,7 +12,6 @@ from sologit.engines.patch_engine import (
     PatchEngine,
     PatchEngineError,
     GitEngineError,
-    PatchConflictError,
 )
 
 
@@ -91,8 +90,6 @@ index 0000000..1111111 100644
         
         repo_id = git_engine.init_from_zip(repo_data, "test-repo")
         pad_id = git_engine.create_workpad(repo_id, "test-pad")
-        workpad = git_engine.get_workpad(pad_id)
-        repository = git_engine.get_repo(repo_id)
         
         # Mock write_text to raise permission error
         from pathlib import Path
@@ -224,7 +221,7 @@ index 0000000..1111111 100644
 """
         
         result = patch_engine.validate_patch_syntax(patch)
-        assert result['valid'] == True
+        assert result['valid']
         assert len(result['warnings']) > 0
         assert "No hunks found in patch" in result['warnings']
 
@@ -336,7 +333,7 @@ index 0000000..1111111 100644
         
         result = patch_engine.apply_patch_interactive(pad_id, patch, dry_run=False)
         
-        assert result['applied'] == False
+        assert not result['applied']
         assert result['reason'] == 'application_failed'
         assert 'error' in result
         assert 'Unexpected error' in result['error']
@@ -380,12 +377,12 @@ index 0000000..1111111 100644
         
         # Test preview with recommendations
         preview = patch_engine.preview_patch(pad_id, simple_patch)
-        assert preview['can_apply'] == True
+        assert preview['can_apply']
         assert 'recommendation' in preview
         
         # Test interactive application
         result = patch_engine.apply_patch_interactive(
             pad_id, simple_patch, message="test commit", dry_run=False
         )
-        assert result['applied'] == True
+        assert result['applied']
         assert 'checkpoint_id' in result

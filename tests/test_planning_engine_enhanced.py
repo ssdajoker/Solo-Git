@@ -4,7 +4,7 @@ Enhanced tests for Planning Engine to achieve >95% coverage.
 
 import pytest
 import json
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from sologit.orchestration.planning_engine import (
     PlanningEngine, CodePlan, FileChange

@@ -8,14 +8,11 @@ import pytest
 import tempfile
 import zipfile
 from pathlib import Path
-from datetime import datetime, timedelta
 from git import Repo
 from git.exc import GitCommandError
 from sologit.engines.git_engine import (
     GitEngine,
     GitEngineError,
-    RepositoryNotFoundError,
-    WorkpadNotFoundError,
     CannotPromoteError,
 )
 
@@ -174,8 +171,7 @@ index 0000000..ce01362
         
         # Mock iter_commits to raise an exception
         from git import Repo as GitRepo
-        original_iter_commits = GitRepo.iter_commits
-        
+
         def mock_iter_commits(self, *args, **kwargs):
             raise Exception("Failed to get commits")
         
@@ -192,9 +188,7 @@ index 0000000..ce01362
         repo_id = git_engine.init_from_zip(simple_repo_zip, "test-repo")
         
         # Mock index.diff to raise an exception
-        from git import Repo as GitRepo
         from git.index import IndexFile
-        original_diff = IndexFile.diff
         
         def mock_diff(self, *args, **kwargs):
             raise Exception("Diff failed")
@@ -248,7 +242,6 @@ index 0000000..ce01362
         
         # Mock delete_head to raise an exception
         from git import Repo as GitRepo
-        original_delete_head = GitRepo.delete_head
         
         def mock_delete_head(self, *args, **kwargs):
             raise Exception("Delete failed")
@@ -267,9 +260,7 @@ index 0000000..ce01362
         pad_id = git_engine.create_workpad(repo_id, "test-pad")
         
         # Mock commit.diff to raise an exception
-        from git import Repo as GitRepo
         from git.objects import Commit
-        original_diff = Commit.diff
         
         def mock_diff(self, *args, **kwargs):
             raise Exception("Diff failed")
@@ -325,7 +316,6 @@ index 0000000..ce01362
         
         # Mock index.commit to raise an exception
         from git.index import IndexFile
-        original_commit = IndexFile.commit
         
         def mock_commit(self, *args, **kwargs):
             raise Exception("Commit failed")
@@ -345,7 +335,6 @@ index 0000000..ce01362
         
         # Mock iter_commits to raise an exception
         from git import Repo as GitRepo
-        original_iter_commits = GitRepo.iter_commits
         
         def mock_iter_commits(self, *args, **kwargs):
             raise Exception("Failed to get commits")
@@ -364,7 +353,6 @@ index 0000000..ce01362
         
         # Mock commit.tree.traverse to raise an exception
         from git.objects import Tree
-        original_traverse = Tree.traverse
         
         def mock_traverse(self, *args, **kwargs):
             raise Exception("Failed to traverse tree")
@@ -384,7 +372,6 @@ index 0000000..ce01362
         
         # Mock checkout to raise an exception
         from git.refs import Head
-        original_checkout = Head.checkout
         
         def mock_checkout(self, *args, **kwargs):
             raise Exception("Checkout failed")
@@ -418,7 +405,6 @@ index 0000000..ce01362
         
         # Mock commit.diff to raise an exception
         from git.objects import Commit
-        original_diff = Commit.diff
         
         def mock_diff(self, *args, **kwargs):
             raise Exception("Diff failed")
@@ -491,7 +477,7 @@ index 0000000..ce01362
         
         # Now can_promote should return False
         can_promote = git_engine.can_promote(pad_id)
-        assert can_promote == False
+        assert not can_promote
 
     def test_can_promote_error_returns_false(self, temp_dir, simple_repo_zip, monkeypatch):
         """Test can_promote returns False on error."""
@@ -501,7 +487,6 @@ index 0000000..ce01362
         
         # Mock merge_base to raise an exception
         from git import Repo as GitRepo
-        original_merge_base = GitRepo.merge_base
         
         def mock_merge_base(self, *args, **kwargs):
             raise Exception("merge_base failed")
@@ -510,4 +495,4 @@ index 0000000..ce01362
         
         # Should return False on error
         can_promote = git_engine.can_promote(pad_id)
-        assert can_promote == False
+        assert not can_promote

@@ -358,7 +358,7 @@ if commands:
     cli.add_command(ci)
 
 # AI-assisted commit message generation (v1.0)
-from sologit.cli.commands import generate_commit_message, show_telemetry
+from sologit.cli.commands import generate_commit_message, show_telemetry  # noqa: E402
 cli.add_command(generate_commit_message)
 cli.add_command(show_telemetry)
 
@@ -460,7 +460,7 @@ def heaven_legacy():
     try:
         from sologit.ui.enhanced_tui import run_enhanced_tui
         run_enhanced_tui()
-    except ImportError as e:
+    except ImportError:
         abort_with_error(
             "Enhanced TUI dependencies not installed",
             "Install with: pip install textual"
@@ -610,7 +610,7 @@ try:
             workpad as integrated_workpad,
             ai as integrated_ai,
             history as integrated_history,
-            edit as integrated_edit
+            edit as integrated_edit,
         )
 
         # Register with distinct names to avoid clashing with core commands

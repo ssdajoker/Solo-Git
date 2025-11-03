@@ -1,4 +1,3 @@
-import json
 from typing import Any, Dict, List
 
 import pytest
@@ -40,14 +39,14 @@ def test_chat_uses_registered_credentials_and_parses_usage(monkeypatch, abacus_c
     abacus_client.register_deployment('planning', 'dep-123', 'token-abc')
     captured: Dict[str, Any] = {}
 
-    def fake_post(url, json=None, stream=False, timeout=60):
-        captured['json'] = json
+    def fake_post(url, payload=None, stream=False, timeout=60):
+        captured['json'] = payload
         captured['stream'] = stream
         payload = {
             'success': True,
             'model': 'abacus-planner',
             'response': {
-                'content': json['messages'][0]['text'],
+                'content': payload['messages'][0]['text'],
                 'usage': {
                     'promptTokens': 12,
                     'completionTokens': 30,
@@ -71,14 +70,14 @@ def test_chat_uses_registered_credentials_and_parses_usage(monkeypatch, abacus_c
 
 
 def test_chat_raises_abacus_error(monkeypatch, abacus_client):
-    def fake_post(url, json=None, stream=False, timeout=60):
+    def fake_post(url, payload=None, stream=False, timeout=60):
         payload = {'error': {'message': 'Invalid token', 'code': 'bad_token'}}
         return FakeResponse(401, payload)
 
     monkeypatch.setattr(abacus_client.session, 'post', fake_post)
 
     messages = [ChatMessage(role='user', content='hello')]
-    with pytest.raises(AbacusAPIError) as exc:
+    with pytest.raises(AbacusAPIError):
         abacus_client.chat(
             messages=messages,
             model='gpt-4o',
@@ -91,7 +90,7 @@ def test_chat_rate_limit_retries_and_succeeds(monkeypatch, abacus_client):
     """Verify that a 429 rate limit error triggers a retry."""
     call_count = 0
 
-    def fake_post_rate_limit(url, json=None, stream=False, timeout=60):
+    def fake_post_rate_limit(url, payload=None, stream=False, timeout=60):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -126,7 +125,7 @@ def test_chat_auth_error_does_not_retry(monkeypatch, abacus_client):
     """Verify that a 401 auth error is not retried."""
     call_count = 0
 
-    def fake_post_auth_error(url, json=None, stream=False, timeout=60):
+    def fake_post_auth_error(url, payload=None, stream=False, timeout=60):
         nonlocal call_count
         call_count += 1
         return FakeResponse(401, text="Unauthorized")
@@ -149,7 +148,7 @@ def test_chat_network_error_raises_abacus_error(monkeypatch, abacus_client):
     """Verify that a network error raises AbacusAPIError."""
     import requests
 
-    def fake_post_network_error(url, json=None, stream=False, timeout=60):
+    def fake_post_network_error(url, payload=None, stream=False, timeout=60):
         raise requests.exceptions.ConnectionError("Network is unreachable")
 
     monkeypatch.setattr(abacus_client.session, 'post', fake_post_network_error)
@@ -169,7 +168,7 @@ def test_retry_logic_with_exponential_backoff(monkeypatch, abacus_client):
     call_count = 0
     retry_delays = []
 
-    def fake_post_503(url, json=None, stream=False, timeout=60):
+    def fake_post_503(url, payload=None, stream=False, timeout=60):
         nonlocal call_count
         call_count += 1
         return FakeResponse(503, text="Service Unavailable")
@@ -209,7 +208,7 @@ def test_stream_chat_yields_chunks_and_returns_response(monkeypatch, abacus_clie
         def __init__(self):
             super().__init__(200, stream_events)
 
-    def fake_post(url, json=None, stream=False, timeout=60):
+    def fake_post(url, payload=None, stream=False, timeout=60):
         assert stream is True
         return StreamResponse()
 
@@ -239,7 +238,7 @@ def test_chat_timeout_raises_abacus_error(monkeypatch, abacus_client):
     """Verify that a client-side timeout raises AbacusAPIError."""
     import requests
 
-    def fake_post_timeout(url, json=None, stream=False, timeout=60):
+    def fake_post_timeout(url, payload=None, stream=False, timeout=60):
         raise requests.exceptions.Timeout("Connection timed out")
 
     monkeypatch.setattr(abacus_client.session, 'post', fake_post_timeout)

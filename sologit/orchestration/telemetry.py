@@ -3,7 +3,6 @@ Telemetry for AI provider usage.
 Tracks: provider usage, latency, costs, fallback rate.
 """
 from dataclasses import dataclass
-from typing import List
 from datetime import datetime
 import json
 from pathlib import Path

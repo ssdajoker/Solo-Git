@@ -6,10 +6,12 @@ Analyzes prompts and generates detailed implementation plans.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any
-from pathlib import Path
+from typing import TYPE_CHECKING, List, Dict, Optional, Any
 
 from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
+
+if TYPE_CHECKING:
+    from sologit.api.client import ChatResponse
 from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -273,7 +275,7 @@ Be specific, practical, and consider the existing codebase structure."""
             if json_match:
                 try:
                     return json.loads(json_match.group(0))
-                except:
+                except json.JSONDecodeError:
                     pass
             
             # Return minimal structure

@@ -9,13 +9,10 @@ Full-screen, keyboard-driven interface with:
 """
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
-from textual.widgets import Header, Footer, Static, Log, Button, Label, DataTable
+from textual.widgets import Header, Footer, Static, Log
 from textual.binding import Binding
 from textual.reactive import reactive
 from textual import work
-from datetime import datetime
-from pathlib import Path
 import asyncio
 from typing import Optional
 
@@ -45,7 +42,7 @@ class TestOutputWidget(Log):
     def finish_test(self, status: str, exit_code: int) -> None:
         """Mark test as finished."""
         if status == 'passed':
-            self.write_line(f"\n[bold green]✅ Tests PASSED[/bold green]")
+            self.write_line("\n[bold green]✅ Tests PASSED[/bold green]")
         elif status == 'failed':
             self.write_line(f"\n[bold red]❌ Tests FAILED (exit code: {exit_code})[/bold red]")
         else:

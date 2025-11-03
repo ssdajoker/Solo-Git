@@ -9,7 +9,6 @@ security sensitivity, and budget constraints.
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
-import re
 
 from sologit.utils.logger import get_logger
 
@@ -436,9 +435,6 @@ class ModelRouter:
         Returns:
             Selected model tier
         """
-        # Get escalation rules
-        triggers = self.escalation_rules.get('triggers', [])
-        
         # Check explicit escalation triggers
         if complexity.security_sensitive:
             logger.debug("Security-sensitive task, escalating to PLANNING")

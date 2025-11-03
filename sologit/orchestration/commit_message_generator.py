@@ -2,13 +2,12 @@
 Commit message generator with Abacus-first routing.
 Uses policy engine for intelligent provider selection and fallback.
 """
-import asyncio
 from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime
 
-from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
-from sologit.orchestration.providers import ProviderResponse, ProviderType
+from sologit.orchestration.routing_policy import PolicyEngine
+from sologit.orchestration.providers import ProviderType
 from sologit.orchestration.telemetry import TelemetryCollector, TelemetryEvent
 from sologit.utils.logger import get_logger
 

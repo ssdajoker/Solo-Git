@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 from sologit.engines.git_engine import GitEngine
-from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig, TestStatus
+from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
 from sologit.workflows.auto_merge import AutoMergeWorkflow, AutoMergeResult
 from sologit.workflows.promotion_gate import PromotionRules
 from sologit.workflows.ci_orchestrator import CIOrchestrator, CIResult, CIStatus

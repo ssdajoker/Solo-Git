@@ -9,7 +9,7 @@ This test suite covers:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 from sologit.workflows.rollback_handler import (
     RollbackHandler, 

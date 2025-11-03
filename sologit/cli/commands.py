@@ -6,10 +6,8 @@ import click
 from pathlib import Path
 from typing import List, Optional
 import time
-from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, NoReturn, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Any, Dict, Sequence, Tuple, Union, cast
 
-import click
 from rich.console import Console
 
 from sologit.config.manager import ConfigManager
@@ -21,8 +19,6 @@ from sologit.workflows.rollback_handler import RollbackHandler
 from sologit.state.manager import StateManager
 from sologit.state.git_sync import GitStateSync
 from sologit.engines.test_orchestrator import (
-    TestConfig,
-    TestOrchestrator,
     TestResult,
     TestStatus,
 )
@@ -30,8 +26,6 @@ from sologit.state.schema import TestResult as StateTestResult
 from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
-from sologit.workflows.ci_orchestrator import CIOrchestrator
-from sologit.workflows.rollback_handler import RollbackHandler
 
 logger = get_logger(__name__)
 
@@ -1322,9 +1316,6 @@ def execute_pair_loop(
         target: Test target (fast/full)
     """
     from sologit.orchestration.ai_orchestrator import AIOrchestrator
-    from sologit.engines.patch_engine import PatchEngine
-    from sologit.workflows.auto_merge import AutoMergeWorkflow
-    from sologit.workflows.promotion_gate import PromotionRules
     
     import time
     
