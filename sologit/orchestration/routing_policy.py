@@ -11,10 +11,10 @@ from sologit.orchestration.providers import ProviderType, ProviderAdapter
 
 class RoutingStrategy(Enum):
     """Routing strategy types."""
-    ABACUS_FIRST = "abacus_first"  # Default: Abacus → OpenAI → Anthropic
-    COST_OPTIMIZED = "cost_optimized"  # Cheapest available
-    LATENCY_OPTIMIZED = "latency_optimized"  # Fastest available
-    USER_SPECIFIED = "user_specified"  # User picks provider
+    ABACUS_FIRST = "abacus_first"
+    COST_OPTIMIZED = "cost_optimized"
+    LATENCY_OPTIMIZED = "latency_optimized"
+    USER_SPECIFIED = "user_specified"
 
 
 @dataclass
@@ -58,7 +58,7 @@ class PolicyEngine:
         Returns:
             (primary_provider, fallback_providers)
         """
-        # User-specified strategy override
+        # USER_SPECIFIED strategy
         if self.policy.strategy == RoutingStrategy.USER_SPECIFIED:
             if self.policy.user_preference:
                 primary = self.adapters.get(self.policy.user_preference)
@@ -91,10 +91,7 @@ class PolicyEngine:
         """Determine if should fallback to next provider."""
         # Always fallback on network errors, auth errors, rate limits
         error_str = str(error).lower()
-        critical_errors = [
-            "api key", "unauthorized", "rate limit", "timeout",
-            "network", "connection", "401", "403", "429"
-        ]
+        critical_errors = ["api key", "unauthorized", "rate limit", "timeout", "network"]
         
         if any(err in error_str for err in critical_errors):
             return True

@@ -6,11 +6,9 @@ Uses policy engine for intelligent provider selection and fallback.
 import asyncio
 from typing import Optional
 from dataclasses import dataclass
+
 from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
 from sologit.orchestration.providers import ProviderResponse, ProviderType
-from sologit.utils.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 @dataclass
@@ -71,7 +69,7 @@ class CommitMessageGenerator:
         )
         
         # Try primary provider
-        logger.info(f"Generating commit message with {primary.provider_type.value}")
+        print(f"[CommitMessageGenerator] Using {primary.provider_type.value}")
         try:
             response = await primary.generate(
                 prompt=prompt,
@@ -88,15 +86,16 @@ class CommitMessageGenerator:
                 cost_usd=response.cost_usd,
                 fallback_used=False,
             )
+        
         except Exception as e:
-            logger.warning(f"Primary provider failed: {e}")
+            print(f"[CommitMessageGenerator] Primary provider failed: {e}")
             
             # Try fallbacks
             for i, fallback_adapter in enumerate(fallbacks):
                 if not fallback_adapter.is_available():
                     continue
                 
-                logger.info(f"Trying fallback #{i+1}: {fallback_adapter.provider_type.value}")
+                print(f"[CommitMessageGenerator] Trying fallback #{i+1}: {fallback_adapter.provider_type.value}")
                 try:
                     response = await fallback_adapter.generate(
                         prompt=prompt,
@@ -113,8 +112,9 @@ class CommitMessageGenerator:
                         cost_usd=response.cost_usd,
                         fallback_used=True,
                     )
+                
                 except Exception as fallback_error:
-                    logger.warning(f"Fallback #{i+1} failed: {fallback_error}")
+                    print(f"[CommitMessageGenerator] Fallback #{i+1} failed: {fallback_error}")
                     continue
             
             # All providers failed

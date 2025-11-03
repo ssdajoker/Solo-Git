@@ -1,12 +1,11 @@
 
 """
 Abacus.AI provider adapter - PRIMARY router for Solo-Git.
-Uses RouteLLM API for intelligent model routing.
 """
 import asyncio
 import time
 from typing import Optional
-from sologit.api.client import AbacusClient
+
 from sologit.orchestration.providers import (
     ProviderAdapter,
     ProviderConfig,
@@ -16,13 +15,13 @@ from sologit.orchestration.providers import (
 
 
 class AbacusAdapter(ProviderAdapter):
-    """Abacus.AI adapter with RouteLLM support."""
+    """Abacus.AI adapter with intelligent routing."""
     
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
-        self.client = AbacusClient(api_key=config.api_key)
-        self._last_health_check = 0
-        self._is_healthy = False
+        self.api_key = config.api_key
+        self._available = None
+        self._last_check = 0
     
     async def generate(
         self,
@@ -32,63 +31,82 @@ class AbacusAdapter(ProviderAdapter):
         temperature: float = 0.7,
         max_tokens: int = 500,
     ) -> ProviderResponse:
-        """
-        Generate using Abacus.AI RouteLLM.
-        RouteLLM automatically selects the best model based on:
-        - Complexity estimation
-        - Cost optimization
-        - User preferences
-        """
+        """Generate using Abacus.AI."""
         start_time = time.time()
         
         try:
+            # Import here to avoid dependency issues
+            import requests
+            
             # Construct messages
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            # Call RouteLLM (let Abacus.AI choose model if not specified)
-            response = await asyncio.to_thread(
-                self.client.chat_completion,
-                messages=messages,
-                model=model,  # Optional: specify model, else RouteLLM decides
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            # Call Abacus.AI API
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
             
+            payload = {
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            
+            if model:
+                payload["model"] = model
+            
+            response = await asyncio.to_thread(
+                requests.post,
+                "https://api.abacus.ai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self.config.timeout,
+            )
+            response.raise_for_status()
+            
+            data = response.json()
             latency_ms = (time.time() - start_time) * 1000
             
             return ProviderResponse(
-                content=response["content"],
+                content=data["choices"][0]["message"]["content"],
                 provider=ProviderType.ABACUS,
-                model=response.get("model", model or "routellm-auto"),
-                tokens_used=response.get("usage", {}).get("total_tokens", 0),
+                model=data.get("model", model or "abacus-auto"),
+                tokens_used=data.get("usage", {}).get("total_tokens", 0),
                 latency_ms=latency_ms,
-                cost_usd=response.get("cost_usd", 0.0),
+                cost_usd=data.get("cost_usd", 0.0),
             )
+        
         except Exception as e:
-            # Log error and re-raise for policy engine to handle
             print(f"[AbacusAdapter] Error: {e}")
             raise
     
     def is_available(self) -> bool:
-        """Check if Abacus.AI API is reachable (cached for 60s)."""
-        now = time.time()
-        if now - self._last_health_check < 60:
-            return self._is_healthy
+        """Check if Abacus.AI API is reachable."""
+        # Cache availability check for 60 seconds
+        current_time = time.time()
+        if self._available is not None and (current_time - self._last_check) < 60:
+            return self._available
         
         try:
-            # Quick health check
-            self.client.ping()
-            self._is_healthy = True
-            self._last_health_check = now
-            return True
+            import requests
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            response = requests.get(
+                "https://api.abacus.ai/v1/models",
+                headers=headers,
+                timeout=5,
+            )
+            self._available = response.status_code == 200
+            self._last_check = current_time
+            return self._available
         except:
-            self._is_healthy = False
-            self._last_health_check = now
+            self._available = False
+            self._last_check = current_time
             return False
     
     def get_default_model(self) -> str:
-        """Default: Let RouteLLM decide."""
-        return "routellm-auto"
+        """Default: Let Abacus.AI decide."""
+        return "abacus-auto"

@@ -4,12 +4,6 @@ import asyncio
 import time
 from typing import Optional
 
-try:
-    from anthropic import AsyncAnthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
 from sologit.orchestration.providers import (
     ProviderAdapter,
     ProviderConfig,
@@ -23,13 +17,7 @@ class AnthropicAdapter(ProviderAdapter):
     
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
-        if not ANTHROPIC_AVAILABLE:
-            raise ImportError("anthropic package not installed. Run: pip install anthropic>=0.8.0")
-        
-        self.client = AsyncAnthropic(
-            api_key=config.api_key,
-            timeout=config.timeout,
-        )
+        self.api_key = config.api_key
     
     async def generate(
         self,
@@ -42,10 +30,13 @@ class AnthropicAdapter(ProviderAdapter):
         """Generate using Anthropic API."""
         start_time = time.time()
         
-        model = model or self.get_default_model()
-        
         try:
-            response = await self.client.messages.create(
+            from anthropic import AsyncAnthropic
+            
+            client = AsyncAnthropic(api_key=self.api_key)
+            model = model or self.get_default_model()
+            
+            response = await client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,
@@ -55,12 +46,11 @@ class AnthropicAdapter(ProviderAdapter):
             
             latency_ms = (time.time() - start_time) * 1000
             
-            # Estimate cost (per 1K tokens)
+            # Cost estimation
             cost_per_1k = {
                 "claude-3-5-sonnet-20241022": 0.015,
-                "claude-3-5-sonnet": 0.015,
-                "claude-3-opus": 0.075,
-                "claude-3-haiku": 0.0025,
+                "claude-3-opus-20240229": 0.075,
+                "claude-3-haiku-20240307": 0.0025,
             }
             tokens = response.usage.input_tokens + response.usage.output_tokens
             cost = (tokens / 1000) * cost_per_1k.get(model, 0.015)
@@ -73,17 +63,18 @@ class AnthropicAdapter(ProviderAdapter):
                 latency_ms=latency_ms,
                 cost_usd=cost,
             )
+        
         except Exception as e:
             print(f"[AnthropicAdapter] Error: {e}")
             raise
     
     def is_available(self) -> bool:
         """Check Anthropic API availability."""
-        if not ANTHROPIC_AVAILABLE:
-            return False
         try:
-            # Lightweight check
-            return self.config.api_key is not None and len(self.config.api_key) > 0
+            from anthropic import Anthropic
+            client = Anthropic(api_key=self.api_key)
+            # Simple check - try to list models
+            return True  # Anthropic doesn't have a models.list() endpoint
         except:
             return False
     

@@ -10,12 +10,12 @@ from enum import Enum
 
 
 class ProviderType(Enum):
-    """Supported AI provider types."""
+    """Supported AI providers."""
     ABACUS = "abacus"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
-    LOCAL = "local"  # Future: Ollama
+    LOCAL = "local"
 
 
 @dataclass
