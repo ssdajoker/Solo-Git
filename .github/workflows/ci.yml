@@ -113,8 +113,8 @@ jobs:
             librsvg2-dev \
             patchelf || {
               echo "apt install failed; dumping apt-cache policy for diagnosis"
-              apt-cache policy libwebkit2gtk-4.0-dev || true
-              apt-cache search libwebkit2gtk || true
+              sudo apt-cache policy libwebkit2gtk-4.0-dev || true
+              sudo apt-cache search libwebkit2gtk || true
               exit 1
             }
       - name: Cache npm dependencies
