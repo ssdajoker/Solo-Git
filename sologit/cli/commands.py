@@ -612,7 +612,7 @@ def pad_diff(pad_id: str) -> None:
 def pad_promote(pad_id: str, force: bool) -> None:
     git_engine = get_git_engine()
     workpad = git_engine.get_workpad(pad_id)
-    workpad = _require_workpad(workpad, pad_id)
+    _require_workpad(workpad, pad_id)
 
     if not force and not git_engine.can_promote(pad_id):
         abort_with_error(
