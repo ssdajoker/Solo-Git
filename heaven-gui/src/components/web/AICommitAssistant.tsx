@@ -12,7 +12,6 @@ import { notifications } from '../utils/notifications'
 
 export interface AICommitAssistantProps {
   workpadId?: string
-  gitDiff?: string
   onAccept?: (message: string) => void
   onEdit?: (message: string) => void
   className?: string
