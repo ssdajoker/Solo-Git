@@ -341,6 +341,10 @@ def init_config(force: bool) -> None:
     target_path.write_text(DEFAULT_CONFIG_TEMPLATE)
     formatter.print_success("Created configuration file at %s" % target_path)
 
+    formatter.print_success_panel(
+        f"Created configuration file at [bold]{target_path}[/bold]",
+        title="Config Initialized"
+    )
     formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
 
 
@@ -355,14 +359,6 @@ def env_template() -> None:
     formatter.print_success(f"Wrote environment template to {env_path}")
 
 
-    
-    formatter.print_success_panel(
-        f"Created configuration file at [bold]{target_path}[/bold]",
-        title="Config Initialized"
-    )
-    formatter.print_info("Edit the file to add your API credentials or run: evogitctl config setup")
-
-
 @config_group.command(name="path")
 def config_path() -> None:
     """Print the resolved path to the configuration file."""
@@ -370,11 +366,3 @@ def config_path() -> None:
     target_path = Path(ConfigManager.DEFAULT_CONFIG_FILE).expanduser()
     formatter.print_info(str(target_path))
     formatter.print_info(f"Configuration file: {target_path}")
-
-
-@config_group.command(name="env-template")
-def config_env_template() -> None:
-    """Generate a .env.example file with required variables."""
-    env_path = Path(".env.example")
-    env_path.write_text(ENV_TEMPLATE)
-    formatter.print_success("Created .env.example")
