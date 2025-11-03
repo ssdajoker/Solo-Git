@@ -1398,7 +1398,7 @@ def execute_pair_loop(
         formatter.print_info(f"Model: {config_manager.config.models.planning_model}")
         start_time = time.time()
 
-        orchestrator = AIOrchestrator(config_manager, formatter=formatter)
+        orchestrator = AIOrchestrator(config_manager)
 
         repo_map = git_engine.get_repo_map(repo_id)
         context = {
