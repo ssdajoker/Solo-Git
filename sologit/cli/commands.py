@@ -1268,10 +1268,7 @@ def test_analyze(pad_id: str) -> None:
     
     Shows failure patterns and suggested fixes.
     """
-    from sologit.analysis.test_analyzer import TestAnalyzer
-    
     git_engine = get_git_engine()
-    test_orchestrator = get_test_orchestrator()
     
     workpad = git_engine.get_workpad(pad_id)
     if not workpad:
