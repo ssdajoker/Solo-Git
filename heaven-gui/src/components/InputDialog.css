@@ -1,0 +1,143 @@
+.input-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.input-dialog {
+  background: var(--heaven-bg-primary, #1a1a1a);
+  border: 1px solid var(--heaven-bg-tertiary, #333);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-width: 500px;
+  width: 90%;
+  animation: slideUp 0.3s ease-out;
+}
+
+.input-dialog-header {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid var(--heaven-bg-tertiary, #333);
+}
+
+.input-dialog-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--heaven-text-primary, #fff);
+}
+
+.input-dialog-body {
+  padding: 24px;
+}
+
+.input-dialog-message {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--heaven-text-secondary, #ccc);
+}
+
+.input-dialog-input,
+.input-dialog-textarea {
+  width: 100%;
+  padding: 12px;
+  background: var(--heaven-bg-secondary, #222);
+  border: 1px solid var(--heaven-bg-tertiary, #333);
+  border-radius: 8px;
+  color: var(--heaven-text-primary, #fff);
+  font-size: 15px;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.input-dialog-input:focus,
+.input-dialog-textarea:focus {
+  outline: none;
+  border-color: var(--heaven-blue-primary, #4A9EFF);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+}
+
+.input-dialog-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.input-dialog-input::placeholder,
+.input-dialog-textarea::placeholder {
+  color: var(--heaven-text-muted, #888);
+}
+
+.input-dialog-footer {
+  padding: 16px 24px 24px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.input-dialog-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.input-dialog-btn:focus-visible {
+  outline: 2px solid var(--heaven-blue-primary, #4A9EFF);
+  outline-offset: 2px;
+}
+
+.input-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background: var(--heaven-bg-tertiary, #333);
+  color: var(--heaven-text-primary, #fff);
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: var(--heaven-bg-tertiary, #333);
+  opacity: 0.9;
+}
+
+.btn-confirm {
+  background: var(--heaven-blue-primary, #4A9EFF);
+  color: white;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: var(--heaven-blue-hover, #3B8FEE);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

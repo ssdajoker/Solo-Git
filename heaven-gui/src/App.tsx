@@ -473,16 +473,17 @@ function App() {
 
   if (loading) {
     return (
-      <div className="app-container loading">
-        <div className="spinner"></div>
+      <div className="app-container loading" role="status" aria-live="polite" aria-busy="true">
+        <div className="spinner" aria-hidden="true"></div>
         <p>Loading Heaven Interface...</p>
+        <span className="sr-only">Application is loading, please wait</span>
       </div>
     )
   }
 
   if (error && !globalState) {
     return (
-      <div className="app-container error">
+      <div className="app-container error" role="alert" aria-live="assertive">
         <div className="error-panel">
           <h2>⚠️ No State Found</h2>
           <p>{error}</p>
@@ -533,10 +534,14 @@ function App() {
         </header>
 
         {/* Main Layout */}
-        <div className="app-main">
+        <div className="app-main" role="main">
           {/* Left Sidebar */}
           {showLeftSidebar && (
-            <aside className="sidebar-left">
+            <aside 
+              className="sidebar-left" 
+              aria-label="Navigation sidebar"
+              role="complementary"
+            >
               <FileBrowser
                 repoId={globalState?.active_repo ?? null}
                 onFileSelect={setSelectedFile}
@@ -553,7 +558,7 @@ function App() {
           )}
 
           {/* Center Panel */}
-          <main className="center-panel">
+          <main className="center-panel" aria-label="Main content area">
             <div className="center-top">
               <CodeViewer 
                 repoId={globalState?.active_repo ?? null}
