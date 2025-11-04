@@ -326,11 +326,15 @@ def test_generate_mock_patch_multiple_files(generator):
     )
     
     diff = generator._generate_mock_patch(plan, None)
-    
+
     # Should have patches for all files
     assert 'file1.py' in diff
     assert 'file2.py' in diff
     assert 'file3.py' in diff
+    assert 'def file1_new_stub' in diff
+    assert 'def file2_update_stub' in diff
+    assert 'raise NotImplementedError' in diff
+    assert '-# Auto-generated placeholder' in diff
 
 
 def test_create_fallback_patch(generator, sample_plan):
