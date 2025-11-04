@@ -31,6 +31,7 @@ def sample_zip():
     return buffer.read()
 
 
+@pytest.mark.smoke
 def test_init_from_zip(git_engine, sample_zip):
     """Test repository initialization from zip."""
     repo_id = git_engine.init_from_zip(sample_zip, "Test Repo")
@@ -45,6 +46,7 @@ def test_init_from_zip(git_engine, sample_zip):
     assert repo.workpad_count == 0
 
 
+@pytest.mark.smoke
 def test_create_workpad(git_engine, sample_zip):
     """Test workpad creation."""
     repo_id = git_engine.init_from_zip(sample_zip, "Test Repo")
@@ -66,6 +68,7 @@ def test_create_workpad(git_engine, sample_zip):
     assert repo.workpad_count == 1
 
 
+@pytest.mark.smoke
 def test_list_repos(git_engine, sample_zip):
     """Test listing repositories."""
     # Initially empty
@@ -80,6 +83,7 @@ def test_list_repos(git_engine, sample_zip):
     assert {r.id for r in repos} == {repo_id1, repo_id2}
 
 
+@pytest.mark.smoke
 def test_list_workpads(git_engine, sample_zip):
     """Test listing workpads."""
     repo_id1 = git_engine.init_from_zip(sample_zip, "Repo 1")

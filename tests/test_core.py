@@ -3,6 +3,7 @@
 Tests for core abstractions (Repository and Workpad).
 """
 
+import pytest
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from sologit.core.repository import Repository
 from sologit.core.workpad import Workpad, Checkpoint
 
 
+@pytest.mark.smoke
 def test_repository_creation():
     """Test Repository dataclass creation."""
     repo = Repository(
@@ -66,6 +68,7 @@ def test_repository_from_dict():
     assert repo.workpad_count == 2
 
 
+@pytest.mark.smoke
 def test_workpad_creation():
     """Test Workpad dataclass creation."""
     pad = Workpad(

@@ -47,6 +47,7 @@ def mock_state_manager():
         yield instance
 
 
+@pytest.mark.smoke
 def test_repo_list_no_repos(mock_git_engine):
     """Test `repo list` with no repositories."""
     mock_git_engine.list_repos.return_value = []
@@ -139,6 +140,7 @@ def test_repo_info_not_found(mock_git_engine):
     assert "Suggested Commands" in result.output
 
 
+@pytest.mark.smoke
 def test_repo_init_from_zip(mock_git_sync, tmp_path):
     """Test `repo init` from a zip file."""
     zip_file = tmp_path / "test.zip"
@@ -278,6 +280,7 @@ def test_repo_delete_engine_error(mock_git_sync):
     assert "cannot delete" in result.output
 
 
+@pytest.mark.smoke
 def test_pad_create_success(mock_git_engine):
     """Test `pad create` successfully."""
     mock_repo = MagicMock()
@@ -321,6 +324,7 @@ def test_pad_create_multiple_repos_no_spec(mock_git_engine):
     assert "Multiple repositories found" in result.output
 
 
+@pytest.mark.smoke
 def test_pad_list_no_pads(mock_git_engine):
     """Test `pad list` with no workpads."""
     mock_git_engine.list_workpads.return_value = []
@@ -652,6 +656,7 @@ def test_abort_with_error_function():
         abort_with_error("Test error message")
 
 
+@pytest.mark.smoke
 def test_get_config_manager():
     """Test get_config_manager helper function."""
     from sologit.cli.commands import get_config_manager
@@ -660,6 +665,7 @@ def test_get_config_manager():
     assert config is not None
 
 
+@pytest.mark.smoke
 def test_get_git_engine():
     """Test get_git_engine helper function."""
     from sologit.cli.commands import get_git_engine
@@ -672,6 +678,7 @@ def test_get_git_engine():
         assert engine is not None
 
 
+@pytest.mark.smoke
 def test_get_patch_engine():
     """Test get_patch_engine helper function."""
     from sologit.cli.commands import get_patch_engine
@@ -687,6 +694,7 @@ def test_get_patch_engine():
 
 
 
+@pytest.mark.smoke
 def test_get_git_sync():
     """Test get_git_sync helper function."""
     from sologit.cli.commands import get_git_sync
