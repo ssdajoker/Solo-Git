@@ -25,7 +25,7 @@ from sologit.orchestration.model_router import (
     ModelRouter,
     ModelTier,
 )
-from sologit.orchestration.planning_engine import PlanningEngine
+from sologit.orchestration.planning_engine import CodePlan, PlanningEngine
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +43,12 @@ class TaskType(Enum):
 class PlanResponse:
     """Response from the planning operation."""
 
-    plan: str
+    plan: CodePlan
     model_used: str
     tokens_used: int
     cost_usd: float
     complexity: ComplexityMetrics
+    plan_text: Optional[str] = None
 
 
 @dataclass
@@ -96,6 +97,7 @@ class AIOrchestrator:
         repo_context: Optional[str] = None,
         force_model: Optional[str] = None,
         escalate_on_failure: bool = False,
+        include_plan_text: bool = False,
         progress: Optional[Progress] = None,
     ) -> PlanResponse:
         """
@@ -194,7 +196,7 @@ class AIOrchestrator:
                     prompt_tokens = 500
                     completion_tokens = 1500
                     total_tokens = 2000
-                
+
                 self.cost_guard.record_usage(
                     model=model_config.name,
                     prompt_tokens=prompt_tokens,
@@ -203,17 +205,15 @@ class AIOrchestrator:
                     task_type=TaskType.PLANNING.value,
                 )
 
-            # Convert CodePlan to string for PlanResponse
-            plan_content = f"# {response.title}\n\n{response.description}\n\n## File Changes\n"
-            for fc in response.file_changes:
-                plan_content += f"- {fc.path}: {fc.action}\n"
-            
+            plan_text = str(response) if include_plan_text else None
+
             return PlanResponse(
-                plan=plan_content,
+                plan=response,
                 model_used=model_config.name,
                 tokens_used=total_tokens,
                 cost_usd=(total_tokens / 1000.0) * model_config.cost_per_1k_tokens,
                 complexity=complexity,
+                plan_text=plan_text,
             )
 
         finally:

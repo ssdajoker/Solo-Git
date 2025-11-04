@@ -301,6 +301,7 @@ class _MockAIOrchestrator:
         return PlanResponse(
             plan=_generate_mock_plan(prompt),
             model_used=force_model or "mock-planner",
+            tokens_used=0,
             cost_usd=0.0,
             complexity=ComplexityMetrics(
                 score=0.25,

@@ -520,14 +520,16 @@ def test_plan_response_dataclass():
     response = PlanResponse(
         plan=plan,
         model_used="gpt-4o",
+        tokens_used=1234,
         cost_usd=0.05,
-        complexity=complexity
+        complexity=complexity,
     )
-    
+
     assert response.plan == plan
     assert response.model_used == "gpt-4o"
     assert response.cost_usd == 0.05
     assert response.complexity == complexity
+    assert response.plan_text is None
 
 
 def test_patch_response_dataclass():
