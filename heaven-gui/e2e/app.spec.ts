@@ -7,9 +7,9 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Heaven GUI', () => {
   test.beforeEach(async ({ page }) => {
-    // Start Tauri app or navigate to the app URL
-    // For Tauri, this might use a custom protocol
-    await page.goto('tauri://localhost');
+    // The Playwright test runner should launch the Tauri app and provide the window context.
+    // No need to navigate to a URL; Playwright is already connected to the app window.
+    // (Removed invalid page.goto('tauri://localhost'))
   });
 
   test('should load main interface', async ({ page }) => {
