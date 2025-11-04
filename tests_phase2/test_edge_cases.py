@@ -292,7 +292,7 @@ def test_malformed_git_state():
             
             # Should handle gracefully - either by loading default state or raising informative error
             try:
-                state_manager = StateManager()
+                StateManager()
                 # If successful, verify state is now valid
                 # Most implementations will recover by creating a new valid state
                 assert True  # Successfully handled malformed state
