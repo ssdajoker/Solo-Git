@@ -3,8 +3,9 @@ Additional tests for AI Orchestrator to improve coverage to 90%+.
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from sologit.api.client import AbacusClient, ChatResponse
 from sologit.orchestration.ai_orchestrator import (
     AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse
 )
@@ -57,9 +58,22 @@ rollback_on_ci_red: true
 
 
 @pytest.fixture
-def orchestrator(mock_config_manager, tmp_path):
+def fake_abacus_client():
+    client = Mock(spec=AbacusClient)
+    client.chat.return_value = ChatResponse(
+        content="LGTM",
+        model="test-model",
+        prompt_tokens=80,
+        completion_tokens=40,
+        total_tokens=120,
+    )
+    return client
+
+
+@pytest.fixture
+def orchestrator(mock_config_manager, tmp_path, fake_abacus_client):
     """Create AI orchestrator with isolated cost tracking."""
-    orch = AIOrchestrator(mock_config_manager)
+    orch = AIOrchestrator(mock_config_manager, abacus_client=fake_abacus_client)
     
     # Use test-specific storage path
     from sologit.orchestration.cost_guard import CostTracker
