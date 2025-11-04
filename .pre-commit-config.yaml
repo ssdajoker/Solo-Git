@@ -1,0 +1,221 @@
+# Pre-commit hooks for Solo-Git
+# See https://pre-commit.com for more information
+
+default_language_version:
+  python: python3.11
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+      
+      # Check for merge conflict markers
+      - id: check-merge-conflict
+      
+      # Check YAML files for syntax errors
+      - id: check-yaml
+        args: ['--safe']
+      
+      # Check TOML files for syntax errors
+      - id: check-toml
+      
+      # Check JSON files for syntax errors
+      - id: check-json
+      
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+      
+      # Remove trailing whitespace
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      
+      # Check for debugger imports and breakpoints
+      - id: debug-statements
+      
+      # Detect private keys
+      - id: detect-private-key
+      
+      # Check for files that would conflict on Windows
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+  
+  # Python code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: ['--line-length=100']
+  
+  # Python import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black', '--line-length', '100']
+  
+  # Python linting with Ruff (fast alternative to flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+  
+  # Type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-PyYAML
+          - types-requests
+        args: ['--ignore-missing-imports', '--no-strict-optional']
+        exclude: ^(tests/|scripts/|examples/)
+  
+  # Security checks with bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+        exclude: ^tests/
+  
+  # Documentation formatting
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          - mdformat-gfm
+          - mdformat-black
+        args: ['--wrap', '88']
+  
+  # Commit message validation
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+  
+  # Local test hooks
+  - repo: local
+    hooks:
+      # Fast smoke tests
+      - id: pytest-smoke
+        name: Run Smoke Tests
+        entry: pytest
+        language: system
+        types: [python]
+        args: ['-m', 'smoke', '-v', '--tb=short', '--maxfail=3']
+        pass_filenames: false
+        stages: [push]
+      
+      # Preflight self-tests (on push to main)
+      - id: pytest-preflight
+        name: Run Preflight Self-Tests
+        entry: python
+        language: system
+        types: [python]
+        args: ['scripts/preflight/run_preflight.py']
+        pass_filenames: false
+        stages: [manual]
+      
+      # Check test coverage
+      - id: coverage-check
+        name: Check Test Coverage
+        entry: pytest
+        language: system
+        types: [python]
+        args:
+          - '--cov=sologit'
+          - '--cov-report=term-missing:skip-covered'
+          - '--cov-fail-under=85'
+          - '-m'
+          - 'not slow'
+        pass_filenames: false
+        stages: [manual]
+      
+      # Validate no broken imports
+      - id: check-imports
+        name: Check Python Imports
+        entry: python
+        language: system
+        types: [python]
+        args: ['-m', 'py_compile']
+      
+      # Check for print statements in production code
+      - id: no-print-statements
+        name: Check for print() in production code
+        entry: bash -c 'grep -rn "print(" sologit/ | grep -v "# noqa: print" && exit 1 || exit 0'
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [manual]
+      
+      # Validate pytest markers are documented
+      - id: check-pytest-markers
+        name: Validate pytest markers
+        entry: bash
+        language: system
+        types: [python]
+        args:
+          - '-c'
+          - |
+            # Extract markers from test files
+            markers=$(grep -rh "@pytest.mark" tests/ | sed 's/@pytest.mark.\([a-z_]*\).*/\1/' | sort -u)
+            
+            # Check if all markers are in pytest.ini
+            missing=0
+            for marker in $markers; do
+              if ! grep -q "\\b$marker:" pytest.ini; then
+                echo "ERROR: Marker '$marker' not documented in pytest.ini"
+                missing=1
+              fi
+            done
+            
+            exit $missing
+        pass_filenames: false
+        stages: [manual]
+
+# Configuration for specific hooks
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+    
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
+
+# Exclude patterns (don't run hooks on these files)
+exclude: |
+  (?x)^(
+      \.git/|
+      \.pytest_cache/|
+      __pycache__/|
+      \.venv/|
+      venv/|
+      build/|
+      dist/|
+      \.eggs/|
+      .*\.egg-info/|
+      htmlcov/|
+      \.coverage|
+      \.mypy_cache/|
+      \.ruff_cache/|
+      node_modules/|
+      heaven-gui/dist/|
+      heaven-gui/build/|
+      \.archive/
+  )

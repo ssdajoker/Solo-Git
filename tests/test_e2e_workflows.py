@@ -688,6 +688,7 @@ def test_state_manager_records_cli_operations(
     assert test_runs[0]["status"] in {"passed", "failed"}
 
 
+@pytest.mark.smoke
 def test_happy_path_create_file_and_promote(
     git_sync: GitStateSync,
     sample_project_zip: bytes,

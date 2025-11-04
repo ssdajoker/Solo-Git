@@ -70,6 +70,7 @@ def orchestrator(mock_config_manager, tmp_path):
     return orch
 
 
+@pytest.mark.smoke
 def test_orchestrator_initialization(orchestrator):
     """Test orchestrator initializes correctly."""
     assert orchestrator is not None
@@ -80,6 +81,7 @@ def test_orchestrator_initialization(orchestrator):
     assert orchestrator.code_generator is not None
 
 
+@pytest.mark.smoke
 def test_plan_simple_task(orchestrator):
     """Test planning for simple task."""
     prompt = "fix typo in readme"
@@ -262,6 +264,7 @@ def test_diagnose_failure(orchestrator):
     assert len(diagnosis) > 0
 
 
+@pytest.mark.smoke
 def test_get_status(orchestrator):
     """Test getting orchestrator status."""
     status = orchestrator.get_status()

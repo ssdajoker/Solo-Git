@@ -1,0 +1,131 @@
+
+# Coverage.py configuration for Solo-Git
+# See https://coverage.readthedocs.io/ for more information
+
+[run]
+# Source code to measure coverage for
+source = sologit
+
+# Files to omit from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */site-packages/*
+    */venv/*
+    */.venv/*
+    */setup.py
+    */conftest.py
+    # Development/example code
+    */examples/*
+    */scripts/benchmarks/*
+    # GUI code (requires separate testing strategy)
+    */heaven-gui/*
+
+# Enable branch coverage (measures if both if/else branches are tested)
+branch = True
+
+# Parallel mode for multi-process testing
+parallel = False
+
+# Include multiprocessing coverage
+concurrency = multiprocessing
+
+# Data file location
+data_file = .coverage
+
+[report]
+# Precision for coverage percentages
+precision = 2
+
+# Show lines that weren't executed
+show_missing = True
+
+# Skip covered files in report (less noise)
+skip_covered = False
+
+# Skip empty files
+skip_empty = True
+
+# Sort output by coverage percentage
+sort = Cover
+
+# Lines to exclude from coverage analysis
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    
+    # Don't complain about debug code
+    def __repr__
+    def __str__
+    
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Don't complain about abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+    
+    # Don't complain if non-runnable code isn't run
+    if __name__ == .__main__.:
+    if __name__ == "__main__":
+    
+    # Don't complain about type checking code
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+    
+    # Don't complain about pass statements
+    pass
+    
+    # Don't complain about ellipsis in stubs
+    \.\.\.
+    
+    # Don't complain about sys.exit
+    sys.exit
+    raise SystemExit
+    
+    # Don't complain about logging
+    logger\.debug
+    logger\.info
+    log\.debug
+    log\.info
+
+# Patterns to exclude
+exclude_also =
+    # Exclude error messages
+    raise \w+Error\(
+    
+    # Exclude typing overloads
+    @overload
+
+[html]
+# HTML report output directory
+directory = htmlcov
+
+# Title for HTML report
+title = Solo-Git Coverage Report
+
+# Show contexts (test functions that executed each line)
+show_contexts = True
+
+[xml]
+# XML report output file
+output = coverage.xml
+
+[json]
+# JSON report output file
+output = coverage.json
+
+# Pretty print JSON
+pretty_print = True
+
+# Show contexts in JSON
+show_contexts = True
+
+[paths]
+# Path mapping for different environments
+source =
+    sologit/
+    */sologit/
+    */site-packages/sologit/

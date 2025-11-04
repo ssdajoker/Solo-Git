@@ -51,6 +51,7 @@ def isolated_cli_runner(tmp_path):
         yield runner, Path(isolated_dir)
 
 
+@pytest.mark.smoke
 def test_config_show(mock_config_manager):
     """Test `config show` command."""
     runner = CliRunner()
@@ -162,6 +163,7 @@ def test_config_budget_status(mock_config_manager):
         assert "25.0%" in result.output
 
 
+@pytest.mark.smoke
 def test_config_init(isolated_cli_runner):
     """Test `config init`."""
     runner, temp_dir = isolated_cli_runner
