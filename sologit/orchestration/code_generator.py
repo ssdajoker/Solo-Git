@@ -457,11 +457,21 @@ Only output the patch itself, no explanatory text outside the diff."""
         return f'"""Auto-generated scaffold for {safe_description}."""\n\n'
 
     def _append_stub_to_content(self, existing_content: str, stub_block: str) -> str:
-        """Append a stub block to existing content with spacing."""
+        """Append a stub block to existing content with spacing.
+        
+        Ensures that there is at least one blank line between the existing content
+        and the appended stub block, but avoids adding excessive blank lines.
+        """
         content = existing_content or ""
         if content and not content.endswith("\n"):
             content += "\n"
-        separator = "" if not content else ("\n" if not content.endswith("\n\n") else "")
+        # If content is not empty and does not end with two newlines, add one newline as separator.
+        if not content:
+            separator = ""
+        elif not content.endswith("\n\n"):
+            separator = "\n"
+        else:
+            separator = ""
         new_content = f"{content}{separator}{stub_block}"
         if not new_content.endswith("\n"):
             new_content += "\n"
