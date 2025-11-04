@@ -66,14 +66,14 @@ def test_state_file_corruption():
             os.environ['SOLO_GIT_STATE'] = str(tmpdir)
             
             # First, create valid state
-            state_manager = StateManager()
+            StateManager()
             
             # Now corrupt the state file
             state_file.write_text("CORRUPTED DATA {{{")
             
             # Should handle gracefully and create new state
             try:
-                state_manager = StateManager()
+                StateManager()
                 # Should not raise, but create new empty state or handle gracefully
                 assert True  # Successfully handled corrupted state
                 
