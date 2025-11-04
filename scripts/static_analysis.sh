@@ -1,6 +1,4 @@
 #!/bin/bash
-set -e
-
 echo "🔍 Running static analysis..."
 
 echo ""
