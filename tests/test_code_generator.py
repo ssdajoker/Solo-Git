@@ -140,6 +140,8 @@ def test_generate_mock_patch_create(generator):
     
     assert '--- /dev/null' in diff
     assert '+++ b/new.py' in diff
+    assert 'def new_stub' in diff
+    assert 'raise NotImplementedError' in diff
 
 
 def test_generate_mock_patch_modify(generator):
@@ -159,6 +161,8 @@ def test_generate_mock_patch_modify(generator):
     
     assert '--- a/existing.py' in diff
     assert '+++ b/existing.py' in diff
+    assert 'def existing_update_stub' in diff
+    assert 'raise NotImplementedError' in diff
 
 
 def test_generate_mock_patch_delete(generator):

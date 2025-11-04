@@ -8,6 +8,8 @@ Generates code patches from implementation plans.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from pathlib import Path
+from difflib import unified_diff
+import re
 
 from sologit.api.client import AbacusClient, ChatMessage, AbacusAPIError
 
@@ -89,7 +91,7 @@ Only output the patch itself, no explanatory text outside the diff."""
     def generate_patch(
         self,
         task_description: str = None,
-        plan: Optional[str] = None,
+        plan: Optional[Any] = None,
         file_contents: Optional[Dict[str, str]] = None,
         model_config: Optional[Any] = None,
         client: Optional[Any] = None,
@@ -119,26 +121,30 @@ Only output the patch itself, no explanatory text outside the diff."""
             Generated patch
         """
         # Handle both new and legacy API
-        if task_description and isinstance(task_description, str):
-            # New API: task_description and optional plan string
-            logger.info("Generating patch for: %s", task_description[:50] if len(task_description) > 50 else task_description)
-            context_parts = [f"Task: {task_description}"]
-            if plan:
-                context_parts.append(f"\nPlan:\n{plan}")
-        else:
-            # Legacy API: first parameter is actually a CodePlan object
-            plan_obj = task_description  # It's actually a CodePlan
+        plan_obj: Optional[CodePlan] = None
+        plan_text: Optional[str] = plan if isinstance(plan, str) else None
+        description_text: Optional[str] = None
+
+        if isinstance(task_description, CodePlan):
+            plan_obj = task_description
+        elif isinstance(task_description, str):
+            description_text = task_description
+
+        if plan_obj is None and isinstance(plan, CodePlan):
+            plan_obj = plan
+
+        if plan_obj:
             logger.info("Generating patch for: %s", plan_obj.title)
             context_parts = [
                 f"Implementation Plan: {plan_obj.title}",
                 f"\n{plan_obj.description}",
                 "\nFile Changes:"
             ]
-            
+
             for fc in plan_obj.file_changes:
                 context_parts.append(f"  - {fc.action.upper()}: {fc.path}")
                 context_parts.append(f"    Reason: {fc.reason}")
-                
+
                 # Include existing file content if available
                 if fc.action == 'modify' and file_contents and fc.path in file_contents:
                     content = file_contents[fc.path]
@@ -146,8 +152,17 @@ Only output the patch itself, no explanatory text outside the diff."""
                     if len(content) > 2000:
                         content = content[:2000] + "\n... (truncated)"
                     context_parts.append(f"    Current content:\n```\n{content}\n```")
-            
+
             context_parts.append(f"\nTest Strategy: {plan_obj.test_strategy}")
+        else:
+            task_text = description_text or plan_text or "Generated task"
+            logger.info(
+                "Generating patch for: %s",
+                task_text[:50] if len(task_text) > 50 else task_text
+            )
+            context_parts = [f"Task: {task_text}"]
+            if plan_text:
+                context_parts.append(f"\nPlan:\n{plan_text}")
         
         # Add file contents for new API
         if file_contents and isinstance(task_description, str):
@@ -200,10 +215,14 @@ Only output the patch itself, no explanatory text outside the diff."""
                 # Mock patch generation for Phase 2 development
                 logger.warning("No deployment credentials provided, using mock patch")
                 # For new API, use task_description; for legacy API, use the plan object
-                if isinstance(task_description, str):
-                    diff = self._generate_mock_patch_from_description(task_description, plan, file_contents)
+                if not plan_obj:
+                    diff = self._generate_mock_patch_from_description(
+                        description_text or plan_text or "Generated task",
+                        plan_text,
+                        file_contents
+                    )
                 else:
-                    diff = self._generate_mock_patch(task_description, file_contents)
+                    diff = self._generate_mock_patch(plan_obj, file_contents)
             
             # Analyze the patch
             files_changed = self._extract_files_from_diff(diff)
@@ -227,7 +246,7 @@ Only output the patch itself, no explanatory text outside the diff."""
         except Exception as e:
             logger.error("Failed to generate patch: %s", e)
             # Return a minimal patch
-            return self._create_fallback_patch(plan)
+            return self._create_fallback_patch(plan_obj, description_text or plan_text)
     
     def _extract_diff(self, content: str) -> str:
         """Extract diff from AI response."""
@@ -298,18 +317,38 @@ Only output the patch itself, no explanatory text outside the diff."""
         plan: Optional[str],
         file_contents: Optional[Dict[str, str]]
     ) -> str:
-        """Generate a mock patch from task description for development/testing."""
-        # Simple mock patch for testing
-        patch = "--- a/test.py\n"
-        patch += "+++ b/test.py\n"
-        patch += "@@ -1,3 +1,6 @@\n"
-        patch += " # Existing code\n"
-        patch += f"+# Mock implementation for: {task_description[:50]}\n"
-        patch += "+# TODO: Implement actual changes\n"
-        patch += "+\n"
-        patch += " # More existing code\n"
-        return patch
-    
+        """Generate a deterministic scaffold patch from a task description."""
+        description = plan or task_description or "generated task"
+        target_path: str
+        existing_content = ""
+
+        if file_contents:
+            # Prefer updating the first provided file to keep deterministic behaviour.
+            target_path, existing_content = next(iter(file_contents.items()))
+        else:
+            target_path = "mock_task.py"
+
+        stub_name = self._build_stub_name(target_path, description)
+        stub_block = self._create_function_stub(stub_name, description)
+
+        if target_path.endswith(".py") and not file_contents:
+            module_header = self._create_module_header(description)
+        else:
+            module_header = ""
+
+        if not existing_content:
+            new_content = f"{module_header}{stub_block}"
+        else:
+            new_content = self._append_stub_to_content(existing_content, stub_block)
+
+        return self._build_diff(
+            target_path,
+            existing_content,
+            new_content,
+            is_new_file=not existing_content,
+            is_delete=False
+        )
+
     def _generate_mock_patch(
         self,
         plan: CodePlan,
@@ -317,60 +356,169 @@ Only output the patch itself, no explanatory text outside the diff."""
     ) -> str:
         """Generate a mock patch for development/testing."""
         patches = []
-        
-        for fc in plan.file_changes:
+
+        for index, fc in enumerate(plan.file_changes):
+            reason = fc.reason or plan.title
+            existing_content = ""
+            if file_contents and fc.path in file_contents:
+                existing_content = file_contents[fc.path]
+
+            stub_name = self._build_stub_name(fc.path, reason, index)
+            stub_block = self._create_function_stub(stub_name, reason)
+
             if fc.action == 'create':
-                # Generate a new file patch
-                content_lines = [
-                    '"""',
-                    f'Module: {Path(fc.path).stem}',
-                    '',
-                    fc.reason,
-                    '"""',
-                    '',
-                    '# TODO: Implement this module',
-                    '',
-                ]
-                
-                patch = "--- /dev/null\n"
-                patch += f"+++ b/{fc.path}\n"
-                patch += f"@@ -0,0 +1,{len(content_lines)} @@\n"
-                patch += '\n'.join(f'+{line}' for line in content_lines)
+                module_header = self._create_module_header(reason)
+                new_content = f"{module_header}{stub_block}"
+                patch = self._build_diff(
+                    fc.path,
+                    "",
+                    new_content,
+                    is_new_file=True,
+                    is_delete=False
+                )
                 patches.append(patch)
-                
+
             elif fc.action == 'modify':
-                # Generate a modification patch
-                # This is a simplified mock - real patches would be more sophisticated
-                patch = f"--- a/{fc.path}\n"
-                patch += f"+++ b/{fc.path}\n"
-                patch += "@@ -1,5 +1,8 @@\n"
-                patch += " # Existing code\n"
-                patch += f"+# Added: {fc.reason}\n"
-                patch += f"+# TODO: Implement changes for: {plan.title}\n"
-                patch += "+\n"
-                patch += " # More existing code\n"
+                if existing_content:
+                    new_content = self._append_stub_to_content(existing_content, stub_block)
+                    patch = self._build_diff(
+                        fc.path,
+                        existing_content,
+                        new_content,
+                        is_new_file=False,
+                        is_delete=False
+                    )
+                else:
+                    module_header = self._create_module_header(reason) if fc.path.endswith('.py') else ""
+                    new_content = f"{module_header}{stub_block}"
+                    patch = self._build_diff(
+                        fc.path,
+                        "",
+                        new_content,
+                        is_new_file=False,
+                        is_delete=False
+                    )
                 patches.append(patch)
-                
+
             elif fc.action == 'delete':
-                # Generate a deletion patch
-                patch = f"--- a/{fc.path}\n"
-                patch += "+++ /dev/null\n"
-                patch += "@@ -1,10 +0,0 @@\n"
-                patch += "-# File deleted\n"
+                patch = self._build_diff(
+                    fc.path,
+                    existing_content,
+                    "",
+                    is_new_file=False,
+                    is_delete=True
+                )
+                if not patch:
+                    patch = self._build_static_deletion_patch(fc.path)
                 patches.append(patch)
-        
-        return '\n\n'.join(patches)
+
+        return '\n\n'.join(filter(None, patches))
+
+    def _build_stub_name(self, reference: str, description: str, index: int = 0) -> str:
+        """Create a deterministic stub function name based on file and description."""
+        base_reference = Path(reference).stem or reference
+        tokens = re.findall(r"[A-Za-z0-9]+", f"{base_reference} {description}")
+        if not tokens:
+            tokens = ["generated", "stub"]
+        deduped_tokens: List[str] = []
+        seen = set()
+        for token in tokens:
+            lower = token.lower()
+            if lower not in seen:
+                seen.add(lower)
+                deduped_tokens.append(lower)
+            if len(deduped_tokens) == 5:
+                break
+        if not deduped_tokens:
+            deduped_tokens = ["generated", "stub"]
+        name = "_".join(deduped_tokens)
+        if not name.endswith("_stub"):
+            name = f"{name}_stub"
+        if name[0].isdigit():
+            name = f"stub_{name}"
+        if index:
+            name = f"{name}_{index}"
+        return name
+
+    def _create_function_stub(self, function_name: str, description: str) -> str:
+        """Return a function stub block."""
+        safe_description = description.replace('"', '\"')
+        lines = [
+            f"def {function_name}(*args, **kwargs) -> None:",
+            f"    \"\"\"Placeholder for {safe_description}.\"\"\"",
+            "    raise NotImplementedError(\"Auto-generated stub\")",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def _create_module_header(self, description: str) -> str:
+        """Create a simple module-level docstring."""
+        safe_description = description.replace('"', '\"')
+        return f'"""Auto-generated scaffold for {safe_description}."""\n\n'
+
+    def _append_stub_to_content(self, existing_content: str, stub_block: str) -> str:
+        """Append a stub block to existing content with spacing."""
+        content = existing_content or ""
+        if content and not content.endswith("\n"):
+            content += "\n"
+        separator = "" if not content else ("\n" if not content.endswith("\n\n") else "")
+        new_content = f"{content}{separator}{stub_block}"
+        if not new_content.endswith("\n"):
+            new_content += "\n"
+        return new_content
+
+    def _build_diff(
+        self,
+        path: str,
+        original_content: str,
+        new_content: str,
+        *,
+        is_new_file: bool,
+        is_delete: bool
+    ) -> str:
+        """Create a unified diff between two content versions."""
+        original_lines = original_content.splitlines(keepends=True)
+        new_lines = new_content.splitlines(keepends=True)
+
+        from_label = "/dev/null" if is_new_file else f"a/{path}"
+        to_label = "/dev/null" if is_delete else f"b/{path}"
+
+        diff_lines = list(
+            unified_diff(
+                original_lines,
+                new_lines,
+                fromfile=from_label,
+                tofile=to_label,
+                lineterm=""
+            )
+        )
+        return "\n".join(diff_lines)
+
+    def _build_static_deletion_patch(self, path: str) -> str:
+        """Fallback deletion patch when original content is unavailable."""
+        return (
+            f"--- a/{path}\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            "-# Auto-generated placeholder\n"
+        )
     
-    def _create_fallback_patch(self, plan: CodePlan) -> GeneratedPatch:
+    def _create_fallback_patch(
+        self,
+        plan: Optional[CodePlan],
+        description: Optional[str] = None
+    ) -> GeneratedPatch:
         """Create a minimal fallback patch when generation fails."""
-        # Create a simple TODO patch
+        title = plan.title if plan else (description or "Generated task")
+        summary = plan.description if plan else (description or "No description provided")
+
         diff = "--- a/TODO.md\n"
         diff += "+++ b/TODO.md\n"
         diff += "@@ -1,1 +1,3 @@\n"
-        diff += f"+# TODO: {plan.title}\n"
-        diff += f"+{plan.description[:100]}\n"
+        diff += f"+# TODO: {title}\n"
+        diff += f"+{summary[:100]}\n"
         diff += "+\n"
-        
+
         return GeneratedPatch(
             diff=diff,
             files_changed=['TODO.md'],
