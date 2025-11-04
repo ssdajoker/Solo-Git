@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 
 def test_empty_repository():
