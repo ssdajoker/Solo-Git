@@ -434,7 +434,7 @@ Only output the patch itself, no explanatory text outside the diff."""
         name = "_".join(deduped_tokens)
         if not name.endswith("_stub"):
             name = f"{name}_stub"
-        if name[0].isdigit():
+        if name and name[0].isdigit():
             name = f"stub_{name}"
         if index:
             name = f"{name}_{index}"
