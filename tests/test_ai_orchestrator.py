@@ -3,8 +3,11 @@
 Tests for AI Orchestrator.
 """
 
+from unittest.mock import Mock
+
 import pytest
 
+from sologit.api.client import AbacusClient, ChatResponse
 from sologit.orchestration.ai_orchestrator import (
     AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse
 )
@@ -57,10 +60,23 @@ rollback_on_ci_red: true
 
 
 @pytest.fixture
-def orchestrator(mock_config_manager, tmp_path):
+def fake_abacus_client():
+    client = Mock(spec=AbacusClient)
+    client.chat.return_value = ChatResponse(
+        content="LGTM",
+        model="test-model",
+        prompt_tokens=100,
+        completion_tokens=50,
+        total_tokens=150,
+    )
+    return client
+
+
+@pytest.fixture
+def orchestrator(mock_config_manager, tmp_path, fake_abacus_client):
     """Create AI orchestrator with isolated cost tracking."""
     # Create orchestrator with fresh cost tracker for each test
-    orch = AIOrchestrator(mock_config_manager)
+    orch = AIOrchestrator(mock_config_manager, abacus_client=fake_abacus_client)
     
     # Use test-specific storage path to avoid state sharing between tests
     from sologit.orchestration.cost_guard import CostTracker
