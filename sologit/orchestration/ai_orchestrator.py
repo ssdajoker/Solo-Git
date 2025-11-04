@@ -26,6 +26,7 @@ from sologit.orchestration.model_router import (
     ModelTier,
 )
 from sologit.orchestration.planning_engine import CodePlan, PlanningEngine
+from sologit.orchestration.planning_engine import PlanningEngine, CodePlan
 
 logger = logging.getLogger(__name__)
 
@@ -77,19 +78,25 @@ class AIOrchestrator:
     Orchestrates AI operations with model selection, cost tracking, and error handling.
     """
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        abacus_client: Optional[AbacusClient] = None,
+    ):
         """
         Initialize the AI orchestrator.
 
         Args:
             config_manager: Configuration manager instance
+            abacus_client: Optional Abacus client for dependency injection (useful in tests)
         """
         self.config_manager = config_manager
         self.config: SoloGitConfig = config_manager.get_config()
         self.cost_guard = CostGuard(self.config.budget)
         self.model_router = ModelRouter(self.config.to_dict())
-        self.planning_engine = PlanningEngine(self.config)
-        self.code_generator = CodeGenerator(self.config)
+        self.abacus_client = abacus_client or AbacusClient(self.config.abacus)
+        self.planning_engine = PlanningEngine(self.abacus_client)
+        self.code_generator = CodeGenerator(self.abacus_client)
 
     def plan(
         self,
@@ -152,14 +159,27 @@ class AIOrchestrator:
 
             with self._progress_stage(progress, task_id, f"Generating plan with {model_config.name}", 50):
                 deployment_creds = self._get_deployment_credentials(model_config.name)
+                deployment_name = None
+                deployment_id = None
+                deployment_token = None
+                if deployment_creds:
+                    if isinstance(deployment_creds, dict):
+                        deployment_name = deployment_creds.get('deployment_name')
+                        deployment_id = deployment_creds.get('deployment_id')
+                        deployment_token = deployment_creds.get('deployment_token')
+                    else:
+                        deployment_name = getattr(deployment_creds, 'deployment_name', None)
+                        deployment_id = getattr(deployment_creds, 'deployment_id', None)
+                        deployment_token = getattr(deployment_creds, 'deployment_token', None)
 
                 try:
                     response = self.planning_engine.generate_plan(
                         prompt=task_description,
                         repo_context={"description": task_description, "context": repo_context} if repo_context else None,
                         model=model_config.name,
-                        deployment_id=getattr(deployment_creds, 'deployment_id', None) if deployment_creds else None,
-                        deployment_token=getattr(deployment_creds, 'deployment_token', None) if deployment_creds else None,
+                        deployment_name=deployment_name,
+                        deployment_id=deployment_id,
+                        deployment_token=deployment_token,
                     )
                 except Exception as e:
                     if escalate_on_failure:
@@ -169,12 +189,25 @@ class AIOrchestrator:
                             escalated_cost = (estimated_tokens / 1000.0) * escalated_model.cost_per_1k_tokens
                             if self.cost_guard.check_budget(escalated_cost):
                                 escalated_creds = self._get_deployment_credentials(escalated_model.name)
+                                escalated_name = None
+                                escalated_id = None
+                                escalated_token = None
+                                if escalated_creds:
+                                    if isinstance(escalated_creds, dict):
+                                        escalated_name = escalated_creds.get('deployment_name')
+                                        escalated_id = escalated_creds.get('deployment_id')
+                                        escalated_token = escalated_creds.get('deployment_token')
+                                    else:
+                                        escalated_name = getattr(escalated_creds, 'deployment_name', None)
+                                        escalated_id = getattr(escalated_creds, 'deployment_id', None)
+                                        escalated_token = getattr(escalated_creds, 'deployment_token', None)
                                 response = self.planning_engine.generate_plan(
                                     prompt=task_description,
                                     repo_context={"description": task_description, "context": repo_context} if repo_context else None,
                                     model=escalated_model.name,
-                                    deployment_id=getattr(escalated_creds, 'deployment_id', None) if escalated_creds else None,
-                                    deployment_token=getattr(escalated_creds, 'deployment_token', None) if escalated_creds else None,
+                                    deployment_name=escalated_name,
+                                    deployment_id=escalated_id,
+                                    deployment_token=escalated_token,
                                 )
                                 model_config = escalated_model
                             else:
@@ -262,13 +295,21 @@ class AIOrchestrator:
                         select_context["plan"] = plan
                     if file_contents:
                         select_context["file_contents"] = file_contents
+                    selection_prompt = (
+                        task_description.title
+                        if isinstance(task_description, CodePlan)
+                        else task_description
+                    )
                     model_config = self.model_router.select_model(
-                        task_description,
+                        selection_prompt,
                         context=select_context,
                     )
 
             with self._progress_stage(progress, task_id, "Estimating cost", 10):
-                estimated_tokens = self.model_router.estimate_patch_size(plan or task_description)
+                estimation_source = plan if plan is not None else task_description
+                if isinstance(estimation_source, CodePlan):
+                    estimation_source = str(estimation_source)
+                estimated_tokens = self.model_router.estimate_patch_size(estimation_source)
                 estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
                 if not self.cost_guard.check_budget(estimated_cost):
                     raise RuntimeError(
@@ -277,7 +318,6 @@ class AIOrchestrator:
                     )
 
             with self._progress_stage(progress, task_id, f"Generating code with {model_config.name}", 55):
-                client = AbacusClient(self.config.abacus)
                 deployment_creds = self._get_deployment_credentials(model_config.name)
 
                 try:
@@ -286,7 +326,7 @@ class AIOrchestrator:
                         plan=plan,
                         file_contents=file_contents,
                         model_config=model_config,
-                        client=client,
+                        client=self.abacus_client,
                         deployment_credentials=deployment_creds,
                     )
                 except Exception as e:
@@ -301,7 +341,7 @@ class AIOrchestrator:
                                     plan=plan,
                                     file_contents=file_contents,
                                     model_config=escalated_model,
-                                    client=client,
+                                    client=self.abacus_client,
                                     deployment_credentials=self._get_deployment_credentials(escalated_model.name),
                                 )
                                 model_config = escalated_model
@@ -369,9 +409,8 @@ class AIOrchestrator:
 
             with self._progress_stage(progress, task_id, "Analyzing patch", 60):
                 review_prompt = self._build_review_prompt(patch, test_files)
-                client = AbacusClient(self.config.abacus)
 
-                response = client.chat(
+                response = self.abacus_client.chat(
                     messages=[{"role": "user", "content": review_prompt}],
                     model=model_config.name,
                     max_tokens=model_config.max_tokens,
@@ -554,6 +593,7 @@ class AIOrchestrator:
         if not creds or not creds.deployment_id or not creds.deployment_token:
             return None
         return {
+            'deployment_name': name,
             'deployment_id': creds.deployment_id,
             'deployment_token': creds.deployment_token,
         }

@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
+from sologit.api.client import AbacusClient, ChatResponse
 from sologit.orchestration.ai_orchestrator import (
     AIOrchestrator, PlanResponse, PatchResponse, ReviewResponse, TaskType
 )
@@ -61,9 +62,22 @@ def temp_storage():
 
 
 @pytest.fixture
-def orchestrator(temp_storage, mock_config_manager):
+def fake_abacus_client():
+    client = Mock(spec=AbacusClient)
+    client.chat.return_value = ChatResponse(
+        content="LGTM",
+        model="test-model",
+        prompt_tokens=120,
+        completion_tokens=60,
+        total_tokens=180,
+    )
+    return client
+
+
+@pytest.fixture
+def orchestrator(temp_storage, mock_config_manager, fake_abacus_client):
     """Create AI orchestrator for testing with isolated storage."""
-    orch = AIOrchestrator(mock_config_manager)
+    orch = AIOrchestrator(mock_config_manager, abacus_client=fake_abacus_client)
     # Use isolated storage path
     orch.cost_guard.tracker.storage_path = temp_storage
     orch.cost_guard.tracker.usage_history = {}
