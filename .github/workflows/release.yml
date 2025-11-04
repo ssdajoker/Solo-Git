@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  # Job 1: Create GitHub Release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+  # Job 2: Build and Upload macOS
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        working-directory: heaven-gui
+        run: npm ci
+      - name: Build
+        working-directory: heaven-gui
+        run: npm run tauri build
+      - name: Sign app (if certificates available)
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        run: |
+          # Code signing steps (see Phase 3)
+          echo "Code signing not yet configured"
+      - name: Notarize app (if certificates available)
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        run: |
+          # Notarization steps (see Phase 3)
+          echo "Notarization not yet configured"
+      - name: Upload .dmg
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./heaven-gui/src-tauri/target/release/bundle/dmg/*.dmg
+
+  # Job 3: Build and Upload Windows
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        working-directory: heaven-gui
+        run: npm ci
+      - name: Build
+        working-directory: heaven-gui
+        run: npm run tauri build
+      - name: Sign .msi (if certificate available)
+        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+        run: |
+          # Code signing steps (see Phase 3)
+          echo "Code signing not yet configured"
+      - name: Upload .msi
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./heaven-gui/src-tauri/target/release/bundle/msi/*.msi
+
+  # Job 4: Build and Upload Linux
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Install npm dependencies
+        working-directory: heaven-gui
+        run: npm ci
+      - name: Build
+        working-directory: heaven-gui
+        run: npm run tauri build
+      - name: Upload .deb
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./heaven-gui/src-tauri/target/release/bundle/deb/*.deb
+      - name: Upload .AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./heaven-gui/src-tauri/target/release/bundle/appimage/*.AppImage
+
+  # Job 5: Publish to PyPI
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build twine
+      - run: python -m build
+      - name: Publish to PyPI
+        if: ${{ secrets.PYPI_TOKEN != '' }}
+        run: twine upload dist/* --username __token__ --password ${{ secrets.PYPI_TOKEN }}
