@@ -48,7 +48,11 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
   - 5 engagement levels (Idle → Navigation → Planning → Coding/Test → Commit/Resolve)
   - Dark theme with minimal accent colors (#61AFEF blue, #98C379 green, #E06C75 red)
   - JSON-based state synchronization between CLI/TUI/GUI
-  - **Read-only interactions today**: the GUI is currently limited to viewing repository state; write operations must be performed through the CLI or TUI interfaces.
+  - Workpad lifecycle controls that invoke the Solo Git CLI under the hood: create new workpads, run targeted tests, promote approved changes, and delete obsolete pads without leaving the GUI.【F:heaven-gui/src-tauri/src/commands.rs†L204-L535】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L37-L126】
+
+See the [GUI Write Operations Implementation Report](GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md) for the authoritative breakdown of these workflows and their parity with the CLI/TUI experiences.
+
+> **Still guarded:** The GUI shells out to `evogitctl`, so the Solo Git CLI must be installed and on the PATH. File edits remain constrained by the backend—writes are capped at 1 MB and are blocked from escaping the repository directory, preserving the same safety rails used by the CLI/TUI stack.【F:heaven-gui/src-tauri/src/commands.rs†L21-L82】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L71-L163】【F:GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md†L1-L86】
 
 **Design Tokens**:
 - Typography: JetBrains Mono/SF Mono for code, SF Pro/Roboto for UI
@@ -58,6 +62,7 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
 - Motion: Subtle 150-300ms animations with ease-in-out
 
 See the [Heaven Interface Playbook](docs/wiki/Heaven_Interface_Playbook.md) for complete specifications.
+See the [Heaven Interface Design System](docs/HEAVEN_INTERFACE.md) and [Heaven Interface Guide](docs/HEAVEN_INTERFACE_GUIDE.md) for complete specifications and the [Heaven Interface Implementation Summary](HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md) for the latest delivery snapshot.
 
 ### ✨ **Frictionless Workflow**
 - **No Branch Management**: Say goodbye to `git checkout -b feature/...`
@@ -476,6 +481,8 @@ flake8 sologit/
 ```
 
 ### Project Structure
+
+> 📁 Need the full inventory? See the continuously maintained [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) guide.
 
 ```
 solo-git/

@@ -3,6 +3,8 @@
 
 **Last Updated**: October 16, 2025
 
+> Current Heaven Interface status: [Heaven Interface Implementation Summary](../../../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
+
 ## Prerequisites
 
 Before installing Solo Git, ensure you have:

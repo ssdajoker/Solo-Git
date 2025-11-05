@@ -14,10 +14,9 @@
 4. [Heaven GUI](#heaven-gui-heaven-gui)
 5. [Tests](#tests-tests)
 6. [Documentation](#documentation-docs)
-7. [Infrastructure](#infrastructure-infrastructure)
-8. [Configuration Files](#configuration-files)
-9. [Data and Runtime](#data-and-runtime)
-10. [File Naming Conventions](#file-naming-conventions)
+7. [Configuration Files](#configuration-files)
+8. [File Naming Conventions](#file-naming-conventions)
+9. [Appendix: Retired Directories](#appendix-retired-directories)
 
 ---
 
@@ -26,21 +25,24 @@
 Solo Git follows a clean, modular structure with clear separation between:
 - **Core Logic** (`sologit/`) - Python package with business logic
 - **User Interfaces** (CLI/TUI in `sologit/ui/`, GUI in `heaven-gui/`)
-- **Tests** (`tests/`) - Comprehensive test suite (76% coverage)
+- **Tests** (`tests/`, legacy suites in `tests_phase2/`)
 - **Documentation** (`docs/`) - User guides, API docs, wiki
-- **Infrastructure** (`infrastructure/`) - Deployment configs
+- **Supporting Assets** (`examples/`, `scripts/`, `jules-scratch/`)
 
 ### Quick Navigation
 
 ```
-solo-git/
+Solo-Git/
 ├── sologit/          → Core Python package
 ├── heaven-gui/       → Desktop GUI (Tauri + React)
-├── tests/            → Test suite (555 tests)
-├── docs/             → Documentation
-├── infrastructure/   → Deployment configs
-├── data/             → Runtime data
-└── [config files]    → Project configuration
+├── docs/             → Documentation and wiki sources
+├── tests/            → Active pytest suites
+├── tests_phase2/     → Legacy regression suites
+├── examples/         → Usage demos and reference scripts
+├── scripts/          → Tooling and maintenance helpers
+├── jules-scratch/    → Verification experiments
+├── solo-git          → CLI entrypoint shim
+└── [config files]    → Repository-level configuration (pyproject.toml, etc.)
 ```
 
 ---
@@ -48,26 +50,33 @@ solo-git/
 ## Root Directory
 
 ```
-solo-git/
-├── .git/                           # Git repository metadata
-├── .gitignore                      # Git ignore patterns
-├── .archive/                       # Historical artifacts (not in Git)
-│   └── historical_coverage/       # Old test coverage reports
-│
+Solo-Git/
 ├── README.md                       # Main project documentation
-├── ARCHITECTURE.md                 # System architecture guide
 ├── PROJECT_STRUCTURE.md            # This file
+├── ARCHITECTURE.md                 # System architecture guide
 ├── CHANGELOG.md                    # Version history
 ├── LICENSE                         # MIT license
 │
 ├── requirements.txt                # Python dependencies
-├── setup.py                        # Package installation script
+├── requirements-ci.txt             # CI dependency pinning
+├── setup.py                        # Legacy packaging entry point
 ├── pyproject.toml                  # Modern Python build config
 ├── pytest.ini                      # Pytest configuration
-├── MANIFEST.in                     # Package manifest
+├── MANIFEST.in                     # Source distribution manifest
+│
+├── solo-git                        # CLI entrypoint shim
+├── check_all_syntax.py             # Tooling helpers
+├── scripts/                        # Automation scripts
+├── examples/                       # Demo programs
+├── docs/                           # Documentation (guides, wiki)
+├── heaven-gui/                     # Desktop GUI sources
+├── jules-scratch/                  # Verification artifacts
+├── sologit/                        # Core Python package
+├── tests/                          # Active pytest suites
+├── tests_phase2/                   # Legacy regression suites
 │
 ├── current_coverage.json           # Latest test coverage data
-├── test_run_output.txt            # Latest test execution log
+├── test_run_output.txt             # Latest test execution log
 │
 ├── QUICKSTART.md                   # Quick start guide
 ├── CLI_DEMO.txt                    # CLI demo transcript
@@ -648,30 +657,6 @@ docs/
 
 ---
 
-## Infrastructure (`infrastructure/`)
-
-Deployment and CI/CD configuration.
-
-```
-infrastructure/
-├── jenkins/                        # Jenkins CI/CD
-│   ├── Jenkinsfile                # Pipeline definition
-│   ├── jenkins-config.xml         # Jenkins configuration
-│   └── plugins.txt                # Required plugins
-│
-└── sandbox/                        # Legacy sandbox configs (kept for history)
-    ├── sandbox.yml                # Sandbox configuration
-    └── entrypoint.sh              # Sandbox entry script
-```
-
-### Infrastructure Philosophy
-
-All container images were intentionally purged. We rely on direct subprocess execution
-and proudly refuse to ship or maintain container recipes. This repository treats
-containerization as an anti-pattern for Solo Git's workflows.
-
----
-
 ## Configuration Files
 
 ### Python Configuration
@@ -736,70 +721,6 @@ requests>=2.31.0
         "execute": true
       }
     }
-  }
-}
-```
-
----
-
-## Data and Runtime
-
-### Data Directory (`data/`)
-
-```
-data/
-├── repos/                          # Repository storage
-│   └── [repo-id]/                 # Each repo in subdirectory
-│       ├── .git/                  # Git metadata
-│       ├── .sologit/              # Solo Git state
-│       │   ├── state.json         # Repository state
-│       │   ├── config.yaml        # Repo-specific config
-│       │   └── cache/             # Temporary cache
-│       └── [project files]
-│
-└── logs/                           # Application logs
-    ├── evogitctl.log              # CLI logs
-    ├── ai_requests.log            # AI API request logs
-    ├── test_runs.log              # Test execution logs
-    └── [date]-audit.log           # Daily audit logs
-```
-
-### User Configuration
-
-```
-~/.sologit/                         # Global config directory
-├── config.yaml                    # Global configuration
-├── credentials.enc                # Encrypted API keys
-├── history.json                   # Command history
-└── cache/                         # Global cache
-    ├── models/                    # Model response cache
-    └── tmp/                       # Temporary files
-```
-
-### State File Structure
-
-**`.sologit/state.json`** example:
-```json
-{
-  "version": "0.4.0",
-  "repository": {
-    "id": "repo-123",
-    "trunk": "main",
-    "workpads": {
-      "pad-abc": {
-        "id": "pad-abc",
-        "title": "add-auth",
-        "status": "ACTIVE",
-        "base_commit": "abc123",
-        "patches": [],
-        "test_results": []
-      }
-    }
-  },
-  "ai_metrics": {
-    "total_requests": 42,
-    "total_cost_usd": 2.45,
-    "daily_budget_remaining": 7.55
   }
 }
 ```
@@ -883,6 +804,17 @@ Files that should **never** be deleted:
 - ✅ Removed Python bytecode files
 - ✅ Organized phase reports
 - ✅ No tar.gz archives
+
+---
+
+## Appendix: Retired Directories
+
+Two historical directories referenced in earlier documentation are no longer part of the tracked tree. They remain documented here so future contributors understand why they are absent.
+
+- **`infrastructure/`** – Jenkins and sandbox assets were removed during the Phase 4 cleanup in favor of per-environment automation owned by downstream deployments. Reintroduce the folder only if new CI/CD assets are committed; mirror the former `jenkins/` and `sandbox/` layout if that happens.
+- **`data/`** – Runtime repositories and logs now live outside the Git tree (e.g., under `~/.sologit/`). Keep working copies out of version control; if local fixtures are required, create them under `tests/fixtures/` instead of reviving `data/`.
+
+These directories should **not** be recreated unless there is an intentional decision to version infrastructure or runtime payloads.
 
 ---
 
