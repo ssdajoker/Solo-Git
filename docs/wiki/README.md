@@ -86,6 +86,13 @@ Start at **[Home.md](./Home.md)** for the main entry point.
    - Link to related documents
    - Add "Related Documents" section at bottom
 
+### Heaven Interface Documentation Regression Checklist
+
+- [ ] Update the **Heaven Interface** section of the root `README.md` whenever GUI write operations change (create/test/promote/delete scope, safety notes, and dependencies).
+- [ ] Ensure the [GUI Write Operations Implementation Report](../../GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md) reflects any new capabilities or constraints and cross-link it from README/UI guides.
+- [ ] Verify `heaven-gui/src/hooks/useSoloGitOperations.ts` and `heaven-gui/src-tauri/src/commands.rs` remain the source of truth for exposed operations, and adjust docs if their signatures or safeguards (file size limits, repository path enforcement, CLI invocation) change.
+- [ ] Re-run the Heaven GUI to confirm UI affordances match documented operations before merging.
+
 ### Markdown Style Guide
 
 - Use ATX headers (`#`, `##`, `###`)

@@ -48,7 +48,11 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
   - 5 engagement levels (Idle → Navigation → Planning → Coding/Test → Commit/Resolve)
   - Dark theme with minimal accent colors (#61AFEF blue, #98C379 green, #E06C75 red)
   - JSON-based state synchronization between CLI/TUI/GUI
-  - **Read-only interactions today**: the GUI is currently limited to viewing repository state; write operations must be performed through the CLI or TUI interfaces.
+  - Workpad lifecycle controls that invoke the Solo Git CLI under the hood: create new workpads, run targeted tests, promote approved changes, and delete obsolete pads without leaving the GUI.【F:heaven-gui/src-tauri/src/commands.rs†L204-L341】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L37-L126】
+
+See the [GUI Write Operations Implementation Report](GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md) for the authoritative breakdown of these workflows and their parity with the CLI/TUI experiences.
+
+> **Still guarded:** The GUI shells out to `evogitctl`, so the Solo Git CLI must be installed and on the PATH. File edits remain constrained by the backend—writes are capped at 1 MB and are blocked from escaping the repository directory, preserving the same safety rails used by the CLI/TUI stack.【F:heaven-gui/src-tauri/src/commands.rs†L21-L82】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L37-L112】【F:GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md†L1-L86】
 
 **Design Tokens**:
 - Typography: JetBrains Mono/SF Mono for code, SF Pro/Roboto for UI
