@@ -1,152 +1,69 @@
-
 # Solo Git Quick Start
 
-**Get up and running in 5 minutes**
-
-## Installation
-
-```bash
-# Clone and install
-git clone https://github.com/yourusername/solo-git.git
-cd solo-git
-pip install -e .
-
-# Configure
-evogitctl config setup
-```
-
-## Your First Repository
-
-### Initialize from Zip
-
-```bash
-# Create a test project
-mkdir myapp && cd myapp
-echo "print('Hello, Solo Git!')" > main.py
-zip -r ../myapp.zip .
-
-# Initialize with Solo Git
-cd ..
-evogitctl repo init --zip myapp.zip
-```
-
-### Or from Git
-
-```bash
-evogitctl repo init --git https://github.com/user/myrepo.git
-```
-
-## Working with Workpads
-
-### Create a Workpad
-
-```bash
-# Create an ephemeral workpad
-evogitctl pad create "add-new-feature"
-```
-
-This creates a disposable sandbox based on trunk.
-
-### List Workpads
-
-```bash
-evogitctl pad list
-```
-
-### Promote a Workpad
-
-```bash
-# After tests pass, promote to trunk
-evogitctl pad promote <pad-id>
-```
-
-## Running Tests
-
-```bash
-# Run fast tests
-evogitctl test run --pad <pad-id> --target fast
-
-# Run full test suite
-evogitctl test run --pad <pad-id> --target full
-```
-
-## The Pair Loop (Phase 2+)
-
-Once AI integration is complete:
-
-```bash
-# Natural language prompt
-evogitctl pair "add Redis caching to search endpoint"
-```
-
-This will:
-1. 🧠 Plan the changes (GPT-4 / Claude)
-2. ✍️ Generate patches (DeepSeek Coder)
-3. 🧪 Run tests (subprocess sandbox)
-4. ✅ Auto-merge if green
-
-**Total time**: ~1 minute
-
-## Configuration
-
-### View Config
-
-```bash
-evogitctl config show
-```
-
-### Test API
-
-```bash
-evogitctl config test
-```
-
-### Validate Config
-
-```bash
-evogitctl config validate
-```
-
-## What's Next?
-
-- **Phase 1** (Current): Core Git operations
-- **Phase 2** (Coming): AI-powered pair programming
-- **Phase 3** (Coming): Auto-merge & Jenkins integration
-- **Phase 4** (Coming): Desktop UI
-
-## Getting Help
-
-```bash
-# General help
-evogitctl --help
-
-# Command-specific help
-evogitctl pad --help
-evogitctl repo --help
-```
-
-## Key Concepts
-
-### Trunk
-Your main branch (`main`). Always protected, always pristine.
-
-### Workpad
-An ephemeral, disposable workspace. Like a branch, but you never name it or manage it.
-
-### Checkpoint
-An auto-save point within a workpad. Like Git commits, but lightweight.
-
-### Promote
-Fast-forward merge a workpad to trunk. Only works if tests are green.
-
-## Philosophy
-
-> **Tests are the review.**  
-> Green tests = instant merge.  
-> Red tests = quarantine in workpad.
-
-No PRs. No manual reviews. No ceremony.
+**Welcome to Solo Git! This guide will walk you through setting up a project and completing your first AI-powered development task in just a few minutes.**
 
 ---
 
-**Ready to dive deeper?** Check out the [Setup Guide](./setup-guide.md) and [CLI Reference](./cli-reference.md).
+## 1. Prerequisites
+
+Before you start, make sure you have:
+
+- ✅ **Python 3.9+** and **Git 2.30+** installed.
+- ✅ An **Abacus.ai API key**.
+- ✅ Solo Git installed and configured. If you haven't done this yet, please follow the **[Setup Guide](../Setup-Guide.md)**.
+
+---
+
+## 2. Initialize Your Repository
+
+First, we'll import your project into Solo Git. This creates a new, managed repository in the Solo Git environment.
+
+```bash
+# Initialize from a .zip file
+evogitctl repo init --zip /path/to/your/project.zip --name "My First Project"
+```
+
+This command will output a `Repo ID`. **Copy this ID for the next step.**
+
+---
+
+## 3. Create a Workpad
+
+In Solo Git, you don't use traditional branches. Instead, you create **workpads**—ephemeral, disposable sandboxes where the AI will do its work.
+
+```bash
+# Create a new workpad
+evogitctl pad create "Implement user authentication" --repo <your-repo-id>
+```
+
+Replace `<your-repo-id>` with the ID from the previous step. This command will output a `Pad ID`. **Copy this ID as well.**
+
+---
+
+## 4. The AI Pair Programming Loop
+
+Now, it's time to give the AI a task. The `pair` command is the core of the Solo Git experience.
+
+```bash
+# Instruct the AI to make a change
+evogitctl pair "Add a new endpoint for user login" --pad <your-pad-id>
+```
+
+Replace `<your-pad-id>` with the ID from the previous step. Solo Git will now:
+
+1.  **🧠 Plan**: Analyze your request and the codebase to create a plan.
+2.  **✍️ Code**: Generate the necessary code changes.
+3.  **🧪 Test**: Run your project's test suite to verify the changes.
+4.  **✅ Promote**: If all tests pass, automatically merge the changes into your trunk.
+
+---
+
+## 5. You're Done!
+
+Congratulations! You've successfully completed your first AI-powered development task with Solo Git. The changes are now in your `main` branch.
+
+### What's Next?
+
+- **Explore the TUI**: Launch the interactive terminal UI with `evogitctl tui`.
+- **Dive Deeper**: Learn more about AI-assisted development in the **[AI-Assisted Development Guide](../AI-Assisted-Development.md)**.
+- **Customize Your Workflow**: Explore the various configuration options in the **[Configuration Reference](../Configuration-Reference.md)**.
