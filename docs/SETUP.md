@@ -4,6 +4,8 @@
 
 This comprehensive guide covers everything you need to get Solo Git up and running, from installation to your first successful auto-merge workflow.
 
+For the completed Heaven Interface deliverables and current status, see the [Heaven Interface Implementation Summary](../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
+
 ---
 
 ## Table of Contents
