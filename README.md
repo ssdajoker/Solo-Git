@@ -57,7 +57,7 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
 - Icons: Monoline 2px stroke, 24×24px, monochrome
 - Motion: Subtle 150-300ms animations with ease-in-out
 
-See the [Heaven Interface Design System](docs/HEAVEN_INTERFACE.md) and [Heaven Interface Guide](docs/HEAVEN_INTERFACE_GUIDE.md) for complete specifications
+See the [Heaven Interface Design System](docs/HEAVEN_INTERFACE.md) and [Heaven Interface Guide](docs/HEAVEN_INTERFACE_GUIDE.md) for complete specifications and the [Heaven Interface Implementation Summary](HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md) for the latest delivery snapshot.
 
 ### ✨ **Frictionless Workflow**
 - **No Branch Management**: Say goodbye to `git checkout -b feature/...`

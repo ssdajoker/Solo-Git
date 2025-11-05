@@ -30,6 +30,9 @@ docs/wiki/
 │   ├── test-orchestrator.md
 │   └── model-routing.md
 │
+├── history/                   # Archived plans and superseded docs
+│   └── heaven-interface-implementation-plan.md
+│
 └── guides/                    # User guides
     ├── setup-guide.md
     ├── quick-start.md
@@ -60,6 +63,8 @@ Start at **[Home.md](./Home.md)** for the main entry point.
 - [Vision Document](./timeline/2025-10-16-vision.md) - Core philosophy
 - [Game Plan](./timeline/2025-10-16-game-plan.md) - Complete roadmap
 - [Phase 0 Completion](./phases/phase-0-completion.md) - Foundation complete
+- [Heaven Interface Implementation Summary](../../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md) - Current Heaven Interface delivery snapshot
+- [History: Heaven Interface Implementation Completion Plan](./history/heaven-interface-implementation-plan.md) - Archived implementation checklist (superseded)
 
 ## Contributing to Wiki
 

@@ -4,6 +4,8 @@
 
 Solo Git is a frictionless Git workflow for AI-augmented solo developers that eliminates branches, PRs, and manual reviews, replacing them with **ephemeral workpads** and **test-driven auto-merging**.
 
+For the current Heaven Interface status and deliverables, review the [Heaven Interface Implementation Summary](HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
+
 ### Philosophy
 - ✅ **Tests are the review** - Green tests = instant merge
 - 🎯 **Single trunk, no PRs** - No branch management overhead

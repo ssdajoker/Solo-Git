@@ -62,6 +62,10 @@ This wiki serves as the central knowledge base for Solo Git, tracking the projec
   - Test Suite: 48 tests, 46 passing (2 legacy container-dependent)
   - CLI Commands: 5 new commands for Phase 3 workflows
 
+## 🕰️ History
+
+- [History: Heaven Interface Implementation Completion Plan](./history/heaven-interface-implementation-plan.md) — Archived; superseded by the [Heaven Interface Implementation Summary](../../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
+
 ---
 
 ## 🗂️ Documentation Structure
