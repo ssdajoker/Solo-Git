@@ -1,8 +1,11 @@
-# Solo Git CLI/TUI Quick Start Guide
+# Solo Git Quick Start
 
+**This guide will walk you through setting up a project and completing your first AI-powered development task in just a few minutes.**
 ## 🚀 Welcome to Solo Git!
 
 Solo Git is a frictionless Git workflow for AI-augmented solo developers that eliminates branches, PRs, and manual reviews, replacing them with **ephemeral workpads** and **test-driven auto-merging**.
+
+For the current Heaven Interface status and deliverables, review the [Heaven Interface Implementation Summary](HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
 
 ### Philosophy
 - ✅ **Tests are the review** - Green tests = instant merge
@@ -331,164 +334,60 @@ evogitctl pad auto-merge <pad_id>
 
 ---
 
-## 📝 Configuration
+## 1. Prerequisites
 
-### Configuration File Location
+Before you start, make sure you have:
 
-```bash
-~/.sologit/config.yaml
-```
-
-### Key Configuration Options
-
-```yaml
-abacus:
-  endpoint: https://api.abacus.ai/api/v0
-  api_key: your-api-key-here
-
-models:
-  planning: gpt-4o
-  coding: deepseek-coder-33b
-  fast: llama-3.1-8b-instruct
-
-budget:
-  daily_usd_cap: 10.0
-  alert_threshold: 0.8
-  track_by_model: true
-
-workflow:
-  auto_merge_on_green: true
-  auto_rollback_on_red: true
-  workpad_ttl_days: 7
-
-paths:
-  config_file: ~/.sologit/config.yaml
-  repos_dir: ~/.sologit/repos
-```
+- ✅ **Python 3.9+** and **Git 2.30+** installed.
+- ✅ An **Abacus.ai API key**.
+- ✅ Solo Git installed and configured. If you haven't done this yet, please follow the **[Setup Guide](docs/SETUP.md)**.
 
 ---
 
-## 🐛 Troubleshooting
+## 2. Initialize Your Repository
 
-### CLI not found
-
-```bash
-# Make sure ~/.local/bin is in your PATH
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### Dependencies issues
+First, we'll import your project into Solo Git. This creates a new, managed repository in the Solo Git environment.
 
 ```bash
-# Reinstall Solo Git
-cd /home/ubuntu/code_artifacts/solo-git
-pip3 install -e .
+# Initialize from a .zip file
+evogitctl repo init --zip /path/to/your/project.zip --name "My First Project"
 ```
 
-### Check installation
-
-```bash
-# Verify Python version
-python3 --version  # Should be 3.9+
-
-# Check if evogitctl is in PATH
-which evogitctl
-
-# Test installation
-evogitctl hello
-```
+This command will output a `Repo ID`. **Copy this ID for the next step.**
 
 ---
 
-## 📚 Additional Resources
+## 3. Create a Workpad
 
-### Documentation
-
-- Full documentation: `docs/` directory
-- API documentation: `docs/API.md`
-- Heaven Interface: `HEAVEN_INTERFACE_*.md` reports
-
-### Testing
+In Solo Git, you don't use traditional branches. Instead, you create **workpads**—ephemeral, disposable sandboxes where the AI will do its work.
 
 ```bash
-# Run test suite
-cd /home/ubuntu/code_artifacts/solo-git
-pytest
-
-# Run with coverage
-pytest --cov=sologit --cov-report=html
+# Create a new workpad
+evogitctl pad create "Implement user authentication" --repo <your-repo-id>
 ```
 
-### Development
+Replace `<your-repo-id>` with the ID from the previous step. This command will output a `Pad ID`. **Copy this ID as well.**
+
+---
+
+## 4. The AI Pair Programming Loop
+
+Now, it's time to give the AI a task. The `pair` command is the core of the Solo Git experience.
 
 ```bash
-# Install in development mode
-pip3 install -e .
-
-# Run tests
-pytest
-
-# Format code
-black sologit/
-
-# Lint
-flake8 sologit/
+# Instruct the AI to make a change
+evogitctl pair "Add a new endpoint for user login" --pad <your-pad-id>
 ```
 
----
+Replace `<your-pad-id>` with the ID from the previous step. Solo Git will now:
 
-## 🎯 Next Steps
-
-1. ✅ **Installation Complete** - All dependencies are installed and working
-2. 🔧 **Try the CLI** - Run `evogitctl hello` to get started
-3. 🎨 **Launch Heaven TUI** - Run `evogitctl heaven` for the full interface
-4. 📖 **Read the Docs** - Check out the documentation in `docs/`
-5. 🤖 **Configure AI** - Set up your Abacus.ai API key with `evogitctl config setup`
-6. 🚀 **Start Building** - Create your first repository and workpad!
+1.  **🧠 Plan**: Analyze your request and the codebase to create a plan.
+2.  **✍️ Code**: Generate the necessary code changes.
+3.  **🧪 Test**: Run your project's test suite to verify the changes.
+4.  **✅ Promote**: If all tests pass, automatically merge the changes into your trunk.
 
 ---
 
-## 🆘 Getting Help
+## 5. You're Done!
 
-### Command Help
-
-```bash
-# Get help for any command
-evogitctl <command> --help
-
-# Examples:
-evogitctl pad --help
-evogitctl ai --help
-evogitctl config --help
-```
-
-### In TUI
-
-- Press `?` to show help and keyboard shortcuts
-- Press `Ctrl+P` to open command palette with fuzzy search
-
----
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
----
-
-## 🌟 Credits
-
-Built with ❤️ by the Solo Git Team
-
-Powered by:
-- Abacus.ai (AI orchestration)
-- Rich (beautiful CLI formatting)
-- Textual (TUI framework)
-- GitPython (Git operations)
-- Native subprocess runner (sandboxed testing without containers)
-
----
-
-**Happy Solo Coding! 🚀**
-
-For questions, issues, or feature requests, please open an issue on GitHub.
+Congratulations! You've successfully completed your first AI-powered development task with Solo Git. The changes are now in your `main` branch.

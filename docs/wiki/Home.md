@@ -62,9 +62,15 @@ This wiki serves as the central knowledge base for Solo Git, tracking the projec
   - Test Suite: 48 tests, 46 passing (2 legacy container-dependent)
   - CLI Commands: 5 new commands for Phase 3 workflows
 
+## 🕰️ History
+
+- [History: Heaven Interface Implementation Completion Plan](./history/heaven-interface-implementation-plan.md) — Archived; superseded by the [Heaven Interface Implementation Summary](../../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
+
 ---
 
 ## 🗂️ Documentation Structure
+
+Looking for the full repository map? Consult [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) for the current directory inventory.
 
 ### By Category
 
@@ -76,6 +82,7 @@ This wiki serves as the central knowledge base for Solo Git, tracking the projec
 - [Phase 4: Documentation & Beta Prep](./phases/phase-4-completion.md) ✅
 
 #### 🏗️ Architecture
+- [Heaven Interface Playbook](./Heaven_Interface_Playbook.md)
 - [System Architecture](./architecture/core-components.md)
 - [Git Engine Design](./architecture/git-engine.md)
 - [Test Orchestrator Design](./architecture/test-orchestrator.md)
@@ -172,6 +179,7 @@ All documents in chronological order showing project evolution.
 - Setup GitHub Discussions
 - Prepare public announcement
 - Define support channels
+For the latest project status, please refer to the **[Project Status section in the main README.md](../../../README.md#project-status)**. This ensures a single, authoritative source for all status updates.
 
 ---
 

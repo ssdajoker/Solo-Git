@@ -30,12 +30,17 @@ docs/wiki/
 │   ├── test-orchestrator.md
 │   └── model-routing.md
 │
+├── history/                   # Archived plans and superseded docs
+│   └── heaven-interface-implementation-plan.md
+│
 └── guides/                    # User guides
     ├── setup-guide.md
     ├── quick-start.md
     ├── cli-reference.md
     └── config-reference.md
 ```
+
+For the full repository layout outside the wiki, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md).
 
 ## Navigation
 
@@ -60,6 +65,8 @@ Start at **[Home.md](./Home.md)** for the main entry point.
 - [Vision Document](./timeline/2025-10-16-vision.md) - Core philosophy
 - [Game Plan](./timeline/2025-10-16-game-plan.md) - Complete roadmap
 - [Phase 0 Completion](./phases/phase-0-completion.md) - Foundation complete
+- [Heaven Interface Implementation Summary](../../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md) - Current Heaven Interface delivery snapshot
+- [History: Heaven Interface Implementation Completion Plan](./history/heaven-interface-implementation-plan.md) - Archived implementation checklist (superseded)
 
 ## Contributing to Wiki
 
@@ -85,6 +92,13 @@ Start at **[Home.md](./Home.md)** for the main entry point.
 4. **Cross-Reference**:
    - Link to related documents
    - Add "Related Documents" section at bottom
+
+### Heaven Interface Documentation Regression Checklist
+
+- [ ] Update the **Heaven Interface** section of the root `README.md` whenever GUI write operations change (create/test/promote/delete scope, safety notes, and dependencies).
+- [ ] Ensure the [GUI Write Operations Implementation Report](../../GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md) reflects any new capabilities or constraints and cross-link it from README/UI guides.
+- [ ] Verify `heaven-gui/src/hooks/useSoloGitOperations.ts` and `heaven-gui/src-tauri/src/commands.rs` remain the source of truth for exposed operations, and adjust docs if their signatures or safeguards (file size limits, repository path enforcement, CLI invocation) change.
+- [ ] Re-run the Heaven GUI to confirm UI affordances match documented operations before merging.
 
 ### Markdown Style Guide
 
