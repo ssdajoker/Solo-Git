@@ -48,6 +48,7 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
   - 5 engagement levels (Idle → Navigation → Planning → Coding/Test → Commit/Resolve)
   - Dark theme with minimal accent colors (#61AFEF blue, #98C379 green, #E06C75 red)
   - JSON-based state synchronization between CLI/TUI/GUI
+  - **Full Read/Write Operations**: The GUI provides a complete interactive experience for all Solo Git workflows.
   - Workpad lifecycle controls that invoke the Solo Git CLI under the hood: create new workpads, run targeted tests, promote approved changes, and delete obsolete pads without leaving the GUI.【F:heaven-gui/src-tauri/src/commands.rs†L204-L535】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L37-L126】
 
 See the [GUI Write Operations Implementation Report](GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md) for the authoritative breakdown of these workflows and their parity with the CLI/TUI experiences.
@@ -99,49 +100,57 @@ throughout the codebase and documentation.
 
 ## Quick Start
 
-### Prerequisites
+**This guide will walk you through setting up a project and completing your first AI-powered development task in just a few minutes.**
 
-- **Python 3.9+**
-- **Git 2.30+**
-- **Abacus.ai API Account** ([Sign up here](https://abacus.ai))
+### 1. Prerequisites
 
-### Installation
+Before you start, make sure you have:
 
-```bash
-# Install from source
-git clone https://github.com/yourusername/solo-git.git
-cd solo-git
-pip install -e .
+- ✅ **Python 3.9+** and **Git 2.30+** installed.
+- ✅ An **Abacus.ai API key**.
+- ✅ Solo Git installed and configured. If you haven't done this yet, please follow the **[Setup Guide](docs/SETUP.md)**.
 
-# Verify installation
-evogitctl --version
-```
+### 2. Initialize Your Repository
 
-### Configuration
+First, we'll import your project into Solo Git. This creates a new, managed repository in the Solo Git environment.
 
 ```bash
-# Interactive setup (recommended)
-evogitctl config setup
-
-# Or set environment variables
-export ABACUS_API_ENDPOINT=https://api.abacus.ai/v1
-export ABACUS_API_KEY=your-api-key-here
+# Initialize from a .zip file
+evogitctl repo init --zip /path/to/your/project.zip --name "My First Project"
 ```
 
-### Your First Project
+This command will output a `Repo ID`. **Copy this ID for the next step.**
+
+### 3. Create a Workpad
+
+In Solo Git, you don't use traditional branches. Instead, you create **workpads**—ephemeral, disposable sandboxes where the AI will do its work.
 
 ```bash
-# Initialize repository from zip
-evogitctl repo init --zip myproject.zip
-
-# Create a workpad
-evogitctl pad create "add-auth-feature"
-
-# Run tests
-evogitctl test run --target fast
-
-# Tests passed? Auto-promoted to trunk! ✅
+# Create a new workpad
+evogitctl pad create "Implement user authentication" --repo <your-repo-id>
 ```
+
+Replace `<your-repo-id>` with the ID from the previous step. This command will output a `Pad ID`. **Copy this ID as well.**
+
+### 4. The AI Pair Programming Loop
+
+Now, it's time to give the AI a task. The `pair` command is the core of the Solo Git experience.
+
+```bash
+# Instruct the AI to make a change
+evogitctl pair "Add a new endpoint for user login" --pad <your-pad-id>
+```
+
+Replace `<your-pad-id>` with the ID from the previous step. Solo Git will now:
+
+1.  **🧠 Plan**: Analyze your request and the codebase to create a plan.
+2.  **✍️ Code**: Generate the necessary code changes.
+3.  **🧪 Test**: Run your project's test suite to verify the changes.
+4.  **✅ Promote**: If all tests pass, automatically merge the changes into your trunk.
+
+### 5. You're Done!
+
+Congratulations! You've successfully completed your first AI-powered development task with Solo Git. The changes are now in your `main` branch.
 
 ---
 
@@ -411,6 +420,16 @@ evogitctl --help                    # Show help
 ## Project Status
 
 ### 🚀 Project Status: Private Beta Ready
+
+| Metric | Value | Status |
+| :--- | :--- | :--- |
+| **Current Phase** | ✅ **Phase 4 Complete** | Ready for Launch |
+| **Launch Readiness**| 🟢 **Private Beta** | **READY NOW** |
+| **Next Milestone** | 🟡 **Public Beta** | Ready in 1-2 days |
+| **Test Coverage** | 76% Overall | 90%+ on Core |
+| **Passing Tests** | 555 / 581 (95.5%)| Non-critical failures |
+| **Documentation** | 35k+ lines | Comprehensive |
+
 
 | Metric | Value | Status |
 | :--- | :--- | :--- |
@@ -702,7 +721,7 @@ Solo Git recognizes that for solo developers working with AI:
 - ✅ Comprehensive documentation
 - ✅ Setup and API guides
 - ✅ Beta launch checklist
-- 🚧 Desktop UI (Electron/React)
+- ✅ Desktop GUI (Tauri + React)
 - 🚧 Metrics dashboard
 - 🚧 Final polish and bug fixes
 
