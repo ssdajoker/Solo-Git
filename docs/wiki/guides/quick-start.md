@@ -1,6 +1,59 @@
 # Solo Git Quick Start
 
 **Welcome to Solo Git! This guide will walk you through setting up a project and completing your first AI-powered development task in just a few minutes.**
+**Get up and running in 5 minutes**
+
+> For the current Heaven Interface delivery snapshot, review the [Heaven Interface Implementation Summary](../../HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md).
+
+## Installation
+
+```bash
+# Clone and install
+git clone https://github.com/yourusername/solo-git.git
+cd solo-git
+pip install -e .
+
+# Configure
+evogitctl config setup
+```
+
+## Your First Repository
+
+### Initialize from Zip
+
+```bash
+# Create a test project
+mkdir myapp && cd myapp
+echo "print('Hello, Solo Git!')" > main.py
+zip -r ../myapp.zip .
+
+# Initialize with Solo Git
+cd ..
+evogitctl repo init --zip myapp.zip
+```
+
+### Or from Git
+
+```bash
+evogitctl repo init --git https://github.com/user/myrepo.git
+```
+
+## Working with Workpads
+
+### Create a Workpad
+
+```bash
+# Create an ephemeral workpad
+evogitctl pad create "add-new-feature"
+```
+
+This creates a disposable sandbox based on trunk.
+
+### List Workpads
+
+```bash
+evogitctl pad list
+```
 
 ---
 

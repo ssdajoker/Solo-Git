@@ -49,6 +49,11 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
   - Dark theme with minimal accent colors (#61AFEF blue, #98C379 green, #E06C75 red)
   - JSON-based state synchronization between CLI/TUI/GUI
   - **Full Read/Write Operations**: The GUI provides a complete interactive experience for all Solo Git workflows.
+  - Workpad lifecycle controls that invoke the Solo Git CLI under the hood: create new workpads, run targeted tests, promote approved changes, and delete obsolete pads without leaving the GUI.【F:heaven-gui/src-tauri/src/commands.rs†L204-L535】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L37-L126】
+
+See the [GUI Write Operations Implementation Report](GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md) for the authoritative breakdown of these workflows and their parity with the CLI/TUI experiences.
+
+> **Still guarded:** The GUI shells out to `evogitctl`, so the Solo Git CLI must be installed and on the PATH. File edits remain constrained by the backend—writes are capped at 1 MB and are blocked from escaping the repository directory, preserving the same safety rails used by the CLI/TUI stack.【F:heaven-gui/src-tauri/src/commands.rs†L21-L82】【F:heaven-gui/src/hooks/useSoloGitOperations.ts†L71-L163】【F:GUI_WRITE_OPERATIONS_IMPLEMENTATION_REPORT.md†L1-L86】
 
 **Design Tokens**:
 - Typography: JetBrains Mono/SF Mono for code, SF Pro/Roboto for UI
@@ -58,6 +63,7 @@ Heaven is Solo Git's minimalist, code-first interface inspired by Jony Ive and D
 - Motion: Subtle 150-300ms animations with ease-in-out
 
 See the [Heaven Interface Playbook](docs/wiki/Heaven_Interface_Playbook.md) for complete specifications.
+See the [Heaven Interface Design System](docs/HEAVEN_INTERFACE.md) and [Heaven Interface Guide](docs/HEAVEN_INTERFACE_GUIDE.md) for complete specifications and the [Heaven Interface Implementation Summary](HEAVEN_INTERFACE_IMPLEMENTATION_SUMMARY.md) for the latest delivery snapshot.
 
 ### ✨ **Frictionless Workflow**
 - **No Branch Management**: Say goodbye to `git checkout -b feature/...`
@@ -424,6 +430,16 @@ evogitctl --help                    # Show help
 | **Passing Tests** | 555 / 581 (95.5%)| Non-critical failures |
 | **Documentation** | 35k+ lines | Comprehensive |
 
+
+| Metric | Value | Status |
+| :--- | :--- | :--- |
+| **Current Phase** | ✅ **Phase 4 Complete** | Ready for Launch |
+| **Launch Readiness**| 🟢 **Private Beta** | **READY NOW** |
+| **Next Milestone** | 🟡 **Public Beta** | Ready in 1-2 days |
+| **Test Coverage** | 76% Overall | 90%+ on Core |
+| **Passing Tests** | 555 / 581 (95.5%)| Non-critical failures |
+| **Documentation** | 35k+ lines | Comprehensive |
+
 **Solo Git is stable, feature-complete, and approved for immediate private beta launch.** All core functionality from Phases 0-4 is implemented and validated.
 
 ➡️ **For the latest detailed breakdown, see the [Phase 4 Completion Report](docs/PHASE_4_COMPLETION_REPORT.md).**
@@ -484,6 +500,8 @@ flake8 sologit/
 ```
 
 ### Project Structure
+
+> 📁 Need the full inventory? See the continuously maintained [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) guide.
 
 ```
 solo-git/
