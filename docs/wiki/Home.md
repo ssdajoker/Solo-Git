@@ -72,8 +72,8 @@ This wiki serves as the central knowledge base for Solo Git, tracking the projec
 - [Phase 0: Foundation & Setup](./phases/phase-0-overview.md) ✅
 - [Phase 1: Core Git Engine](./phases/phase-1-overview.md) ✅
 - [Phase 2: AI Integration](./phases/phase-2-overview.md) ✅
-- [Phase 3: Testing & Auto-Merge](./phases/phase-3-overview.md) ⏳
-- [Phase 4: Polish & Beta](./phases/phase-4-overview.md) ⏳
+- [Phase 3: Testing & Auto-Merge](./phases/phase-3-overview.md) ✅
+- [Phase 4: Documentation & Beta Prep](./phases/phase-4-completion.md) ✅
 
 #### 🏗️ Architecture
 - [System Architecture](./architecture/core-components.md)
@@ -97,6 +97,8 @@ All documents in chronological order showing project evolution.
 ### Current Phase: Phase 4 Complete! 🎉
 **Status**: ✅ Documentation, Polish & Beta Preparation fully implemented
 
+➡️ **Single Source of Truth**: See the [Project Status Widget](../../README.md#project-status-widget) in the repository README for canonical status, dates, and upcoming milestones.
+
 **Phase 4 Completed** (October 17, 2025):
 - ✅ **README.md** - Comprehensive project overview with Phase 4 specifications
 - ✅ **docs/SETUP.md** - Complete setup guide (installation, configuration, troubleshooting)
@@ -106,8 +108,8 @@ All documents in chronological order showing project evolution.
 - ✅ **Wiki Updates** - All documentation pages updated
 - ✅ **Phase 4 Completion Report** - Final assessment and metrics
 - ✅ **Code Quality** - Bug fixes, improved error handling, enhanced logging
-- ✅ **Total Tests**: 555 passing (95.5% pass rate)
-- ✅ **Code Coverage**: 76% overall, 90%+ on core components
+- ✅ **Total Tests**: 562 passing (96.6% pass rate from 581 total)
+- ✅ **Code Coverage**: 73% overall, 90%+ on core components
 - ✅ **Launch Status**: Ready for Private Beta (now), Public Beta (1-2 days)
 
 **Phase 3 Completed** (October 17, 2025):
@@ -147,8 +149,8 @@ All documents in chronological order showing project evolution.
 ### Project Metrics
 - **Lines of Code**: 3,220 (main package)
 - **Test Files**: 32 test suites
-- **Total Tests**: 555 passing (95.5% pass rate)
-- **Overall Coverage**: 76% (90%+ on core components)
+- **Total Tests**: 562 passing (96.6% pass rate from 581 total)
+- **Overall Coverage**: 73% (90%+ on core components)
 - **Documentation Pages**: 23+ comprehensive guides
 - **CLI Commands**: 25+ commands across 6 groups
 - **Supported Models**: 9+ via Abacus.ai RouteLLM API
