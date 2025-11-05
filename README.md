@@ -496,6 +496,8 @@ flake8 sologit/
 
 ### Project Structure
 
+> 📁 Need the full inventory? See the continuously maintained [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) guide.
+
 ```
 solo-git/
 ├── sologit/                    # Main Python package

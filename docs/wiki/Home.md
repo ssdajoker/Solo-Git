@@ -66,6 +66,8 @@ This wiki serves as the central knowledge base for Solo Git, tracking the projec
 
 ## 🗂️ Documentation Structure
 
+Looking for the full repository map? Consult [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) for the current directory inventory.
+
 ### By Category
 
 #### 📖 Phases
