@@ -37,6 +37,8 @@ docs/wiki/
     └── config-reference.md
 ```
 
+For the full repository layout outside the wiki, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md).
+
 ## Navigation
 
 Start at **[Home.md](./Home.md)** for the main entry point.
