@@ -419,6 +419,7 @@ def test_repo_list_help():
     assert "Promoting workpad" in result.output
     assert "Workpad promoted to trunk!" in result.output
     assert "Commit: abcdef123" in result.output
+    mock_git_engine.promote_workpad.assert_called_once_with('pad1')
 
 
 def test_pad_promote_not_fast_forward(mock_git_engine):

@@ -36,9 +36,7 @@
         "icons/icon.ico"
       ],
       "resources": [],
-      "externalBin": [
-        "headless-core"
-      ],
+      "externalBin": [],
       "copyright": "Copyright © 2024 Solo Git Contributors",
       "category": "DeveloperTool",
       "shortDescription": "Git workflow manager with AI assistance",

@@ -1,389 +1,41 @@
-"""Headless-backed command implementations for Solo Git CLI."""
 
-from __future__ import annotations
+"""Command implementations for Solo Git CLI."""
 
-import json
-import os
-import sys
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
-import logging
-from contextlib import contextmanager
-from unittest.mock import MagicMock
-
+import asyncio
 import click
+from pathlib import Path
+from typing import List, Optional
+import time
+from typing import Any, Dict, Sequence, Tuple, Union, cast
+
 from rich.console import Console
 
-from sologit.api.service import SoloGitService
-from sologit.cli.headless_client import HeadlessClient, HeadlessServiceError
 from sologit.config.manager import ConfigManager
 from sologit.engines.git_engine import GitEngine, GitEngineError
 from sologit.engines.patch_engine import PatchEngine
-from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator
-from sologit.state.git_sync import GitStateSync
+from sologit.engines.test_orchestrator import TestOrchestrator, TestConfig
+from sologit.workflows.ci_orchestrator import CIOrchestrator
+from sologit.workflows.rollback_handler import RollbackHandler
 from sologit.state.manager import StateManager
+from sologit.state.git_sync import GitStateSync
+from sologit.engines.test_orchestrator import (
+    TestResult,
+    TestStatus,
+)
+from sologit.state.schema import TestResult as StateTestResult
+from sologit.utils.logger import get_logger
 from sologit.ui.formatter import RichFormatter
 from sologit.ui.theme import theme
-from sologit.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Initialize Rich formatter
 formatter = RichFormatter()
-_client: Optional[HeadlessClient] = None
-_service: Optional[SoloGitService] = None
-_git_sync: Optional[GitStateSync] = None
-_patch_engine: Optional[PatchEngine] = None
-_test_orchestrator: Optional[TestOrchestrator] = None
-
-TestEntry = Union[TestConfig, Dict[str, Any]]
-
-
-def _status_to_str(value: Any) -> str:
-    """Normalize a status value (string or Enum-like) to a lower-case string.
-
-    Handles values like "passed", TestStatus.PASSED, or objects exposing name/value.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, MagicMock):
-        return ""
-    # Enum-like: prefer .value then .name
-    if hasattr(value, "value"):
-        try:
-            val = getattr(value, "value")
-            return str(val).lower()
-        except Exception:
-            pass
-    if hasattr(value, "name"):
-        try:
-            val = getattr(value, "name")
-            return str(val).lower()
-        except Exception:
-            pass
-    # Fallback to string
-    # Basic primitives
-    if isinstance(value, (str, int, float, bool)):
-        return str(value).lower()
-    return ""
-
-
-@contextmanager
-def _suppress_info_logs(enable: bool = False):
-    """Temporarily raise log levels to WARNING to avoid polluting JSON output."""
-    if not enable:
-        yield
-        return
-    targets = [
-        logging.getLogger("sologit"),
-        logging.getLogger("sologit.engines.git_engine"),
-        logging.getLogger("sologit.state.git_sync"),
-    ]
-    prev = [lg.level for lg in targets]
-    try:
-        for lg in targets:
-            lg.setLevel(logging.WARNING)
-        yield
-    finally:
-        for lg, lvl in zip(targets, prev):
-            lg.setLevel(lvl)
 
 
 def set_formatter_console(console: Console) -> None:
-    """Allow the CLI entrypoint to reuse its Rich console instance."""
-
+    """Allow external modules to configure the console used by the formatter."""
     formatter.set_console(console)
-
-
-class _LegacyHeadlessAdapter:
-    """Adapter that mimics HeadlessClient using local service/engines.
-
-    Enables tests to patch legacy helpers while commands call a headless-like interface.
-    """
-
-    def __init__(self, service: SoloGitService) -> None:
-        self.service = service
-
-    def list_repositories(self) -> Iterable[Dict[str, Any]]:
-        # Respect legacy GitEngine mocking in tests
-        try:
-            engine = get_git_engine()
-            repos = getattr(engine, "list_repos")()
-            results: List[Dict[str, Any]] = []
-            for r in repos:
-                # Support both object-like and dict-like repos
-                rid = getattr(r, "id", None) or getattr(r, "repo_id", None) or (r.get("id") if isinstance(r, dict) else None)
-                name = getattr(r, "name", None) or (r.get("name") if isinstance(r, dict) else None) or rid or "—"
-                trunk = getattr(r, "trunk_branch", None) or (r.get("trunk_branch") if isinstance(r, dict) else None) or "main"
-                workpads = getattr(r, "workpad_count", None) or (r.get("workpad_count") if isinstance(r, dict) else None) or 0
-                created = getattr(r, "created_at", None) or (r.get("created_at") if isinstance(r, dict) else None) or "—"
-                results.append({
-                    "id": rid,
-                    "name": name,
-                    "trunk_branch": trunk,
-                    "workpad_count": workpads,
-                    "created_at": created,
-                })
-            return results
-        except Exception:
-            # Fallback to service if GitEngine is unavailable
-            return self.service.list_repositories(include_state=True)
-
-    def get_repository(self, repo_id: str) -> Optional[Dict[str, Any]]:
-        try:
-            repo = get_git_engine().get_repo(repo_id)
-            if not repo:
-                return None
-            # normalize
-            return {
-                "id": getattr(repo, "id", repo_id),
-                "name": getattr(repo, "name", repo_id),
-                "path": getattr(repo, "path", None),
-                "trunk_branch": getattr(repo, "trunk_branch", "main"),
-                "workpad_count": getattr(repo, "workpad_count", 0),
-                "source_type": getattr(repo, "source_type", None) or getattr(repo, "source", None),
-                "created_at": getattr(repo, "created_at", None),
-            }
-        except Exception:
-            return self.service.get_repository(repo_id, include_state=True)
-
-    def create_repository(
-        self,
-        *,
-        source: str,
-        name: Optional[str] = None,
-        target_path: Optional[str] = None,
-        git_url: Optional[str] = None,
-        zip_bytes: Optional[bytes] = None,
-    ) -> Dict[str, Any]:
-        sync = get_git_sync()
-        if source == "zip":
-            if zip_bytes is None:
-                raise HeadlessServiceError("missing_zip", "Zip content required")
-            if not name:
-                name = "repository"
-            return sync.init_repo_from_zip(zip_bytes, name)
-        if source == "git":
-            if not git_url:
-                raise HeadlessServiceError("missing_git", "Git URL required")
-            return sync.init_repo_from_git(git_url, name)
-        if source == "empty":
-            if not name:
-                name = "repository"
-            return sync.create_empty_repo(name, path=target_path)
-        # Fallback to service for unknown sources
-        return self.service.initialize_repository(
-            empty=(source == "empty"),
-            name=name,
-            target_path=Path(target_path).expanduser() if target_path else None,
-            git_url=git_url,
-            zip_bytes=zip_bytes,
-        )
-
-    def delete_repository(self, repo_id: str, *, keep_files: bool = False) -> None:
-        self.service.delete_repository(repo_id, keep_files=keep_files)
-
-    def list_workpads(self, repo_id: str) -> Iterable[Dict[str, Any]]:
-        try:
-            engine = get_git_engine()
-            pads = getattr(engine, "list_workpads")(repo_id)
-            results: List[Dict[str, Any]] = []
-            for p in pads:
-                pid = getattr(p, "id", None) or getattr(p, "workpad_id", None) or (p.get("id") if isinstance(p, dict) else None)
-                # Use pad-provided fields directly to avoid MagicMock bleed-through
-                test_status = getattr(p, "test_status", None) or (p.get("test_status") if isinstance(p, dict) else None)
-                updated_at = getattr(p, "updated_at", None) or (p.get("updated_at") if isinstance(p, dict) else None)
-                raw_status = getattr(p, "status", None) or (p.get("status") if isinstance(p, dict) else None)
-                status_value = raw_status if isinstance(raw_status, str) else "active"
-                # sanitize updated_at if it's a mock-like
-                if isinstance(updated_at, MagicMock):
-                    updated_at = None
-                results.append({
-                    "workpad_id": pid,
-                    "title": getattr(p, "title", None) or (p.get("title") if isinstance(p, dict) else None) or pid,
-                    "status": status_value,
-                    "updated_at": updated_at or "—",
-                    "test_status": test_status,
-                })
-            return results
-        except Exception:
-            return self.service.list_workpads(repo_id)
-
-    def create_workpad(self, repo_id: str, title: str) -> Dict[str, Any]:
-        try:
-            pad_id = get_git_engine().create_workpad(repo_id, title)
-            wp = get_git_engine().get_workpad(pad_id)
-            return {
-                "workpad_id": pad_id,
-                "repo_id": repo_id,
-                "title": getattr(wp, "title", title) if wp else title,
-                "branch_name": getattr(wp, "branch_name", f"pad/{title}") if wp else f"pad/{title}",
-            }
-        except Exception:
-            return self.service.create_workpad(repo_id, title)
-
-    def get_workpad(self, pad_id: str) -> Optional[Dict[str, Any]]:
-        try:
-            wp = get_git_engine().get_workpad(pad_id)
-            if not wp:
-                return None
-            # Try to surface checkpoints and test status for CLI display/tests
-            checkpoints = []
-            try:
-                checkpoints = list(getattr(wp, "checkpoints", []) or [])
-            except Exception:
-                try:
-                    checkpoints = list(wp.get("checkpoints", []) if isinstance(wp, dict) else [])
-                except Exception:
-                    checkpoints = []
-            test_status = getattr(wp, "test_status", None) if hasattr(wp, "test_status") else (
-                wp.get("test_status") if isinstance(wp, dict) else None
-            )
-            return {
-                "workpad_id": getattr(wp, "id", pad_id) or pad_id,
-                "repo_id": getattr(wp, "repo_id", None),
-                "title": getattr(wp, "title", pad_id),
-                "branch_name": getattr(wp, "branch_name", None),
-                "status": getattr(wp, "status", "active"),
-                "checkpoints": checkpoints,
-                "test_status": test_status,
-            }
-        except Exception:
-            return self.service.get_workpad(pad_id)
-
-    def get_workpad_diff(self, pad_id: str) -> Dict[str, Any]:
-        try:
-            diff = get_git_engine().get_workpad_diff(pad_id)
-            return {"workpad_id": pad_id, "diff": diff or ""}
-        except Exception:
-            return self.service.get_workpad_diff(pad_id)
-
-    def get_workpad_promotion(self, pad_id: str) -> Dict[str, Any]:
-        try:
-            return {"workpad_id": pad_id, "can_promote": bool(get_git_engine().can_promote(pad_id))}
-        except Exception:
-            return {"workpad_id": pad_id, "can_promote": self.service.can_promote(pad_id)}
-
-    def promote_workpad(self, pad_id: str) -> Dict[str, Any]:
-        try:
-            result = get_git_engine().promote_workpad(pad_id)
-            return {"success": bool(result), "workpad_id": pad_id}
-        except GitEngineError:
-            # Bubble up engine errors so CLI can render expected messaging
-            raise
-        except Exception:
-            return self.service.promote_workpad(pad_id)
-
-    def checkpoint_workpad(self, pad_id: str, message: str) -> Dict[str, Any]:
-        try:
-            get_git_engine().checkpoint_workpad(pad_id, message)
-            return {"workpad_id": pad_id, "message": message}
-        except Exception:
-            return self.service.checkpoint_workpad(pad_id, message)
-
-    def run_tests(self, pad_id: str, *, target: str, parallel: bool) -> Dict[str, Any]:
-        # Delegate to orchestrator used by tests when available
-        try:
-            orchestrator = get_test_orchestrator()
-            # Many tests set AsyncMock; run synchronously by awaiting via asyncio loop
-            import asyncio
-
-            async def _run():
-                return await orchestrator.run_tests(pad_id, target=target, parallel=parallel)
-
-            try:
-                outcome = asyncio.run(_run())
-            except RuntimeError:
-                # If an event loop is already running (unlikely in CLI), propagate
-                raise
-            return outcome.to_dict() if hasattr(outcome, "to_dict") else outcome
-        except Exception:
-            # Propagate exceptions so CLI can render appropriate messages and state updates
-            raise
-
-    def generate_commit_message(self, pad_id: str, *, conventional: bool) -> Dict[str, Any]:
-        try:
-            # In tests, commit message generation is often driven via orchestrator mocks
-            return self.service.generate_commit_message_sync(pad_id, conventional=conventional)
-        except Exception:
-            return self.service.generate_commit_message_sync(pad_id, conventional=conventional)
-
-    def get_telemetry_summary(self, *, days: int) -> Dict[str, Any]:
-        return self.service.get_telemetry_summary(days=days)
-
-
-def get_client() -> HeadlessClient:
-    """Return a singleton HeadlessClient or a legacy adapter when enabled."""
-
-    # Prefer the in-process legacy adapter during tests unless explicitly disabled
-    if os.getenv("SOLOGIT_CLI_USE_LEGACY_ENGINE") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
-        return _LegacyHeadlessAdapter(get_service())  # type: ignore[return-value]
-
-    global _client
-    if _client is None:
-        _client = HeadlessClient()
-    return _client
-
-
-def get_service() -> SoloGitService:
-    """Return a singleton SoloGitService for legacy helpers."""
-
-    global _service
-    if _service is None:
-        # Honor test/runner-provided isolation via environment variables
-        state_dir = os.getenv("SOLOGIT_STATE_PATH")
-        data_dir = os.getenv("SOLOGIT_DATA_PATH")
-        git_sync = None
-        if state_dir or data_dir:
-            try:
-                git_sync = GitStateSync(
-                    state_dir=Path(state_dir) if state_dir else None,
-                    data_dir=Path(data_dir) if data_dir else None,
-                )
-            except Exception:
-                git_sync = None
-        _service = SoloGitService(git_state_sync=git_sync)
-    return _service
-
-
-def get_config_manager() -> ConfigManager:
-    """Expose the shared ConfigManager instance."""
-
-    return get_service().config_manager
-
-
-def get_git_engine() -> GitEngine:
-    """Expose the GitEngine for compatibility with helper utilities."""
-
-    return get_service().git_engine
-
-
-def get_git_sync() -> GitStateSync:
-    """Return the shared GitStateSync instance."""
-
-    global _git_sync
-    if _git_sync is None:
-        _git_sync = get_service().git_state_sync
-    return _git_sync
-
-
-def get_patch_engine() -> PatchEngine:
-    """Return the shared PatchEngine instance."""
-
-    global _patch_engine
-    if _patch_engine is None:
-        _patch_engine = get_service().patch_engine
-    return _patch_engine
-
-
-def get_test_orchestrator() -> TestOrchestrator:
-    """Return the shared TestOrchestrator instance."""
-
-    global _test_orchestrator
-    if _test_orchestrator is None:
-        _test_orchestrator = get_service().test_orchestrator
-    return _test_orchestrator
 
 
 def abort_with_error(
@@ -393,55 +45,112 @@ def abort_with_error(
     title: Optional[str] = None,
     help_text: Optional[str] = None,
     tip: Optional[str] = None,
-    suggestions: Optional[Iterable[str]] = None,
+    suggestions: Optional[List[str]] = None,
     docs_url: Optional[str] = None,
 ) -> None:
-    """Render a consistent Rich error panel and abort the command."""
+    """Display a formatted error with rich context and abort the command."""
+
+    default_help = help_text or "Use the --help flag to review available options."
+    default_tip = tip or "Common fix: double-check CLI arguments and repository context."
+    default_suggestions = suggestions or [
+        "evogitctl --help",
+        "evogitctl history --recent",
+    ]
 
     formatter.print_error(
         title or "Command Error",
         message,
-        help_text=help_text or "Use --help to review supported options.",
-        tip=tip or "Verify CLI arguments and repository context.",
-        suggestions=suggestions or ["evogitctl --help", "evogitctl repo list"],
+        help_text=default_help,
+        tip=default_tip,
+        suggestions=default_suggestions,
         docs_url=docs_url or "docs/SETUP.md",
         details=details,
     )
     raise click.Abort()
 
 
-def _emit_json(payload: Dict[str, Any]) -> None:
-    print(json.dumps(payload))
+# Initialize engines (singleton pattern)
+_git_engine: Optional[GitEngine] = None
+_patch_engine: Optional[PatchEngine] = None
+_test_orchestrator: Optional[TestOrchestrator] = None
+_config_manager: Optional[ConfigManager] = None
+_git_state_sync: Optional[GitStateSync] = None
 
 
-def _handle_service_error(error: HeadlessServiceError, *, json_output: bool = False) -> None:
-    if json_output:
-        payload = error.payload if isinstance(error.payload, dict) else {"error": str(error)}
-        payload.setdefault("success", False)
-        _emit_json(payload)
-        raise SystemExit(1)
-    abort_with_error(
-        str(error),
-        title="Headless Service Error",
-        details=json.dumps(error.payload, indent=2) if error.payload else None,
-    )
+def get_config_manager() -> ConfigManager:
+    """Get or create ConfigManager instance."""
+
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
+
+
+TestEntry = Union[TestConfig, Dict[str, Any]]
+
+
+def _tests_from_config_entries(
+    entries: Optional[Sequence[TestEntry]],
+    default_timeout: int,
+) -> List[TestConfig]:
+    """Convert config entries to TestConfig objects."""
+    tests: List[TestConfig] = []
+
+    if not entries:
+        return tests
+
+    for entry in entries:
+        if isinstance(entry, TestConfig):
+            tests.append(entry)
+            continue
+
+        if not isinstance(entry, dict):
+            logger.warning(f"Ignoring invalid test entry: {entry}")
+            continue
+
+        name = entry.get('name')
+        cmd = entry.get('cmd')
+        if not name or not cmd:
+            logger.warning(f"Test entry missing name/cmd: {entry}")
+            continue
+
+        timeout_value = entry.get('timeout', default_timeout)
+        timeout = int(timeout_value) if timeout_value is not None else default_timeout
+        depends_on_raw = entry.get('depends_on', []) or []
+        if isinstance(depends_on_raw, list):
+            depends_on_list = depends_on_raw
+        elif not depends_on_raw:
+            depends_on_list = []
+        else:
+            logger.warning("Ignoring non-list depends_on value for test '%s'", name)
+            depends_on_list = []
+        tests.append(
+            TestConfig(
+                name=name,
+                cmd=cmd,
+                timeout=timeout,
+                depends_on=list(depends_on_list),
+            )
+        )
+
+    return tests
 
 
 def _parse_test_override(value: str, default_timeout: int) -> TestConfig:
-    """Parse CLI override string into a TestConfig instance."""
+    """Parse CLI test override in the form NAME=CMD[:TIMEOUT]."""
+    if '=' not in value:
+        raise click.BadParameter("Must be in NAME=CMD[:TIMEOUT] format")
 
-    if "=" not in value:
-        raise click.BadParameter("Override must be NAME=CMD[:TIMEOUT]")
-
-    name, remainder = value.split("=", 1)
+    name, remainder = value.split('=', 1)
     name = name.strip()
     remainder = remainder.strip()
+
     if not name or not remainder:
-        raise click.BadParameter("Both test name and command are required")
+        raise click.BadParameter("Both name and command must be provided")
 
     timeout = default_timeout
-    if ":" in remainder:
-        cmd, timeout_str = remainder.rsplit(":", 1)
+    if ':' in remainder:
+        cmd, timeout_str = remainder.rsplit(':', 1)
         cmd = cmd.strip()
         try:
             timeout = int(timeout_str.strip())
@@ -456,955 +165,1129 @@ def _parse_test_override(value: str, default_timeout: int) -> TestConfig:
     return TestConfig(name=name, cmd=cmd, timeout=timeout)
 
 
-def _tests_from_config_entries(
-    entries: Optional[Sequence[TestEntry]],
-    default_timeout: int,
-) -> List[TestConfig]:
-    """Convert configuration entries to TestConfig objects."""
+def get_git_engine() -> GitEngine:
+    """Get or create GitEngine instance."""
+    global _git_engine
+    if _git_engine is None:
+        _git_engine = GitEngine()
+    return _git_engine
 
-    if not entries:
-        return []
 
-    tests: List[TestConfig] = []
-    for entry in entries:
-        if isinstance(entry, TestConfig):
-            tests.append(entry)
-            continue
+def get_patch_engine() -> PatchEngine:
+    """Get or create PatchEngine instance."""
+    global _patch_engine
+    if _patch_engine is None:
+        _patch_engine = PatchEngine(get_git_engine())
+    return _patch_engine
 
-        if not isinstance(entry, dict):
-            logger.warning("Ignoring invalid test entry: %s", entry)
-            continue
 
-        name = entry.get("name")
-        cmd = entry.get("cmd")
-        if not name or not cmd:
-            logger.warning("Test entry missing name/cmd: %s", entry)
-            continue
-
-        timeout_value = entry.get("timeout", default_timeout)
-        try:
-            timeout = int(timeout_value) if timeout_value is not None else default_timeout
-        except (TypeError, ValueError):
-            logger.warning("Invalid timeout for test entry: %s", entry)
-            timeout = default_timeout
-
-        depends_raw = entry.get("depends_on") or []
-        if isinstance(depends_raw, (list, tuple)):
-            depends_on = [str(item) for item in depends_raw if item]
-        elif isinstance(depends_raw, str):
-            depends_on = [depends_raw]
-        else:
-            depends_on = []
-
-        tests.append(
-            TestConfig(
-                name=name,
-                cmd=cmd,
-                timeout=timeout,
-                depends_on=depends_on,
-            )
+def get_test_orchestrator() -> TestOrchestrator:
+    """Get or create TestOrchestrator instance."""
+    global _test_orchestrator
+    if _test_orchestrator is None:
+        config = get_config_manager().config.tests
+        log_dir = Path(config.log_dir).expanduser()
+        _test_orchestrator = TestOrchestrator(
+            get_git_engine(),
+            sandbox_image=config.sandbox_image,
+            execution_mode=config.execution_mode,
+            log_dir=log_dir,
+            formatter=formatter,
         )
-
-    return tests
-
-
-def _format_duration_ms(value: Optional[int]) -> str:
-    if value is None:
-        return "—"
-    if value < 1000:
-        return f"{value}ms"
-    return f"{value / 1000:.1f}s"
+    return _test_orchestrator
 
 
-def _resolve_repo_id(provided_repo_id: Optional[str], client: HeadlessClient) -> str:
-    """Resolve a repository identifier when not explicitly provided."""
+def get_git_sync() -> GitStateSync:
+    """Get or create GitStateSync instance."""
 
-    if provided_repo_id:
-        return provided_repo_id
-
-    repositories = list(client.list_repositories())
-    if not repositories:
-        abort_with_error(
-            "No repositories found",
-            "Initialize one with: evogitctl repo init --zip app.zip",
-            title="Repository Required",
-        )
-
-    if len(repositories) > 1:
-        table = formatter.table(headers=["ID", "Name", "Trunk"])
-        for repo_item in repositories:
-            table.add_row(
-                str(repo_item.get("id") or repo_item.get("repo_id")),
-                str(repo_item.get("name", "—")),
-                str(repo_item.get("trunk_branch", "main")),
-            )
-        formatter.print_info_panel(
-            "Multiple repositories found. Re-run with --repo <ID> to select one.",
-            title="Repository Selection Needed",
-        )
-        formatter.console.print(table)
-        raise click.Abort()
-
-    primary = repositories[0]
-    return primary.get("id") or primary.get("repo_id")
+    global _git_state_sync
+    if _git_state_sync is None:
+        _git_state_sync = GitStateSync()
+    return _git_state_sync
 
 
 @click.group()
 def repo() -> None:
     """Repository management commands."""
+    pass
 
 
-@repo.command("list")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def repo_list(output_json: bool) -> None:
-    """List registered repositories.
+@repo.command('init')
+@click.option('--zip', 'zip_file', type=click.Path(exists=True), help='Initialize from zip file')
+@click.option('--git', 'git_url', type=str, help='Initialize from Git URL')
+@click.option('--empty', is_flag=True, help='Initialize an empty repository managed by Solo Git')
+@click.option('--path', 'target_path', type=click.Path(path_type=Path), help='Directory for empty repository (defaults to Solo Git data dir)')
+@click.option('--name', type=str, help='Repository name (optional)')
+def repo_init(zip_file: Optional[str], git_url: Optional[str], empty: bool, target_path: Optional[Path], name: Optional[str]):
+    """Initialize a new repository from zip file, Git URL, or empty."""
+    formatter.print_header("Repository Initialization")
 
-    Examples:
-      Promoting workpad
-      Workpad promoted to trunk!
-      Commit: abcdef123
-    """
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            repositories = list(client.list_repositories())
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
+    sources = {
+        'zip': zip_file,
+        'git': git_url,
+        'empty': empty
+    }
 
-    if output_json:
-        _emit_json({"success": True, "repositories": repositories})
-        return
+    provided_sources = [name for name, value in sources.items() if value]
 
-    if not repositories:
-        formatter.print_info("No repositories found.")
-        formatter.console.print("\nHint: Create one with: evogitctl repo init --zip app.zip")
-        return
-
-    formatter.print_header(f"Repositories ({len(repositories)})")
-    table = formatter.table(headers=["ID", "Name", "Trunk", "Workpads", "Created"])
-    for repo_item in repositories:
-        repo_id = repo_item.get("id") or repo_item.get("repo_id") or "<unknown>"
-        name = repo_item.get("name", repo_id)
-        trunk = repo_item.get("trunk_branch", "main")
-        workpads = str(repo_item.get("workpad_count", repo_item.get("workpads", 0)))
-        created_at = repo_item.get("created_at", "—")
-        table.add_row(
-            f"[cyan]{repo_id}[/cyan]",
-            f"[bold]{name}[/bold]",
-            trunk,
-            workpads,
-            str(created_at),
-        )
-    formatter.console.print(table)
-
-
-@repo.command("info")
-@click.argument("repo_id")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def repo_info(repo_id: str, output_json: bool) -> None:
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            repository = client.get_repository(repo_id)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        _emit_json({"success": True, "repository": repository})
-        return
-
-    if not repository:
-        abort_with_error(
-            f"Repository '{repo_id}' is not registered with Solo Git.",
-            help_text="Use one of the commands below to register a repository.",
-            suggestions=[
-                "evogitctl repo init --zip <archive.zip>",
-                "evogitctl repo init --git <url>",
-                "evogitctl repo init --empty --path <dir> --name <name>",
-            ],
-            title="Repository Not Found",
-        )
-
-    details_lines = [
-        f"[bold cyan]Repository:[/bold cyan] {repository.get('id', repo_id)}",
-        f"[bold]Name:[/bold] {repository.get('name', repo_id)}",
-        f"[bold]Path:[/bold] {repository.get('path', '—')}",
-        f"[bold]Trunk:[/bold] {repository.get('trunk_branch', 'main')}",
-    ]
-    if "workpad_count" in repository:
-        details_lines.append(f"[bold]Workpads:[/bold] {repository.get('workpad_count')} active")
-    source = repository.get("source_type") or repository.get("source")
-    if source:
-        details_lines.append(f"[bold]Source:[/bold] {source}")
-    details_lines.append(f"[bold]Created:[/bold] {repository.get('created_at', '—')}")
-
-    formatter.print_panel("\n".join(details_lines), title=f"Repository: {repository.get('name', repo_id)}")
-
-
-@repo.command("init")
-@click.option("--zip", "zip_path", type=click.Path(exists=True), help="Initialize from a zip archive")
-@click.option("--git", "git_url", type=str, help="Initialize from a Git URL")
-@click.option("--empty", is_flag=True, help="Create an empty repository")
-@click.option("--path", "target_path", type=click.Path(), help="Target path for an empty repo")
-@click.option("--name", type=str, help="Repository name")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def repo_init(
-    zip_path: Optional[str],
-    git_url: Optional[str],
-    empty: bool,
-    target_path: Optional[str],
-    name: Optional[str],
-    output_json: bool,
-) -> None:
-    provided = [label for label, value in (("zip", zip_path), ("git", git_url), ("empty", empty)) if value]
-    if len(provided) != 1:
+    if len(provided_sources) != 1:
         abort_with_error(
             "Invalid Source Specification",
-            "Please specify exactly one of --zip, --git, or --empty",
+            f"Please specify exactly one of --zip, --git, or --empty. Provided: {', '.join(provided_sources) or 'None'}",
+            title="Repository Initialization Blocked",
+            help_text="Choose one initialization method.",
+            suggestions=[
+                "evogitctl repo init --zip app.zip",
+                "evogitctl repo init --git https://github.com/user/repo.git",
+                "evogitctl repo init --empty --path ./new-repo",
+            ]
         )
 
-    client = get_client()
+    git_sync = get_git_sync()
+
     try:
-        if zip_path:
-            # Derive name from file if not provided
-            derived_name = name or Path(zip_path).stem
-            data = Path(zip_path).read_bytes()
-            if not output_json:
-                formatter.print_info(f"Initializing from zip: {zip_path}")
-            with _suppress_info_logs(True):
-                repository = client.create_repository(source="zip", name=derived_name, zip_bytes=data)
+        repo_info: Optional[Dict[str, Any]] = None
+        if empty:
+            repo_name = name or (target_path.name if target_path else "solo-git-repo")
+            formatter.print_info(f"Creating empty repository: {repo_name}")
+            repo_info = git_sync.create_empty_repo(repo_name, str(target_path) if target_path else None)
+        elif zip_file:
+            zip_path = Path(zip_file)
+            repo_name = name or zip_path.stem
+            formatter.print_info(f"Initializing from zip: {zip_path.name}")
+            repo_info = git_sync.init_repo_from_zip(zip_path.read_bytes(), repo_name)
         elif git_url:
-            # Derive repository name from URL if not provided
-            repo_name = name
-            if not repo_name:
-                tail = git_url.rstrip("/").split("/")[-1]
-                repo_name = tail[:-4] if tail.endswith(".git") else tail
-            if not output_json:
-                formatter.print_info(f"Cloning from {git_url}")
-            with _suppress_info_logs(True):
-                repository = client.create_repository(source="git", name=repo_name, git_url=git_url)
-        else:
-            if not name:
-                abort_with_error("Repository name is required for empty initialization")
-            if not output_json:
-                formatter.print_info(f"Creating empty repository {name}")
-            with _suppress_info_logs(True):
-                repository = client.create_repository(source="empty", name=name, target_path=target_path)
-    except (HeadlessServiceError, GitEngineError) as exc:
-        if output_json:
-            _emit_json({"success": False, "error": str(exc)})
-        else:
-            abort_with_error("Repository initialization failed", str(exc))
-        return
+            repo_name = name or Path(git_url).stem.replace('.git', '')
+            formatter.print_info(f"Cloning from: {git_url}")
+            repo_info = git_sync.init_repo_from_git(git_url, repo_name)
 
-    if output_json:
-        _emit_json({"success": True, "repository": repository})
-        return
+        if repo_info is None:
+            raise GitEngineError("Repository initialization returned no metadata")
 
-    formatter.print_success("Repository initialized!")
-    table = formatter.table(headers=["ID", "Name", "Path", "Trunk"])
-    table.add_row(
-        str(repository.get("repo_id") or repository.get("id")),
-        str(repository.get("name")),
-        str(repository.get("path")),
-        str(repository.get("trunk_branch", "main")),
-    )
+        formatter.print_success("Repository initialized!")
+        formatter.print_info(f"Repo ID: {repo_info['repo_id']}")
+        formatter.print_info(f"Name: {repo_info['name']}")
+        formatter.print_info(f"Path: {repo_info['path']}")
+        formatter.print_info(f"Trunk: {repo_info.get('trunk_branch', 'main')}")
+
+        summary_table = formatter.table(headers=["Field", "Value"])
+        summary_table.add_row("ID", f"[cyan]{repo_info['repo_id']}[/cyan]")
+        summary_table.add_row("Name", f"[bold]{repo_info['name']}[/bold]")
+        summary_table.add_row("Path", str(repo_info['path']))
+        summary_table.add_row("Trunk", f"[cyan]{repo_info.get('trunk_branch', 'main')}[/cyan]")
+
+        formatter.console.print(summary_table)
+
+    except GitEngineError as e:
+        abort_with_error(
+            "Repository initialization failed",
+            str(e),
+            title="Repository Initialization Blocked",
+            help_text="Confirm the source path or URL is reachable and that your credentials allow cloning the repository.",
+            tip="If cloning from a private remote, ensure your SSH keys or HTTPS tokens are configured locally.",
+            suggestions=[
+                "Retry the command with --verbose",
+                "Check git remote access manually",
+            ],
+            docs_url="docs/SETUP.md#initialize-a-repository",
+        )
+
+
+@repo.command('list')
+def repo_list() -> None:
+    """List all repositories."""
+    git_engine = get_git_engine()
+    repos = git_engine.list_repos()
+    
+    if not repos:
+        formatter.print_info("No repositories found.")
+        formatter.print("\n💡 Create a repository with: evogitctl repo init --zip app.zip")
+        return
+    
+    # Create a Rich table
+    formatter.print_header(f"Repositories ({len(repos)})")
+    table = formatter.table(headers=["ID", "Name", "Trunk", "Workpads", "Created"])
+    
+    for repo in repos:
+        table.add_row(
+            f"[cyan]{repo.id}[/cyan]",
+            f"[bold]{repo.name}[/bold]",
+            repo.trunk_branch,
+            str(repo.workpad_count),
+            repo.created_at.strftime('%Y-%m-%d %H:%M')
+        )
+    
     formatter.console.print(table)
 
 
-@repo.command("delete")
-@click.argument("repo_id")
-@click.option("--keep-files", is_flag=True, help="Retain the repository directory on disk")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def repo_delete(repo_id: str, keep_files: bool, output_json: bool) -> None:
-    # Use GitStateSync directly for test compatibility
-    sync = get_git_sync()
+@repo.command('delete')
+@click.argument('repo_id')
+@click.option('--keep-files', is_flag=True, help='Retain repository directory on disk')
+def repo_delete(repo_id: str, keep_files: bool):
+    """Delete a repository and clean up associated state."""
+
+    git_sync = get_git_sync()
+
     try:
-        repo = getattr(sync.git_engine, "get_repo")(repo_id)
+        repo = git_sync.git_engine.get_repo(repo_id)
         if not repo:
-            # Match test expectation wording
             abort_with_error(f"Repository {repo_id} not found")
-        with _suppress_info_logs(True):
-            sync.delete_repository(repo_id, remove_files=not keep_files)
+
+        formatter.print_info(f"Deleting repository {repo.name} ({repo_id})")
+        git_sync.delete_repository(repo_id, remove_files=not keep_files)
+        formatter.print_success("Repository deleted")
+        if keep_files:
+            formatter.print_info("Repository files retained on disk")
     except GitEngineError as exc:
-        if output_json:
-            _emit_json({"success": False, "error": f"Failed to delete repository: {exc}"})
-            return
-        abort_with_error("Failed to delete repository", str(exc))
-        return
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
+        abort_with_error(str(exc), "Failed to delete repository")
+    formatter.console.print()
 
-    if output_json:
-        _emit_json({"success": True, "repo_id": repo_id, "keep_files": keep_files})
-        return
 
-    formatter.print_success("Repository deleted")
-    if keep_files:
-        formatter.print_info("Repository files retained on disk")
+@repo.command('info')
+@click.argument('repo_id')
+def repo_info(repo_id: str) -> None:
+    """Show repository information."""
+    git_engine = get_git_engine()
+    repo = git_engine.get_repo(repo_id)
+    
+    if not repo:
+        available = [f"{r.id} • {getattr(r, 'name', r.id)}" for r in git_engine.list_repos()]
+        formatter.print_error(
+            "Repository Not Found",
+            f"Repository '{repo_id}' is not registered with Solo Git.",
+            help_text="Select one of the available repository IDs or initialize a new repository before retrying.",
+            tip="Run 'evogitctl repo list' to review active repositories before invoking repo info.",
+            suggestions=["evogitctl repo list"] + available[:5],
+            docs_url="docs/SETUP.md#initialize-a-repository",
+        )
+
+    if repo is None:
+        formatter.print_error(f"Repository {repo_id} not found")
+        raise click.Abort()
+    
+    # Create formatted info panel
+    info = f"""[bold cyan]Repository:[/bold cyan] {repo.id}
+[bold]Name:[/bold] {repo.name}
+[bold]Path:[/bold] {repo.path}
+[bold]Trunk:[/bold] {repo.trunk_branch}
+[bold]Created:[/bold] {repo.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+[bold]Workpads:[/bold] {repo.workpad_count} active
+[bold]Source:[/bold] {repo.source_type}"""
+    
+    if repo.source_url:
+        info += f"\n[bold]URL:[/bold] {repo.source_url}"
+    
+    formatter.print_panel(info, title=f"📦 Repository: {repo.name}")
 
 
 @click.group()
 def pad() -> None:
     """Workpad management commands."""
+    pass
 
 
-@pad.command("create")
-@click.argument("title")
-@click.option("--repo", "repo_id", type=str, help="Repository ID (required if multiple repos)")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@pad.command('create')
+@click.argument('title')
+@click.option('--repo', 'repo_id', type=str, help='Repository ID (required if multiple repos)')
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
 def pad_create(title: str, repo_id: Optional[str], output_json: bool) -> None:
-    client = get_client()
+    """Create a new workpad."""
+    import json
+    git_engine = get_git_engine()
+
+    if not output_json:
+        formatter.print_header("Workpad Creation")
+
+    # If no repo_id, try to auto-select
+    if not repo_id:
+        repos = git_engine.list_repos()
+        if len(repos) == 0:
+            if output_json:
+                print(json.dumps({"success": False, "error": "No repositories found"}))
+                raise SystemExit(1)
+            abort_with_error("No repositories found", "Initialize a repository first: evogitctl repo init --zip app.zip")
+        elif len(repos) == 1:
+            repo_id = repos[0].id
+            if not output_json:
+                formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
+        else:
+            if output_json:
+                print(json.dumps({
+                    "success": False, 
+                    "error": "Multiple repositories found. Use --repo to specify an ID.",
+                    "repositories": [{"id": r.id, "name": r.name} for r in repos]
+                }))
+                raise SystemExit(1)
+            formatter.print_warning("Multiple repositories found. Use --repo to specify an ID.")
+            repo_table = formatter.table(headers=["ID", "Name"])
+            for repo in repos:
+                repo_identifier = getattr(repo, "id", "<unknown>")
+                repo_name = getattr(repo, "name", repo_identifier)
+                repo_table.add_row(f"[cyan]{repo_identifier}[/cyan]", str(repo_name))
+            formatter.print_info_panel(
+                "Multiple repositories detected. Please rerun with --repo <ID>.",
+                title="Repository Selection Required"
+            )
+            formatter.console.print(repo_table)
+            raise click.Abort()
+
     try:
-        resolved_repo = _resolve_repo_id(repo_id, client)
-        # Prefer name from listing to work with mocked GitEngine in tests
-        repo_name = resolved_repo
-        try:
-            for r in client.list_repositories():
-                rid = r.get("id") or r.get("repo_id")
-                if rid == resolved_repo:
-                    repo_name = r.get("name", resolved_repo)
-                    break
-        except Exception:
-            # Fallback to detailed fetch
-            repo_meta = client.get_repository(resolved_repo) or {}
-            repo_name = repo_meta.get("name", resolved_repo)
         if not output_json:
-            formatter.print_info(f"Using repository: {repo_name} ({resolved_repo})")
             formatter.print_info(f"Creating workpad: {title}")
-        with _suppress_info_logs(output_json):
-            workpad = client.create_workpad(resolved_repo, title)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
+        pad_id = git_engine.create_workpad(repo_id, title)
 
-    if output_json:
-        _emit_json({"success": True, "workpad": workpad})
-        return
+        workpad = git_engine.get_workpad(pad_id)
+        
+        if output_json:
+            # Output JSON format
+            print(json.dumps({
+                "success": True,
+                "workpad": {
+                    "workpad_id": workpad.id,
+                    "repo_id": repo_id,
+                    "title": workpad.title,
+                    "status": getattr(workpad, "status", "draft"),
+                    "branch_name": workpad.branch_name,
+                    "base_commit": getattr(workpad, "base_commit", "main"),
+                    "current_commit": getattr(workpad, "current_commit", None),
+                    "created_at": getattr(workpad, "created_at", None),
+                }
+            }))
+        else:
+            formatter.print_success("Workpad created!")
+            formatter.print_info(f"Pad ID: {workpad.id}")
+            formatter.print_info(f"Title: {workpad.title}")
+            formatter.print_info(f"Branch: {workpad.branch_name}")
+            formatter.print_info("Base: main")
 
-    formatter.print_success("Workpad created!")
-    formatter.print_info(f"Pad ID: {workpad.get('workpad_id', 'unknown')}")
-    formatter.print_info(f"Repository: {workpad.get('repo_id')}")
-    formatter.print_info(f"Branch: {workpad.get('branch_name')}")
+            details = formatter.table(headers=["Field", "Value"])
+            details.add_row("Pad ID", f"[cyan]{workpad.id}[/cyan]")
+            details.add_row("Title", f"[bold]{workpad.title}[/bold]")
+            details.add_row("Branch", workpad.branch_name)
+            details.add_row("Base", "main")
+            formatter.console.print(details)
+
+    except GitEngineError as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
+        abort_with_error("Failed to create workpad", str(e))
 
 
-@pad.command("list")
-@click.option("--repo", "repo_id", type=str, help="Repository ID (auto-selects if only one)")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def pad_list(repo_id: Optional[str], output_json: bool) -> None:
-    client = get_client()
-    # Keep behavior simple for tests: default to a generic repo context when not provided
-    resolved_repo = repo_id or "default"
-    try:
-        with _suppress_info_logs(True):
-            workpads = list(client.list_workpads(resolved_repo))
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        _emit_json({"success": True, "repo_id": resolved_repo, "workpads": workpads})
-        return
-
+@pad.command('list')
+@click.option('--repo', 'repo_id', type=str, help='Filter by repository ID')
+def pad_list(repo_id: Optional[str]) -> None:
+    """List all workpads."""
+    git_engine = get_git_engine()
+    workpads = git_engine.list_workpads(repo_id)
+    
     if not workpads:
         formatter.print_info("No workpads found.")
-        formatter.console.print("\nHint: Create one with: evogitctl pad create <title>")
+        formatter.print("\n💡 Create a workpad with: evogitctl pad create \"add feature\"")
         return
-
-    formatter.print_header(f"Workpads for {resolved_repo or 'default'}")
-    table = formatter.table(headers=["ID", "Title", "Status", "Updated"])
-    for pad_item in workpads:
-        pad_id = pad_item.get("workpad_id") or pad_item.get("id")
-        title = pad_item.get("title", pad_id)
-        status = pad_item.get("status", "unknown")
-        test_status = pad_item.get("test_status") or pad_item.get("state", {}).get("test_status")
-        ts = _status_to_str(test_status)
-        if ts == 'passed':
-            status_display = f"{status} ✅ passed"
-        elif ts == 'failed':
-            status_display = f"{status} ❌ failed"
-        elif ts:
-            status_display = ts
-        else:
-            status_display = status
-        updated = pad_item.get("updated_at", "—")
-        table.add_row(f"[cyan]{pad_id}[/cyan]", f"[bold]{title}[/bold]", status_display, str(updated))
+    
+    # Create a Rich table
+    title = f"Workpads ({len(workpads)})"
+    if repo_id:
+        title += f" for repo {repo_id}"
+    
+    formatter.print_header(title)
+    table = formatter.table(headers=["ID", "Title", "Status", "Checkpoints", "Tests", "Created"])
+    
+    for pad in workpads:
+        # Color-code status
+        status_color = "green" if pad.status == "active" else "yellow" if pad.status == "pending" else "red"
+        status_display = f"[{status_color}]{pad.status}[/{status_color}]"
+        
+        # Test status with icon
+        test_display = ""
+        if pad.test_status:
+            test_icon = "✅" if pad.test_status == "passed" else "❌" if pad.test_status == "failed" else "⏳"
+            test_display = f"{test_icon} {pad.test_status}"
+        
+        table.add_row(
+            f"[cyan]{pad.id[:8]}[/cyan]",
+            f"[bold]{pad.title}[/bold]",
+            status_display,
+            str(len(pad.checkpoints)),
+            test_display,
+            pad.created_at.strftime('%Y-%m-%d %H:%M')
+        )
+    
     formatter.console.print(table)
+    formatter.console.print()
 
 
-@pad.command("info")
-@click.argument("pad_id")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def pad_info(pad_id: str, output_json: bool) -> None:
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            workpad = client.get_workpad(pad_id)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        _emit_json({"success": True, "workpad": workpad})
-        return
+@pad.command('info')
+@click.argument('pad_id')
+def pad_info(pad_id: str) -> None:
+    """Show workpad information."""
+    git_engine = get_git_engine()
+    workpad = git_engine.get_workpad(pad_id)
 
     if not workpad:
         abort_with_error(f"Workpad {pad_id} not found")
 
-    # Simple key/value output expected by tests
-    # Try to enrich with engine-backed fields when available
-    try:
-        wp_obj = get_git_engine().get_workpad(pad_id)
-    except Exception:
-        wp_obj = None
-    title = workpad.get('title') or (getattr(wp_obj, 'title', None) if wp_obj else None) or '—'
-    formatter.print_info(f"Workpad: {workpad.get('workpad_id', pad_id)}")
-    formatter.print_info(f"Title: {title}")
-    formatter.print_info(f"Repo: {workpad.get('repo_id', '—')}")
-    formatter.print_info(f"Branch: {workpad.get('branch_name', '—')}")
-    formatter.print_info(f"Status: {workpad.get('status', 'unknown')}")
-    checkpoints = workpad.get("checkpoints") or workpad.get("state", {}).get("checkpoints", [])
-    if not checkpoints and wp_obj is not None:
-        try:
-            checkpoints = list(getattr(wp_obj, 'checkpoints', []) or [])
-        except Exception:
-            checkpoints = checkpoints or []
-    formatter.print_info(f"Checkpoints: {len(checkpoints)}")
-    last_test_raw = workpad.get("test_status") or workpad.get("state", {}).get("test_status")
-    if not last_test_raw and wp_obj is not None:
-        try:
-            last_test_raw = getattr(wp_obj, 'test_status', None) or (wp_obj.get('test_status') if isinstance(wp_obj, dict) else None)
-        except Exception:
-            last_test_raw = None
-    last_test = _status_to_str(last_test_raw) or "—"
-    formatter.print_info(f"Last Test: {last_test}")
+    formatter.print_header(f"Workpad Details: {workpad.title}")
+
+    formatter.print_info(f"Workpad: {workpad.id}")
+    formatter.print_info(f"Title: {workpad.title}")
+    formatter.print_info(f"Repo: {workpad.repo_id}")
+    formatter.print_info(f"Branch: {workpad.branch_name}")
+    formatter.print_info(f"Status: {workpad.status}")
+    formatter.print_info(f"Checkpoints: {len(workpad.checkpoints)}")
+    if workpad.test_status:
+        formatter.print_info(f"Last Test: {workpad.test_status}")
+
+    status_color = theme.get_status_color(workpad.status)
+    status_icon = theme.get_status_icon(workpad.status)
+    panel_content = f"""[bold]Workpad ID:[/bold] [cyan]{workpad.id}[/cyan]
+[bold]Repository:[/bold] {workpad.repo_id}
+[bold]Branch:[/bold] {workpad.branch_name}
+[bold]Status:[/bold] [{status_color}]{status_icon} {workpad.status.upper()}[/{status_color}]
+[bold]Created:[/bold] {workpad.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+[bold]Checkpoints:[/bold] {len(workpad.checkpoints)}"""
+
+    if workpad.test_status:
+        test_color = theme.get_status_color(workpad.test_status)
+        test_icon = theme.get_status_icon(workpad.test_status)
+        panel_content += f"\n[bold]Last Test:[/bold] [{test_color}]{test_icon} {workpad.test_status.upper()}[/{test_color}]"
+
+    formatter.print_info_panel(panel_content, title="Workpad Summary")
+
+    if workpad.checkpoints:
+        formatter.print_subheader("Checkpoints")
+        formatter.print_bullet_list(workpad.checkpoints, icon=theme.icons.commit, style=theme.colors.blue)
 
 
-@pad.command("diff")
-@click.argument("pad_id")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def pad_diff(pad_id: str, output_json: bool) -> None:
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            diff_payload = client.get_workpad_diff(pad_id)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        payload = {"success": True, "workpad_id": pad_id}
-        if isinstance(diff_payload, dict):
-            payload.update(diff_payload)
-        _emit_json(payload)
-        return
-
-    diff_text = ""
-    summary: Dict[str, Any] = {}
-    if isinstance(diff_payload, dict):
-        diff_text = diff_payload.get("diff", "") or ""
-        summary = diff_payload.get("summary") or {}
-
-    formatter.print_header(f"Diff for {pad_id}")
-
-    if summary:
-        summary_table = formatter.table(headers=["Metric", "Value"])
-        summary_table.add_row("Base", summary.get("base_branch", "trunk"))
-        summary_table.add_row("Compare", summary.get("compare_branch", "workpad"))
-        summary_table.add_row("Files", str(summary.get("files_changed", 0)))
-        summary_table.add_row("Lines Added", f"+{summary.get('lines_added', 0)}")
-        summary_table.add_row("Lines Deleted", f"-{summary.get('lines_deleted', 0)}")
-        summary_table.add_row("Lines Changed", str(summary.get("lines_changed", 0)))
-        formatter.console.print(summary_table)
-
-    if diff_text.strip():
-        formatter.print_code(diff_text, language="diff")
-    else:
-        formatter.print_info("No changes detected for this workpad.")
-
-
-@pad.command("checkpoint")
-@click.argument("pad_id")
-@click.option("-m", "--message", help="Checkpoint message")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def pad_checkpoint(pad_id: str, message: Optional[str], output_json: bool) -> None:
-    if not message and output_json:
-        _emit_json({"success": False, "error": "Checkpoint message is required"})
-        return
-    if not message:
-        message = click.prompt("Checkpoint message", type=str)
-
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            result = client.checkpoint_workpad(pad_id, message)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        payload = {"success": True}
-        if isinstance(result, dict):
-            payload.update(result)
-        _emit_json(payload)
-        return
-
-    formatter.print_success("Checkpoint created")
-    formatter.print_info(f"Workpad: {result.get('workpad_id', pad_id)}")
-    formatter.print_info(f"Commit: {result.get('commit_hash', '—')}")
-    formatter.print_info(f"Message: {result.get('message', message)}")
-
-
-@pad.command("promotion")
-@click.argument("pad_id")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def pad_promotion(pad_id: str, output_json: bool) -> None:
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            status_payload = client.get_workpad_promotion(pad_id)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        payload = {"success": True, "workpad_id": pad_id}
-        if isinstance(status_payload, dict):
-            payload.update(status_payload)
-        _emit_json(payload)
-        return
-
-    can_promote = bool(status_payload.get("can_promote")) if isinstance(status_payload, dict) else False
-    if can_promote:
-        formatter.print_success("Workpad passes promotion checks")
-    else:
-        formatter.print_warning("Promotion rules not satisfied. Resolve outstanding checks before promoting.")
-    formatter.print_info(f"Workpad: {pad_id}")
-
-
-@pad.command("promote")
-@click.argument("pad_id")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@pad.command('promote')
+@click.argument('pad_id')
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
 def pad_promote(pad_id: str, output_json: bool) -> None:
-    client = get_client()
-    try:
-        # Pre-check fast-forward eligibility
-        try:
-            with _suppress_info_logs(True):
-                status_payload = client.get_workpad_promotion(pad_id)
-        except Exception:
-            status_payload = {}
-        if isinstance(status_payload, dict) and not status_payload.get("can_promote", True):
-            if output_json:
-                _emit_json({"success": False, "error": "not_fast_forwardable", "workpad_id": pad_id})
-                return
-            abort_with_error(
-                "Cannot promote: not fast-forward-able",
-                details="Trunk has diverged; rebase or update your workpad to the latest trunk.",
-                title="Promotion Blocked",
-            )
-        with _suppress_info_logs(True):
-            result = client.promote_workpad(pad_id)
-    except GitEngineError as exc:
+    """Promote workpad to trunk (fast-forward merge)."""
+    import json
+    git_engine = get_git_engine()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
         if output_json:
-            _emit_json({"success": False, "error": str(exc)})
-            return
-        abort_with_error("Promotion failed", str(exc))
-        return
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
+            print(json.dumps({"success": False, "error": f"Workpad {pad_id} not found"}))
+            raise SystemExit(1)
+        abort_with_error(f"Workpad {pad_id} not found")
 
-    if output_json:
-        payload = {"success": True}
-        payload.update(result)
-        _emit_json(payload)
-        return
+    # Check if can promote
+    if not git_engine.can_promote(pad_id):
+        if output_json:
+            print(json.dumps({
+                "success": False, 
+                "error": "Cannot promote: not fast-forward-able",
+                "details": "Trunk has diverged. Manual merge required before promotion."
+            }))
+            raise SystemExit(1)
+        abort_with_error(
+            "Cannot promote: not fast-forward-able",
+            "Trunk has diverged. Manual merge required before promotion."
+        )
 
-    formatter.print_success("Workpad promoted to trunk")
-    formatter.print_info(f"Commit: {result.get('commit_hash')}")
-    formatter.print_info(f"Branch Removed: {result.get('branch_removed')}")
-
-
-@pad.command("delete")
-@click.argument("pad_id")
-@click.option("--force", is_flag=True, help="Force deletion even if tests failed")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def pad_delete(pad_id: str, force: bool, output_json: bool) -> None:
-    client = get_client()
     try:
-        with _suppress_info_logs(True):
-            client.delete_workpad(pad_id, force=force)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
+        if not output_json:
+            formatter.print_header("Workpad Promotion")
+            formatter.print_info(f"Promoting workpad: {workpad.title}")
+        
+        commit_hash = git_engine.promote_workpad(pad_id)
 
-    if output_json:
-        _emit_json({"success": True, "workpad_id": pad_id, "force": force})
-        return
+        if output_json:
+            print(json.dumps({
+                "success": True,
+                "workpad_id": pad_id,
+                "commit_hash": commit_hash,
+                "branch_removed": workpad.branch_name,
+                "title": workpad.title,
+                "promoted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }))
+        else:
+            formatter.print_success("Workpad promoted to trunk!")
+            formatter.print_info(f"Commit: {commit_hash}")
+            formatter.print_info(f"Branch Removed: {workpad.branch_name}")
+            formatter.print_info(f"Trunk Updated: main @ {commit_hash[:8]}")
 
-    formatter.print_success("Workpad deleted")
+            details = formatter.table(headers=["Field", "Value"])
+            details.add_row("Commit", f"[green]{commit_hash}[/green]")
+            details.add_row("Branch Removed", workpad.branch_name)
+            details.add_row("Trunk Updated", f"main @ {commit_hash[:8]}")
+            formatter.console.print(details)
+
+    except GitEngineError as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
+        abort_with_error("Promotion failed", str(e))
+
+
+@pad.command('delete')
+@click.argument('pad_id')
+@click.option('--force', is_flag=True, help='Force deletion without confirmation')
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
+def pad_delete(pad_id: str, force: bool, output_json: bool) -> None:
+    """Delete a workpad and its branch."""
+    import json
+    git_engine = get_git_engine()
+    state_manager = StateManager()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
+        if output_json:
+            print(json.dumps({"success": False, "error": f"Workpad {pad_id} not found"}))
+            raise SystemExit(1)
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    # Confirmation prompt (skip if --force or --json)
+    if not force and not output_json:
+        if not click.confirm(f"Delete workpad '{workpad.title}' ({pad_id})?"):
+            formatter.print_info("Deletion cancelled")
+            return
+
+    try:
+        if not output_json:
+            formatter.print_header("Workpad Deletion")
+            formatter.print_info(f"Deleting workpad: {workpad.title}")
+        
+        # Delete the branch and workpad metadata using the engine API
+        branch_name = workpad.branch_name
+        git_engine.delete_workpad(pad_id, force=force)
+
+        # Remove from state
+        state_manager.delete_workpad(pad_id)
+        
+        if output_json:
+            print(json.dumps({
+                "success": True,
+                "workpad_id": pad_id,
+                "title": workpad.title,
+                "branch_deleted": branch_name,
+                "deleted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }))
+        else:
+            formatter.print_success("Workpad deleted!")
+            formatter.print_info(f"Pad ID: {pad_id}")
+            formatter.print_info(f"Branch Removed: {branch_name}")
+
+    except GitEngineError as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
+        abort_with_error("Deletion failed", str(e))
+    except Exception as e:
+        if output_json:
+            print(json.dumps({"success": False, "error": str(e)}))
+            raise SystemExit(1)
+        abort_with_error("Deletion failed", str(e))
+
+
+@pad.command('diff')
+@click.argument('pad_id')
+def pad_diff(pad_id: str) -> None:
+    """Show diff between workpad and trunk."""
+    git_engine = get_git_engine()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    try:
+        diff = git_engine.get_diff(pad_id)
+        if diff:
+            formatter.print_header(f"Diff for {workpad.title}")
+            formatter.print_code(diff, language="diff")
+        else:
+            formatter.print_info("No changes between workpad and trunk.")
+    except GitEngineError as e:
+        abort_with_error("Failed to generate diff", str(e))
 
 
 @click.group()
 def test() -> None:
-    """Test orchestration commands."""
+    """Test execution commands."""
+    pass
 
 
-@test.command("run")
-@click.argument("pad_id")
-@click.option(
-    "--target",
-    type=click.Choice(["fast", "full"], case_sensitive=False),
-    default="fast",
-    show_default=True,
-    help="Test target defined by Solo Git configuration",
-)
-@click.option("--serial", is_flag=True, help="Run tests sequentially instead of in parallel")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def test_run(pad_id: str, target: str, serial: bool, output_json: bool) -> None:
-    client = get_client()
-    state_manager = StateManager()
-    # Pre-check workpad existence for clearer errors and to satisfy tests
-    try:
-        wp_check = get_git_engine().get_workpad(pad_id)
-    except Exception:
-        wp_check = None
-    if not wp_check:
+@test.command('run')
+@click.argument('pad_id')
+@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
+@click.option('--parallel/--sequential', default=True, help='Parallel execution')
+@click.option('--json', 'output_json', is_flag=True, help='Output JSON format')
+def test_run(pad_id: str, target: str, parallel: bool, output_json: bool) -> None:
+    """Run tests for a workpad with live output streaming."""
+    import json
+
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
         if output_json:
-            _emit_json({"success": False, "error": f"Workpad {pad_id} not found"})
+            print(json.dumps({"success": False, "error": f"Workpad {pad_id} not found"}))
             raise SystemExit(1)
         abort_with_error(f"Workpad {pad_id} not found")
-        return
+
+    state_manager = StateManager()
+    run_entry = state_manager.create_test_run(pad_id, target)
+    run_id = getattr(run_entry, "run_id", getattr(run_entry, "id", str(run_entry)))
+    state_manager.update_test_run(run_id, status="running")
+
+    if target == 'fast':
+        tests = [
+            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+        ]
+    else:
+        tests = [
+            TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+            TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+        ]
 
     try:
-        # Record test run state
-        run = state_manager.create_test_run(pad_id, target)
-        state_manager.update_test_run(run.run_id, status="running")
-        with _suppress_info_logs(True):
-            result = client.run_tests(pad_id, target=target, parallel=not serial)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-    except Exception as exc:
-        # Fetch workpad title for display
-        # Use provided pad_id in error display to satisfy tests expecting ID
-        wp_title = pad_id
+        orchestrator_mode = getattr(test_orchestrator.mode, "value", test_orchestrator.mode)
+        
+        if not output_json:
+            info = f"""[bold]Workpad:[/bold] {workpad.title}
+[bold]Tests:[/bold] {len(tests)}
+[bold]Execution:[/bold] {'Parallel' if parallel else 'Sequential'}
+[bold]Mode:[/bold] {orchestrator_mode}
+[bold]Target:[/bold] {target}"""
+            formatter.print_panel(info, title="🧪 Test Execution")
+
+        results: List[TestResult]
+        if output_json:
+            # For JSON mode, run without progress bar or output handlers
+            results = asyncio.run(
+                test_orchestrator.run_tests(
+                    pad_id,
+                    tests,
+                    parallel=parallel,
+                    on_output=None,
+                    on_test_complete=None,
+                )
+            )
+        else:
+            with formatter.create_progress() as progress:
+                task = progress.add_task(f"Running {target} tests...", total=len(tests))
+
+                def handle_output(test_name: str, stream: str, line: str) -> None:
+                    style = "cyan" if stream == "stdout" else "red"
+                    prefix = "stdout" if stream == "stdout" else "stderr"
+                    formatter.console.print(
+                        f"[{prefix}] {test_name}: {line}",
+                        style=style,
+                    )
+
+                def handle_complete(result: TestResult) -> None:
+                    progress.advance(task)
+
+                results = asyncio.run(
+                    test_orchestrator.run_tests(
+                        pad_id,
+                        tests,
+                        parallel=parallel,
+                        on_output=handle_output,
+                        on_test_complete=handle_complete,
+                    )
+                )
 
         if not output_json:
-            formatter.print_header("Test Execution")
-            formatter.print_info(f"Workpad: {wp_title}")
-            formatter.print_info(f"Target: {target}")
-            formatter.print_info(f"Run Mode: {'Serial' if serial else 'Parallel'}")
+            formatter.console.print()
 
-        # Update state to record failure details
-        try:
-            from types import SimpleNamespace
-            state_manager.update_test_run(
-                run.run_id,
-                status='failed',
-                total_tests=1,
-                passed=0,
-                failed=1,
-                skipped=0,
-                duration_ms=0,
-                tests=[SimpleNamespace(status='error', error=str(exc), name='orchestrator')],
+        if not output_json:
+            table = formatter.table(headers=["Test", "Status", "Duration", "Mode", "Notes", "Log"])
+
+        state_results: List[StateTestResult] = []
+        total_duration = 0
+
+        for result in results:
+            status_value = getattr(result.status, "value", result.status)
+
+            if not output_json:
+                if status_value == TestStatus.PASSED.value:
+                    status_icon = "✅"
+                elif status_value == TestStatus.SKIPPED.value:
+                    status_icon = "⏭️"
+                elif status_value == TestStatus.TIMEOUT.value:
+                    status_icon = "⏱️"
+                elif status_value == TestStatus.ERROR.value:
+                    status_icon = "⚠️"
+                else:
+                    status_icon = "❌"
+
+                status_text = f"{status_icon} {status_value}"
+                duration_s = result.duration_ms / 1000
+                notes = result.error or result.stderr or ""
+                notes = notes.replace("\n", " ")
+                if len(notes) > 80:
+                    notes = notes[:77] + "..."
+                log_display = result.log_path.name if result.log_path else "-"
+
+                table.add_row(
+                    result.name,
+                    status_text,
+                    f"{duration_s:.2f}s",
+                    result.mode,
+                    notes,
+                    log_display,
+                )
+
+            state_results.append(
+                StateTestResult(
+                    test_id=result.name,
+                    name=result.name,
+                    status=status_value,
+                    duration_ms=result.duration_ms,
+                    output=result.stdout or result.stderr or "",
+                    error=result.error,
+                )
             )
-        except Exception:
-            pass
+            total_duration += result.duration_ms
+
+        if not output_json:
+            formatter.console.print(table)
+
+        summary: Dict[str, Any] = test_orchestrator.get_summary(results)
+        
+        if not output_json:
+            status_color = "green" if summary['status'] == 'green' else "red"
+            summary_text = f"""[bold]Total:[/bold] {summary['total']}
+[bold]Passed:[/bold] [green]{summary['passed']}[/green]
+[bold]Failed:[/bold] [red]{summary['failed']}[/red]
+[bold]Timeout:[/bold] {summary['timeout']}
+[bold]Skipped:[/bold] {summary['skipped']}
+[bold]Status:[/bold] [{status_color}]{summary['status'].upper()}[/{status_color}]"""
+
+            formatter.print_panel(summary_text, title="📊 Test Summary")
+
+        workpad.test_status = summary['status']
+
+        final_status = "passed" if summary['status'] == 'green' else "failed"
+
+        state_manager.update_test_run(
+            run_id,
+            status=final_status,
+            total_tests=summary['total'],
+            passed=summary['passed'],
+            failed=summary['failed'],
+            skipped=summary['skipped'],
+            duration_ms=total_duration,
+            tests=state_results,
+        )
 
         if output_json:
-            _emit_json({"success": False, "error": str(exc)})
-            raise SystemExit(1)
-        abort_with_error(
-            "Test execution failed",
-            details=str(exc),
-            title="Test Execution Failed",
-            help_text="Review the error details above and try again.",
-            suggestions=[f"evogitctl test run {pad_id}", "Verify workpad ID", "Check test configuration in sologit config"],
-        )
-        return
-
-    if output_json:
-        payload = {"success": True, "workpad_id": pad_id}
-        if isinstance(result, dict):
-            payload.update(result)
-        _emit_json(payload)
-        return
-
-    # Support legacy adapter path where result is a list[TestResult]
-    results_list: List[Any] = []
-    summary: Dict[str, Any] = {}
-    if isinstance(result, list):
-        results_list = result
-        try:
-            summary = get_test_orchestrator().get_summary(return_dict=True)  # type: ignore[misc]
-        except Exception:
-            # Fallback: compute minimal summary
-            total = len(results_list)
-            passed = sum(1 for r in results_list if _status_to_str(getattr(r, 'status', None)) == 'passed')
-            failed = sum(1 for r in results_list if _status_to_str(getattr(r, 'status', None)) == 'failed')
-            skipped = sum(1 for r in results_list if _status_to_str(getattr(r, 'status', None)) == 'skipped')
-            summary = {"total": total, "passed": passed, "failed": failed, "skipped": skipped, "status": "green" if failed == 0 else "red"}
-        total_duration = sum(int(getattr(r, 'duration_ms', 0) or 0) for r in results_list)
-    elif isinstance(result, dict):
-        results_list = result.get("results", []) or []
-        summary = result.get("summary", {}) or {}
-        total_duration = int(result.get("duration_ms") or 0)
-    else:
-        formatter.print_warning("Unexpected response from headless service")
-        return
-
-    # Fetch workpad title for display
-    try:
-        wp = get_git_engine().get_workpad(pad_id)
-        wp_title = getattr(wp, 'title', None) or (wp.get('title') if isinstance(wp, dict) else None) or pad_id
-    except Exception:
-        wp_title = pad_id
-
-    formatter.print_header("Test Execution")
-    formatter.print_info(f"Workpad: {wp_title}")
-    formatter.print_info(f"Target: {target}")
-    formatter.print_info(f"Run Mode: {'Serial' if serial else 'Parallel'}")
-
-    status = _status_to_str(summary.get("status", "unknown"))
-    status_color = theme.get_status_color(status)
-    status_icon = theme.get_status_icon(status)
-
-    if results_list:
-        table = formatter.table(headers=["Test", "Status", "Duration", "Notes"])
-        for tr in results_list:
-            if isinstance(tr, dict):
-                name = tr.get("name", "unknown")
-                result_status = _status_to_str(tr.get("status", "unknown"))
-                duration = _format_duration_ms(tr.get("duration_ms"))
-                notes = tr.get("error") or tr.get("stderr") or tr.get("stdout") or ""
+            # Output JSON format
+            print(json.dumps({
+                "success": True,
+                "run_id": run_id,
+                "workpad_id": pad_id,
+                "target": target,
+                "status": final_status,
+                "summary": {
+                    "total": summary['total'],
+                    "passed": summary['passed'],
+                    "failed": summary['failed'],
+                    "skipped": summary['skipped'],
+                    "timeout": summary['timeout'],
+                    "duration_ms": total_duration,
+                },
+                "tests": [
+                    {
+                        "name": res.name,
+                        "status": res.status,
+                        "duration_ms": res.duration_ms,
+                        "error": res.error,
+                    }
+                    for res in state_results
+                ]
+            }))
+        else:
+            if summary['status'] == 'green':
+                formatter.print_success("All tests passed! Ready to promote.")
             else:
-                name = getattr(tr, 'name', 'unknown')
-                result_status = _status_to_str(getattr(tr, 'status', 'unknown'))
-                duration = _format_duration_ms(getattr(tr, 'duration_ms', 0))
-                notes = getattr(tr, 'error', None) or getattr(tr, 'stderr', None) or getattr(tr, 'stdout', None) or ""
-            row_color = theme.get_status_color(result_status)
-            row_icon = theme.get_status_icon(result_status)
-            if isinstance(notes, str):
-                notes = notes.strip().splitlines()[0] if notes.strip() else ""
-            table.add_row(
-                name,
-                f"[{row_color}]{row_icon} {result_status}[/{row_color}]",
-                duration,
-                notes,
-            )
-        formatter.console.print(table)
-    else:
-        formatter.print_warning("No individual test results returned")
+                formatter.print_error(
+                    "Tests Require Attention",
+                    "Some tests failed or timed out. Promotion has been halted until the issues are resolved.",
+                    help_text="Review the failing rows in the summary table above and inspect the captured logs for each failing test.",
+                    tip="Target a single test with 'evogitctl test run --only <test-name>' to iterate quickly.",
+                    suggestions=[
+                        f"evogitctl test run --workpad {workpad.id}",
+                        f"evogitctl pad info {workpad.id}",
+                        "evogitctl test list",
+                    ],
+                    docs_url="docs/TESTING_GUIDE.md",
+                )
 
-    # Print summary
-    formatter.print_subheader("Test Summary")
-    formatter.console.print(
-        f"Total: {summary.get('total', len(results_list))}\n"
-        f"Passed: {summary.get('passed', 0)}\n"
-        f"Failed: {summary.get('failed', 0)}\n"
-        f"Skipped: {summary.get('skipped', 0)}\n"
-        f"Duration: {_format_duration_ms(total_duration)}\n"
-        f"Status: [{status_color}]{status_icon} {status}[/{status_color}]"
+            log_paths = [res.log_path for res in results if res.log_path]
+            if log_paths:
+                formatter.print_info(
+                    f"Detailed logs saved to {log_paths[0].parent}"
+                )
+
+    except Exception as exc:
+        error_result = StateTestResult(
+            test_id="orchestrator",
+            name="orchestrator",
+            status="error",
+            duration_ms=0,
+            output="",
+            error=str(exc),
+        )
+
+        state_manager.update_test_run(
+            run_id,
+            status="failed",
+            total_tests=1,
+            passed=0,
+            failed=1,
+            skipped=0,
+            duration_ms=0,
+            tests=[error_result],
+        )
+
+        if output_json:
+            print(json.dumps({
+                "success": False,
+                "error": "Test execution failed",
+                "details": str(exc),
+                "workpad_id": pad_id
+            }))
+            raise SystemExit(1)
+        else:
+            formatter.print_error(
+                "Test Execution Failed",
+                f"Test execution failed while processing workpad {pad_id}.",
+                help_text="Inspect the error details below and confirm the test command is valid in your repository.",
+                tip="Many failures are caused by missing dependencies—run the command locally to reproduce and install prerequisites.",
+                suggestions=[
+                    f"evogitctl test run {pad_id}",
+                    "Check logs in ~/.sologit/logs",
+                ],
+                docs_url="docs/TESTING_GUIDE.md",
+                details=f"Workpad: {pad_id}\n{exc}",
+            )
+            raise click.Abort()
+
+
+
+
+
+# ============================================================================
+# Phase 3: Auto-Merge and CI Integration Commands
+# ============================================================================
+
+@pad.command('auto-merge')
+@click.argument('pad_id')
+@click.option('--target', type=click.Choice(['fast', 'full']), default='fast', help='Test target')
+@click.option('--no-auto-promote', is_flag=True, help='Disable automatic promotion')
+@click.option(
+    '--test', 'test_overrides', multiple=True,
+    help='Override tests as NAME=CMD[:TIMEOUT] (repeat for multiple tests)'
+)
+@click.pass_context
+def pad_auto_merge(
+    ctx: click.Context,
+    pad_id: str,
+    target: str,
+    no_auto_promote: bool,
+    test_overrides: Tuple[str, ...],
+) -> None:
+    """
+    Run tests and auto-promote if they pass (Phase 3).
+    
+    This is the complete auto-merge workflow:
+    1. Run tests
+    2. Analyze results
+    3. Evaluate promotion gate
+    4. Auto-promote if approved
+    """
+    from sologit.workflows.auto_merge import AutoMergeWorkflow
+    from sologit.workflows.promotion_gate import PromotionRules
+
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
+    state_manager = StateManager()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
+        abort_with_error(f"Workpad {pad_id} not found")
+
+    config_manager: ConfigManager
+    if ctx.obj and isinstance(ctx.obj, dict) and 'config' in ctx.obj:
+        config_manager = cast(ConfigManager, ctx.obj['config'])
+    else:
+        config_manager = ConfigManager()
+    config_tests = config_manager.config.tests
+    default_timeout = config_tests.timeout_seconds
+
+    if test_overrides:
+        tests = [_parse_test_override(value, default_timeout) for value in test_overrides]
+    else:
+        suite_entries = config_tests.fast_tests if target == 'fast' else config_tests.full_tests
+        tests = _tests_from_config_entries(suite_entries, default_timeout)
+
+        if not tests:
+            if target == 'fast':
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                ]
+            else:
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q", timeout=60),
+                    TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q", timeout=120),
+                ]
+
+    # Configure promotion rules (can be loaded from config in future)
+    rules = PromotionRules(
+        require_tests=True,
+        require_all_tests_pass=True,
+        require_fast_forward=True
     )
 
-    # Final state update (normalize results to ensure string statuses for tests)
-    try:
-        from types import SimpleNamespace
-        normalized_tests: List[Any] = []
-        for tr in results_list:
-            if isinstance(tr, dict):
-                normalized_tests.append(
-                    SimpleNamespace(
-                        name=tr.get('name'),
-                        status=_status_to_str(tr.get('status')) or tr.get('status'),
-                        duration_ms=tr.get('duration_ms', 0),
-                        error=tr.get('error'),
-                        stdout=tr.get('stdout'),
-                        stderr=tr.get('stderr'),
-                    )
-                )
-            else:
-                normalized_tests.append(
-                    SimpleNamespace(
-                        name=getattr(tr, 'name', None),
-                        status=_status_to_str(getattr(tr, 'status', None)) or getattr(tr, 'status', None),
-                        duration_ms=getattr(tr, 'duration_ms', 0),
-                        error=getattr(tr, 'error', None),
-                        stdout=getattr(tr, 'stdout', None),
-                        stderr=getattr(tr, 'stderr', None),
-                    )
-                )
-        state_manager.update_test_run(
-            run.run_id,
-            status='passed' if status in {'green', 'passed'} else 'failed',
-            total_tests=summary.get('total', len(results_list)),
-            passed=summary.get('passed', 0),
-            failed=summary.get('failed', 0),
-            skipped=summary.get('skipped', 0),
-            duration_ms=total_duration,
-            tests=normalized_tests,
-        )
-    except Exception:
-        pass
+    smoke_tests = _tests_from_config_entries(config_tests.smoke_tests, default_timeout)
+    ci_orchestrator = CIOrchestrator(git_engine, test_orchestrator)
+    rollback_handler = RollbackHandler(git_engine)
 
-    if status in {"green", "passed"}:
-        formatter.print_success("All tests passed!")
-    else:
-        formatter.print_warning("Tests Require Attention: Some tests failed or timed out. Inspect the notes above and rerun after fixes.")
+    workflow = AutoMergeWorkflow(
+        git_engine,
+        test_orchestrator,
+        rules,
+        state_manager=state_manager,
+        ci_orchestrator=ci_orchestrator,
+        rollback_handler=rollback_handler,
+        ci_smoke_tests=smoke_tests,
+        ci_config=config_manager.config.ci,
+        rollback_on_ci_red=config_manager.config.rollback_on_ci_red
+    )
+
+    try:
+        formatter.print_header("Auto-Merge Workflow")
+        overview = formatter.table(headers=["Field", "Value"])
+        overview.add_row("Workpad", f"[bold]{workpad.title}[/bold] ({workpad.id[:8]})")
+        overview.add_row("Target", target)
+        overview.add_row("Auto-promote", "Enabled" if not no_auto_promote else "Disabled")
+        overview.add_row("Tests", str(len(tests)))
+        formatter.console.print(overview)
+
+        # Execute workflow
+        result = workflow.execute(
+            pad_id,
+            tests,
+            parallel=True,
+            auto_promote=not no_auto_promote,
+            target=target
+        )
+
+        # Display formatted result
+        formatter.print_info_panel(workflow.format_result(result), title="Auto-Merge Result")
+
+        # Exit with appropriate code
+        if not result.success and result.promotion_decision and not result.promotion_decision.can_promote:
+            raise click.Abort()
+
+    except Exception as e:
+        abort_with_error("Auto-merge failed", str(e))
+
+
+@pad.command('evaluate')
+@click.argument('pad_id')
+def pad_evaluate(pad_id: str) -> None:
+    """
+    Evaluate promotion gate without promoting (Phase 3).
+    
+    Shows whether a workpad is ready to be promoted based on configured rules.
+    """
+    from sologit.workflows.promotion_gate import PromotionGate, PromotionRules
+    
+    git_engine = get_git_engine()
+
+    workpad = git_engine.get_workpad(pad_id)
+    if workpad is None:
+        abort_with_error(f"Workpad {pad_id} not found")
+    
+    # Configure rules
+    rules = PromotionRules(
+        require_tests=True,
+        require_all_tests_pass=True,
+        require_fast_forward=True
+    )
+    
+    # Create gate
+    gate = PromotionGate(git_engine, rules)
+    
+    try:
+        formatter.print_header("Promotion Gate Evaluation")
+        formatter.print_info(f"Evaluating workpad: {workpad.title}")
+
+        # Evaluate (without test results for now)
+        # In full implementation, would load cached test results
+        decision = gate.evaluate(pad_id, test_analysis=None)
+
+        # Display decision
+        formatter.print_info_panel(gate.format_decision(decision), title="Promotion Decision")
+
+        # Exit code based on decision
+        if not decision.can_promote:
+            raise click.Abort()
+
+    except Exception as e:
+        abort_with_error("Evaluation failed", str(e))
 
 
 @click.group()
 def ci() -> None:
-    """Continuous integration helper commands."""
+    """CI and smoke test commands (Phase 3)."""
+    pass
 
 
-@ci.command("smoke")
-@click.argument("repo_id")
-@click.option("--commit", help="Commit hash to evaluate (defaults to trunk HEAD)")
+@ci.command('smoke')
+@click.argument('repo_id')
+@click.option('--commit', help='Commit hash to test (default: HEAD)')
 def ci_smoke(repo_id: str, commit: Optional[str]) -> None:
-    abort_with_error(
-        "CI smoke tests are not yet available in headless CLI mode",
-        details=f"Repository: {repo_id}\nCommit: {commit or 'HEAD'}",
-        title="CI Smoke Tests Unavailable",
-        help_text="Run smoke tests via the legacy CLI or integrate them into your CI pipeline.",
-        suggestions=["evogitctl test run <workpad-id>", "evogitctl pad promote <workpad-id>"],
-    )
+    """
+    Run smoke tests for a commit (Phase 3).
+    
+    This simulates post-merge CI smoke tests.
+    """
+    from sologit.workflows.ci_orchestrator import CIOrchestrator
+    
+    git_engine = get_git_engine()
+    test_orchestrator = get_test_orchestrator()
 
-
-@ci.command("rollback")
-@click.argument("repo_id")
-@click.option("--commit", required=True, help="Commit hash to rollback")
-@click.option("--recreate-pad/--no-recreate-pad", default=True, show_default=True)
-def ci_rollback(repo_id: str, commit: str, recreate_pad: bool) -> None:
-    abort_with_error(
-        "Rollback automation is not exposed via the headless CLI yet.",
-        details=f"Repository: {repo_id}\nCommit: {commit}\nRecreate Pad: {'yes' if recreate_pad else 'no'}",
-        title="Rollback Unsupported",
-        help_text="Manually revert the commit or use the legacy workflows.",
-    suggestions=[f"git revert {commit}", f"evogitctl pad create rollback-{commit[:8]}"],
-    )
-
-
-def _edit_commit_message(initial: str) -> str:
-    """Open the user's editor to refine a commit message."""
-
-    editor = os.getenv("EDITOR")
-    if not editor:
-        editor = "notepad" if os.name == "nt" else "vim"
-
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".txt", encoding="utf-8") as handle:
-        handle.write(initial)
-        temp_path = Path(handle.name)
+    repo = git_engine.get_repo(repo_id)
+    if not repo:
+        abort_with_error(f"Repository {repo_id} not found")
+    
+    # Get commit hash
+    if not commit:
+        # Get HEAD commit
+        commit = git_engine.get_current_commit(repo_id)
+    
+    # Define smoke tests
+    smoke_tests = [
+        TestConfig(name="smoke-health", cmd="python -c 'print(\"Health check passed\")'", timeout=10),
+        TestConfig(name="smoke-unit", cmd="python -m pytest tests/ -q --tb=no", timeout=60),
+    ]
+    
+    # Create orchestrator
+    orchestrator = CIOrchestrator(git_engine, test_orchestrator)
+    
+    def progress_callback(message: str) -> None:
+        formatter.print(f"   {message}")
 
     try:
-        subprocess.run([editor, str(temp_path)], check=True)
-        return temp_path.read_text(encoding="utf-8").strip()
-    finally:
-        try:
-            temp_path.unlink()
-        except FileNotFoundError:
-            pass
+        formatter.print_header("CI Smoke Tests")
+        info_table = formatter.table(headers=["Field", "Value"])
+        info_table.add_row("Repository", f"{repo.name} ({repo_id})")
+        info_table.add_row("Commit", commit[:8])
+        info_table.add_row("Tests", str(len(smoke_tests)))
+        formatter.console.print(info_table)
 
-
-@click.command("commit-msg")
-@click.option("--workpad", "pad_id", required=True, help="Workpad ID")
-@click.option("--edit/--no-edit", default=True, show_default=True, help="Edit message before checkpointing")
-@click.option("--conventional/--free-form", default=True, show_default=True, help="Use conventional commit style")
-@click.option("--checkpoint/--no-checkpoint", default=True, show_default=True, help="Checkpoint the workpad with the generated message")
-@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def generate_commit_message(
-    pad_id: str,
-    edit: bool,
-    conventional: bool,
-    checkpoint: bool,
-    output_json: bool,
-) -> None:
-    client = get_client()
-    try:
-        payload = client.generate_commit_message(pad_id, conventional=conventional)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=output_json)
-        return
-
-    if output_json:
-        data = dict(payload)
-        data["success"] = True
-        _emit_json(data)
-        return
-
-    commit_message = payload.get("message", "")
-    formatter.print_info_panel(
-        commit_message or "No commit message generated.",
-        title="Generated Commit Message",
-    )
-    formatter.print_info(
-        "Provider: {provider} • Model: {model} • Latency: {latency:.0f}ms • Cost: ${cost:.4f}".format(
-            provider=payload.get("provider", "unknown"),
-            model=payload.get("model", "unknown"),
-            latency=payload.get("latency_ms", 0.0),
-            cost=payload.get("cost_usd", 0.0),
+        # Run smoke tests
+        result = orchestrator.run_smoke_tests(
+            repo_id,
+            commit,
+            smoke_tests,
+            on_progress=progress_callback
         )
+
+        # Display result
+        formatter.print_info_panel(orchestrator.format_result(result), title="Smoke Test Summary")
+
+        # Exit code based on result
+        if result.is_red:
+            raise click.Abort()
+
+    except Exception as e:
+        abort_with_error("Smoke tests failed", str(e))
+
+
+@ci.command('rollback')
+@click.argument('repo_id')
+@click.option('--commit', required=True, help='Commit hash to rollback')
+@click.option('--recreate-pad/--no-recreate-pad', default=True, help='Recreate workpad for fixes')
+def ci_rollback(repo_id: str, commit: str, recreate_pad: bool) -> None:
+    """
+    Manually rollback a commit (Phase 3).
+    
+    Reverts the specified commit and optionally recreates a workpad.
+    """
+    from sologit.workflows.rollback_handler import RollbackHandler
+    from sologit.workflows.ci_orchestrator import CIResult, CIStatus
+    
+    git_engine = get_git_engine()
+
+    repo = git_engine.get_repo(repo_id)
+    if not repo:
+        abort_with_error(f"Repository {repo_id} not found")
+    
+    # Create handler
+    handler = RollbackHandler(git_engine)
+    
+    # Create a fake CI result for the rollback
+    fake_ci_result = CIResult(
+        repo_id=repo_id,
+        commit_hash=commit,
+        status=CIStatus.FAILURE,
+        duration_ms=0,
+        test_results=[],
+        message="Manual rollback"
     )
-    if payload.get("fallback_used"):
-        formatter.print_warning("Primary provider failed; fallback was used.")
-
-    final_message = commit_message
-    if edit:
-        edited_message = _edit_commit_message(commit_message)
-        if not edited_message:
-            abort_with_error("Commit message cannot be empty after editing.")
-        final_message = edited_message
-
-    if not checkpoint:
-        formatter.print_info("Checkpoint skipped; use evogitctl pad checkpoint to save later.")
-        return
-
+    
     try:
-        client.checkpoint_workpad(pad_id, final_message)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=False)
-        return
+        formatter.print_header("CI Rollback")
+        info_table = formatter.table(headers=["Field", "Value"])
+        info_table.add_row("Repository", f"{repo.name} ({repo_id})")
+        info_table.add_row("Commit", commit[:8])
+        info_table.add_row("Recreate Workpad", "Yes" if recreate_pad else "No")
+        formatter.console.print(info_table)
 
-    formatter.print_success(f"Checkpointed workpad '{pad_id}' with AI-generated message")
+        # Perform rollback
+        result = handler.handle_failed_ci(fake_ci_result, recreate_pad)
+
+        # Display result
+        formatter.print_info_panel(handler.format_result(result), title="Rollback Result")
+
+        # Exit code
+        if not result.success:
+            raise click.Abort()
+
+    except Exception as e:
+        abort_with_error("Rollback failed", str(e))
 
 
-@click.command("telemetry")
-@click.option("--days", default=30, show_default=True, help="Number of days to analyze")
-def show_telemetry(days: int) -> None:
-    client = get_client()
-    try:
-        with _suppress_info_logs(True):
-            summary = client.get_telemetry_summary(days=days)
-    except HeadlessServiceError as exc:
-        _handle_service_error(exc, json_output=False)
-        return
+@test.command('analyze')
+@click.argument('pad_id')
+def test_analyze(pad_id: str) -> None:
+    """
+    Analyze test failures for a workpad (Phase 3).
+    
+    Shows failure patterns and suggested fixes.
+    """
+    git_engine = get_git_engine()
+    
+    workpad = git_engine.get_workpad(pad_id)
+    if not workpad:
+        abort_with_error(f"Workpad {pad_id} not found")
+    
+    # Check if tests have been run
+    # In a full implementation, we'd cache test results
+    # For now, prompt user to run tests first
+    
+    formatter.print_header("Test Failure Analysis")
+    formatter.print_warning("Test analysis requires recent test results.")
+    formatter.print_info(f"Run: [bold]evogitctl test run {pad_id}[/bold] before analyzing.")
+    formatter.print_info_panel(
+        "In Phase 3, test results will be cached and analyzed automatically.",
+        title="Coming Soon"
+    )
 
-    formatter.print_header(f"AI Provider Usage (Last {days} days)")
 
-    if not summary or summary.get("total_events", 0) == 0:
-        formatter.print_warning("No telemetry data available")
-        return
-
-    formatter.print_info(f"Total Requests: {summary.get('total_events', 0)}")
-    formatter.print_info(f"Total Cost: ${summary.get('total_cost_usd', 0.0):.4f}")
-    formatter.print_info(f"Average Latency: {summary.get('avg_latency_ms', 0.0):.0f}ms")
-    formatter.print_info(f"Fallback Rate: {summary.get('fallback_rate', 0.0):.1%}")
-    formatter.print_info(f"Success Rate: {summary.get('success_rate', 0.0):.1%}")
-
-    provider_usage = summary.get("provider_usage", {})
-    if provider_usage:
-        table = formatter.table(headers=["Provider", "Requests", "Percentage"])
-        total_events = max(summary.get("total_events", 0), 1)
-        for provider, count in provider_usage.items():
-            percentage = (count / total_events) * 100
-            table.add_row(provider, str(count), f"{percentage:.1f}%")
-        formatter.console.print(table)
-
+# ============================================================================
+# Phase 4: Complete Pair Loop Implementation
+# ============================================================================
 
 def execute_pair_loop(
     ctx: click.Context,
@@ -1415,28 +1298,547 @@ def execute_pair_loop(
     no_promote: bool,
     target: str,
 ) -> None:
-    abort_with_error(
-        "The pair workflow is currently available via the Heaven GUI or automation APIs.",
-        details="CLI-based pair programming is temporarily disabled while the headless service is finalized.",
-        suggestions=["Launch the GUI: evogitctl gui", "Manually create a workpad: evogitctl pad create <title>"],
+    """
+    Execute the complete AI pair programming loop.
+    
+    This is the core workflow of Solo Git:
+    1. Select/validate repository
+    2. Create ephemeral workpad
+    3. AI plans implementation
+    4. AI generates patch
+    5. Apply patch to workpad
+    6. Run tests (optional)
+    7. Auto-promote if green (optional)
+    
+    Args:
+        ctx: Click context
+        prompt: Natural language task description
+        repo_id: Repository ID (auto-selected if None)
+        title: Workpad title (derived from prompt if None)
+        no_test: Skip test execution
+        no_promote: Disable automatic promotion
+        target: Test target (fast/full)
+    """
+    from sologit.orchestration.ai_orchestrator import AIOrchestrator
+    
+    import time
+    
+    git_engine = get_git_engine()
+    if ctx.obj and isinstance(ctx.obj, dict) and 'config' in ctx.obj:
+        config_manager = cast(ConfigManager, ctx.obj['config'])
+    else:
+        config_manager = ConfigManager()
+
+    formatter.print_header("AI Pair Programming Session")
+
+    # Step 1: Select repository
+    if not repo_id:
+        repos = git_engine.list_repos()
+        if len(repos) == 0:
+            abort_with_error(
+                "No repositories found",
+                "Initialize a repository first: evogitctl repo init --zip app.zip"
+            )
+        elif len(repos) == 1:
+            repo_id = repos[0].id
+            formatter.print_info(f"Using repository: {repos[0].name} ({repo_id})")
+        else:
+            repo_table = formatter.table(headers=["ID", "Name", "Trunk"])
+            for repo in repos:
+                repo_table.add_row(f"[cyan]{repo.id}[/cyan]", repo.name, repo.trunk_branch)
+            formatter.print_info_panel(
+                "Multiple repositories detected. Re-run with --repo <ID> to specify the target.",
+                title="Repository Selection Required"
+            )
+            formatter.console.print(repo_table)
+            raise click.Abort()
+
+    # Validate repository exists
+    repo = git_engine.get_repo(repo_id)
+    if not repo:
+        abort_with_error(f"Repository {repo_id} not found")
+
+    # Step 2: Create workpad title if missing
+    if not title:
+        words = prompt.split()[:5]
+        title = '-'.join(words).lower()
+        title = ''.join(c if c.isalnum() or c == '-' else '-' for c in title)
+        title = '-'.join(filter(None, title.split('-')))
+
+    overview = formatter.table(headers=["Field", "Value"])
+    overview.add_row("Repository", f"{repo.name} ({repo_id})")
+    overview.add_row("Prompt", prompt)
+    overview.add_row("Workpad Title", title)
+    overview.add_row("Tests", "Skipped" if no_test else target)
+    overview.add_row("Auto-Promote", "Disabled" if no_promote else "Enabled")
+    formatter.console.print(overview)
+
+    pad_id: Optional[str] = None  # Ensure pad_id is assigned before use; check for None if used after try block
+
+    try:
+        formatter.print_subheader("Workpad Setup")
+        formatter.print_info("Creating ephemeral workpad...")
+        pad_id = git_engine.create_workpad(repo_id, title)
+        workpad = git_engine.get_workpad(pad_id)
+        if workpad is None:
+            abort_with_error(
+                "Workpad creation failed",
+                "The workpad could not be retrieved after creation. Please try again.",
+            )
+
+        formatter.print_success("Workpad created")
+
+        workpad_table = formatter.table(headers=["Field", "Value"])
+        workpad_table.add_row("Workpad ID", f"[cyan]{pad_id}[/cyan]")
+        workpad_table.add_row("Branch", workpad.branch_name)
+        workpad_table.add_row("Base", repo.trunk_branch)
+        formatter.console.print(workpad_table)
+
+        # Step 3: AI Planning
+        formatter.print_subheader("AI Planning")
+        formatter.print_info(f"Model: {config_manager.config.models.planning_model}")
+        start_time = time.time()
+
+        orchestrator = AIOrchestrator(config_manager)
+
+        repo_map = git_engine.get_repo_map(repo_id)
+        context = {
+            'repo_id': repo_id,
+            'repo_name': repo.name,
+            'file_tree': repo_map,
+            'trunk_branch': repo.trunk_branch
+        }
+
+        plan_response = orchestrator.plan(
+            task_description=prompt,
+            repo_context=context
+        )
+
+        planning_time = time.time() - start_time
+        plan_panel = f"""[bold]Model:[/bold] {plan_response.model_used}
+[bold]Duration:[/bold] {planning_time:.1f}s
+[bold]Cost:[/bold] ${plan_response.cost_usd:.4f}
+[bold]Complexity:[/bold] {plan_response.complexity.score:.2f}"""
+        formatter.print_info_panel(plan_panel, title="Plan Generation")
+
+        plan = plan_response.plan
+        plan_table = formatter.table(headers=["Aspect", "Details"])
+        plan_table.add_row("Description", plan.description or "-")
+        plan_table.add_row(
+            "Modify",
+            ', '.join(plan.files_to_modify) if plan.files_to_modify else "None"
+        )
+        plan_table.add_row(
+            "Create",
+            ', '.join(plan.files_to_create) if plan.files_to_create else "None"
+        )
+        plan_table.add_row("Test Strategy", plan.test_strategy or "None")
+        formatter.console.print(plan_table)
+
+        # Step 4: Generate Patch
+        formatter.print_subheader("Code Generation")
+        formatter.print_info(f"Model: {config_manager.config.models.coding_model}")
+        start_time = time.time()
+
+        patch_response = orchestrator.generate_patch(
+            plan=plan,
+            repo_context=context
+        )
+
+        coding_time = time.time() - start_time
+        patch_panel = f"""[bold]Model:[/bold] {patch_response.model_used}
+[bold]Duration:[/bold] {coding_time:.1f}s
+[bold]Cost:[/bold] ${patch_response.cost_usd:.4f}"""
+        formatter.print_info_panel(patch_panel, title="Patch Generation")
+
+        patch = patch_response.patch
+        if patch.description:
+            formatter.print_info(f"Patch notes: {patch.description}")
+
+        # Step 5: Apply Patch
+        formatter.print_subheader("Applying Patch")
+        patch_engine = get_patch_engine()
+
+        try:
+            result = patch_engine.apply_patch(pad_id, patch.diff)
+            formatter.print_success("Patch applied successfully")
+            diff_table = formatter.table(headers=["Metric", "Value"])
+            diff_table.add_row("Files Changed", str(result.files_changed))
+            diff_table.add_row("Insertions", f"+{result.insertions}")
+            diff_table.add_row("Deletions", f"-{result.deletions}")
+            formatter.console.print(diff_table)
+
+        except Exception as e:
+            abort_with_error(
+                "Failed to apply patch",
+                f"Workpad preserved for manual inspection: {pad_id}\n{e}"
+            )
+
+        # Step 6: Run Tests (optional)
+        if not no_test:
+            formatter.print_subheader("Test Execution")
+            formatter.print_info(f"Running {target} test suite")
+
+            if target == 'fast':
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60),
+                ]
+            else:
+                tests = [
+                    TestConfig(name="unit-tests", cmd="python -m pytest tests/ -q --tb=short", timeout=60),
+                    TestConfig(name="integration", cmd="python -m pytest tests/integration/ -q --tb=short", timeout=120),
+                ]
+
+            test_orchestrator = get_test_orchestrator()
+            results = test_orchestrator.run_tests_sync(pad_id, tests, parallel=True)
+
+            results_table = formatter.table(headers=["Test", "Status", "Duration", "Notes"])
+            all_passed = True
+            for result in results:
+                is_passed = result.status.value == "passed"
+                status_color = theme.get_status_color(result.status.value)
+                status_icon = theme.get_status_icon(result.status.value)
+                duration_s = result.duration_ms / 1000
+                notes = (result.stdout or result.stderr or "").split('\n')
+                summary_note = next((line for line in notes if line.strip()), "")
+                results_table.add_row(
+                    result.name,
+                    f"[{status_color}]{status_icon} {result.status.value.upper()}[/{status_color}]",
+                    f"{duration_s:.1f}s",
+                    summary_note[:80]
+                )
+                if not is_passed:
+                    all_passed = False
+
+            formatter.console.print(results_table)
+
+            summary = test_orchestrator.get_summary(results)
+            status_color = theme.get_status_color(summary['status'])
+            summary_panel = f"""[bold]Total:[/bold] {summary['total']}
+[bold]Passed:[/bold] [green]{summary['passed']}[/green]
+[bold]Failed:[/bold] [red]{summary['failed']}[/red]
+[bold]Skipped:[/bold] {summary['skipped']}
+[bold]Status:[/bold] [{status_color}]{summary['status'].upper()}[/{status_color}]"""
+            formatter.print_info_panel(summary_panel, title="Test Summary")
+
+            if all_passed and not no_promote:
+                formatter.print_success("All tests passed! Promoting to trunk...")
+
+                try:
+                    commit_hash = git_engine.promote_workpad(pad_id)
+                    formatter.print_success_panel(
+                        f"Commit: {commit_hash}\nBranch: {repo.trunk_branch}",
+                        title="Promotion Complete"
+                    )
+
+                    total_cost = plan_response.cost_usd + patch_response.cost_usd
+                    formatter.print_info(f"Total AI cost: ${total_cost:.4f}")
+
+                except Exception as e:
+                    abort_with_error(
+                        "Promotion failed",
+                        f"Workpad preserved: {pad_id}\nManually promote with: evogitctl pad promote {pad_id}\n{e}"
+                    )
+
+            elif not all_passed:
+                formatter.print_warning(
+                    f"Tests failed. Workpad preserved for fixes: {pad_id}"
+                )
+                formatter.print_info(f"View diff: evogitctl pad diff {pad_id}")
+                formatter.print_info(f"Run tests: evogitctl test run {pad_id}")
+                formatter.print_info(f"Promote manually: evogitctl pad promote {pad_id}")
+                raise click.Abort()
+
+            else:
+                formatter.print_success(
+                    "Tests passed but auto-promote disabled. Promote manually when ready."
+                )
+                formatter.print_info(f"Workpad: {pad_id}")
+                formatter.print_info(f"Promote manually: evogitctl pad promote {pad_id}")
+
+        else:
+            formatter.print_warning(
+                f"Tests skipped. Workpad ready for manual testing: {pad_id}"
+            )
+            formatter.print_info(f"Run tests: evogitctl test run {pad_id}")
+            formatter.print_info(f"View diff: evogitctl pad diff {pad_id}")
+            if not no_promote:
+                formatter.print_info(f"Promote: evogitctl pad promote {pad_id}")
+
+    except click.Abort:
+        raise
+    except Exception as e:
+        logger.exception("Pair loop failed")
+        abort_with_error(
+            "Unexpected error during pair session",
+            f"Workpad may be in inconsistent state: {pad_id if 'pad_id' in locals() else 'N/A'}\n{e}"
+        )
+
+
+
+
+@click.command("commit-msg")
+@click.option("--workpad", "-w", required=True, help="Workpad ID")
+@click.option("--edit/--no-edit", default=True, help="Edit message before committing")
+@click.option("--conventional/--free-form", default=True, help="Use Conventional Commits format")
+@click.option("--json", "json_output", is_flag=True, default=False, help="Output in JSON format")
+def generate_commit_message(workpad: str, edit: bool, conventional: bool, json_output: bool):
+    """
+    Generate AI-assisted commit message for workpad changes.
+    
+    Examples:
+        sologit commit-msg -w my-feature
+        sologit commit-msg -w my-feature --no-edit
+        sologit commit-msg -w my-feature --free-form
+        sologit commit-msg -w my-feature --json
+    """
+    import os
+    import sys
+    import json
+    import tempfile
+    import subprocess
+    from rich.panel import Panel
+    
+    # Import routing components
+    from sologit.orchestration.commit_message_generator import (
+        CommitMessageGenerator,
+        CommitMessageRequest,
     )
+    from sologit.orchestration.routing_policy import PolicyEngine, RoutingPolicy
+    from sologit.orchestration.providers import ProviderConfig, ProviderType
+    from sologit.orchestration.providers.abacus_adapter import AbacusAdapter
+    from sologit.orchestration.providers.openai_adapter import OpenAIAdapter
+    from sologit.orchestration.providers.anthropic_adapter import AnthropicAdapter
+    
+    try:
+        # Get Git engine and state manager
+        git_engine = get_git_engine()
+        state_manager = git_engine.state_manager
+        
+        # Get workpad
+        workpad_obj = state_manager.get_workpad(workpad)
+        if not workpad_obj:
+            if json_output:
+                print(json.dumps({"success": False, "error": f"Workpad '{workpad}' not found"}))
+                sys.exit(1)
+
+        workpad_obj = git_engine.get_workpad(workpad)
+        if workpad_obj is None:
+            abort_with_error(f"Workpad '{workpad}' not found")
+
+        # Get workpad diff
+        diff = git_engine.get_diff(workpad)
+        if not diff:
+            if json_output:
+                print(json.dumps({"success": False, "error": "No changes to commit"}))
+                sys.exit(0)
+            formatter.print_warning("No changes to commit")
+            return
+        
+        # Load configuration
+        config_manager = get_config_manager()
+        config = config_manager.config
+        
+        # Set up adapters
+        adapters = {}
+        
+        # Abacus.AI (primary)
+        abacus_key = config.abacus.api_key if hasattr(config, 'abacus') else None
+        if abacus_key:
+            adapter_config = ProviderConfig(
+                provider_type=ProviderType.ABACUS,
+                api_key=abacus_key,
+                enabled=True,
+            )
+            # Add deployment credentials if available
+            if hasattr(config.abacus, 'deployment_id'):
+                adapter_config.deployment_id = config.abacus.deployment_id
+            if hasattr(config.abacus, 'deployment_token'):
+                adapter_config.deployment_token = config.abacus.deployment_token
+            
+            adapters[ProviderType.ABACUS] = AbacusAdapter(adapter_config)
+        
+        # OpenAI (fallback)
+        openai_key = getattr(config, 'openai_api_key', None)
+        if openai_key:
+            adapters[ProviderType.OPENAI] = OpenAIAdapter(
+                ProviderConfig(
+                    provider_type=ProviderType.OPENAI,
+                    api_key=openai_key,
+                    enabled=True,
+                )
+            )
+        
+        # Anthropic (fallback)
+        anthropic_key = getattr(config, 'anthropic_api_key', None)
+        if anthropic_key:
+            adapters[ProviderType.ANTHROPIC] = AnthropicAdapter(
+                ProviderConfig(
+                    provider_type=ProviderType.ANTHROPIC,
+                    api_key=anthropic_key,
+                    enabled=True,
+                )
+            )
+        
+        if not adapters:
+            if json_output:
+                print(json.dumps({
+                    "success": False, 
+                    "error": "No AI providers configured. Set API keys in config (abacus.api_key, openai_api_key, or anthropic_api_key)"
+                }))
+                sys.exit(1)
+            abort_with_error(
+                "No AI providers configured",
+                "Set API keys in config:\n"
+                "  - Abacus.AI: abacus.api_key\n"
+                "  - OpenAI: openai_api_key\n"
+                "  - Anthropic: anthropic_api_key"
+            )
+        
+        # Create policy engine and generator
+        policy = RoutingPolicy()
+        policy_engine = PolicyEngine(policy, adapters)
+        generator = CommitMessageGenerator(policy_engine)
+        
+        # Generate message
+        if json_output:
+            # Silent generation for JSON output
+            request = CommitMessageRequest(
+                diff=diff,
+                workpad_title=workpad_obj.title,
+                conventional_commit=conventional,
+            )
+            response = asyncio.run(generator.generate(request))
+        else:
+            # Pretty console output
+            with formatter.console.status("[cyan]Generating commit message..."):
+                request = CommitMessageRequest(
+                    diff=diff,
+                    workpad_title=workpad_obj.title,
+                    conventional_commit=conventional,
+                )
+                response = asyncio.run(generator.generate(request))
+            
+            # Display result
+            formatter.console.print()
+            formatter.console.print(Panel(
+                response.message,
+                title="[bold cyan]Generated Commit Message",
+                border_style="cyan",
+            ))
+            formatter.console.print()
+            formatter.console.print(
+                f"[dim]Provider: {response.provider.value} | Model: {response.model}[/dim]"
+            )
+            formatter.console.print(
+                f"[dim]Latency: {response.latency_ms:.0f}ms | Cost: ${response.cost_usd:.4f}[/dim]"
+            )
+            if response.fallback_used:
+                formatter.print_warning("Note: Primary provider failed, fallback was used")
+            formatter.console.print()
+        
+        # Edit message if requested (skip in JSON mode)
+        final_message = response.message
+        if edit and not json_output:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False
+            ) as f:
+                f.write(response.message)
+                temp_path = f.name
+            
+            editor = os.environ.get("EDITOR", "vim")
+            try:
+                subprocess.run([editor, temp_path], check=True)
+                with open(temp_path, "r") as f:
+                    final_message = f.read().strip()
+            finally:
+                os.unlink(temp_path)
+            
+            if not final_message:
+                abort_with_error("Commit message cannot be empty")
+        
+        # In JSON mode, return the message without checkpointing (let caller decide)
+        if json_output:
+            print(json.dumps({
+                "success": True,
+                "message": response.message,
+                "provider": response.provider.value,
+                "model": response.model,
+                "latency_ms": response.latency_ms,
+                "cost_usd": response.cost_usd,
+                "fallback_used": response.fallback_used,
+                "workpad_id": workpad,
+                "diff": diff
+            }))
+            sys.exit(0)
+        
+        # Checkpoint with message (interactive mode only)
+        git_engine.checkpoint_workpad(workpad, final_message)
+        formatter.print_success(
+            f"Checkpointed workpad '{workpad}' with AI-generated message"
+        )
+        
+    except Exception as e:
+        if json_output:
+            print(json.dumps({"success": False, "error": str(e)}))
+            sys.exit(1)
+        logger.exception("Commit message generation failed")
+        abort_with_error("Error generating commit message", str(e))
 
 
-__all__ = [
-    "set_formatter_console",
-    "abort_with_error",
-    "repo",
-    "pad",
-    "test",
-    "ci",
-    "generate_commit_message",
-    "show_telemetry",
-    "execute_pair_loop",
-    "_parse_test_override",
-    "_tests_from_config_entries",
-    "get_config_manager",
-    "get_git_engine",
-    "get_git_sync",
-    "get_patch_engine",
-    "get_test_orchestrator",
-]
+
+
+@click.command("telemetry")
+@click.option("--days", default=30, help="Number of days to analyze")
+def show_telemetry(days: int):
+    """
+    Show AI provider usage telemetry.
+    
+    Displays statistics about AI provider usage including:
+    - Total requests and costs
+    - Average latency
+    - Provider usage breakdown
+    - Fallback rate
+    
+    Examples:
+        sologit telemetry
+        sologit telemetry --days 7
+        sologit telemetry --days 90
+    """
+    from rich.table import Table
+    from sologit.orchestration.telemetry import TelemetryCollector
+    
+    try:
+        collector = TelemetryCollector()
+        summary = collector.get_summary(days=days)
+        
+        formatter.console.print(f"\n[bold cyan]AI Provider Usage (Last {days} days)[/bold cyan]\n")
+        
+        if summary["total_events"] == 0:
+            formatter.print_warning("No telemetry data available")
+            return
+        
+        # Overview
+        formatter.console.print(f"[cyan]Total Requests:[/cyan] {summary['total_events']}")
+        formatter.console.print(f"[cyan]Total Cost:[/cyan] ${summary['total_cost_usd']:.4f}")
+        formatter.console.print(f"[cyan]Avg Latency:[/cyan] {summary['avg_latency_ms']:.0f}ms")
+        formatter.console.print(f"[cyan]Fallback Rate:[/cyan] {summary['fallback_rate']:.1%}")
+        formatter.console.print(f"[cyan]Success Rate:[/cyan] {summary['success_rate']:.1%}")
+        formatter.console.print()
+        
+        # Provider breakdown
+        table = Table(title="Provider Usage", show_header=True, header_style="bold cyan")
+        table.add_column("Provider", style="cyan")
+        table.add_column("Requests", justify="right")
+        table.add_column("Percentage", justify="right")
+        
+        for provider, count in summary["provider_usage"].items():
+            pct = (count / summary["total_events"]) * 100
+            table.add_row(provider, str(count), f"{pct:.1f}%")
+        
+        formatter.console.print(table)
+        formatter.console.print()
+        
+    except Exception as e:
+        logger.exception("Failed to show telemetry")
+        abort_with_error("Error displaying telemetry", str(e))

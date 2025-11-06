@@ -106,8 +106,8 @@ class Icons:
     """Icon characters for CLI/TUI display."""
     
     # Status icons
-    success: str = "✅"
-    error: str = "❌"
+    success: str = "✓"
+    error: str = "✗"
     warning: str = "⚠"
     info: str = "ℹ"
     pending: str = "○"

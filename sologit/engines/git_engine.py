@@ -120,14 +120,6 @@ class GitEngine:
             
             # Initialize Git
             repo = Repo.init(repo_path)
-            # Normalize line endings to LF to avoid CRLF patch/apply issues on Windows
-            try:
-                with repo.config_writer() as cw:
-                    cw.set_value("core", "autocrlf", "input")
-                    cw.set_value("core", "eol", "lf")
-            except Exception:
-                # Non-fatal; continue with defaults if configuration fails
-                pass
             repo.index.add('*')
             repo.index.commit('Initial commit from zip')
             
@@ -189,13 +181,6 @@ class GitEngine:
             # Clone repository
             repo_path.mkdir(parents=True)
             repo = Repo.clone_from(git_url, repo_path)
-            # Normalize line endings to LF to avoid CRLF patch/apply issues on Windows
-            try:
-                with repo.config_writer() as cw:
-                    cw.set_value("core", "autocrlf", "input")
-                    cw.set_value("core", "eol", "lf")
-            except Exception:
-                pass
             
             logger.debug(f"Cloned repository to {repo_path}")
             
@@ -250,13 +235,6 @@ class GitEngine:
         try:
             repo_path.mkdir(parents=True, exist_ok=True)
             repo = Repo.init(repo_path)
-            # Normalize line endings to LF to avoid CRLF patch/apply issues on Windows
-            try:
-                with repo.config_writer() as cw:
-                    cw.set_value("core", "autocrlf", "input")
-                    cw.set_value("core", "eol", "lf")
-            except Exception:
-                pass
 
             placeholder = repo_path / ".gitkeep"
             if not placeholder.exists():
@@ -286,13 +264,6 @@ class GitEngine:
             if repo_path.exists():
                 shutil.rmtree(repo_path)
             raise GitEngineError(f"Failed to create empty repository: {exc}")
-        finally:
-            # Ensure GitPython releases any OS handles on Windows
-            try:
-                if 'repo' in locals() and hasattr(repo, 'close'):
-                    repo.close()
-            except Exception:
-                pass
     def create_workpad(self, repo_id: str, title: str) -> str:
         """
         Create ephemeral workpad.
@@ -360,12 +331,6 @@ class GitEngine:
         except Exception as e:
             logger.error(f"Failed to create workpad: {e}")
             raise GitEngineError(f"Failed to create workpad: {e}")
-        finally:
-            try:
-                if 'repo' in locals() and hasattr(repo, 'close'):
-                    repo.close()
-            except Exception:
-                pass
     
     def apply_patch(self, pad_id: str, patch: str, message: str = "") -> str:
         """
@@ -401,11 +366,9 @@ class GitEngine:
             branch = getattr(repo.heads, workpad.branch_name)
             branch.checkout()
             
-            # Write patch to temporary file (force LF newlines for cross-platform apply)
+            # Write patch to temporary file
             patch_file = repository.path / ".git" / "solo-git-patch.diff"
-            normalized_patch = patch.replace("\r\n", "\n")
-            with patch_file.open('w', encoding='utf-8', newline='\n') as f:
-                f.write(normalized_patch)
+            patch_file.write_text(patch)
             
             # Apply patch
             repo.git.apply(str(patch_file), whitespace='fix')

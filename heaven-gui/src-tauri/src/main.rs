@@ -4,14 +4,9 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command as StdCommand;
-use std::sync::Mutex;
-use tauri::api::process::{Command as SidecarCommand, CommandChild, CommandEvent};
-use tauri::{Manager, RunEvent};
+use std::process::Command;
 
 mod commands;
-
-struct HeadlessProcess(Mutex<Option<CommandChild>>);
 
 // ============================================================================
 // Data Structures (matching Python state schema)
@@ -211,7 +206,7 @@ fn list_repositories() -> Result<Vec<RepositoryState>, String> {
 
 #[tauri::command]
 fn verify_cli_install() -> Result<String, String> {
-    let output = StdCommand::new("evogitctl")
+    let output = Command::new("evogitctl")
         .arg("--version")
         .output()
         .map_err(|e| format!("Failed to execute evogitctl: {}", e))?;
@@ -624,45 +619,8 @@ fn ai_chat(
 // Main Application
 // ============================================================================
 
-fn spawn_headless_core(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let mut command = SidecarCommand::new_sidecar("headless-core")?;
-
-    if std::env::var("SOLOGIT_HEADLESS_PORT").is_err() {
-        command = command.env("SOLOGIT_HEADLESS_PORT", "1234");
-    }
-
-    let (mut rx, child) = command.spawn()?;
-
-    app.manage(HeadlessProcess(Mutex::new(Some(child))));
-
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line) => {
-                    println!("[headless-core] {line}");
-                }
-                CommandEvent::Stderr(line) => {
-                    eprintln!("[headless-core] {line}");
-                }
-                CommandEvent::Terminated(payload) => {
-                    if let Some(code) = payload.code {
-                        eprintln!("Headless core terminated with status {code}");
-                    }
-                    if let Some(signal) = payload.signal {
-                        eprintln!("Headless core terminated by signal {signal}");
-                    }
-                    break;
-                }
-                _ => {}
-            }
-        }
-    });
-
-    Ok(())
-}
-
 fn main() {
-    let app = tauri::Builder::default()
+    tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             // State management
             read_global_state,
@@ -701,24 +659,6 @@ fn main() {
             commands::write_file_content,
             commands::generate_commit_message,
         ])
-        .setup(|app| {
-            if let Err(error) = spawn_headless_core(app) {
-                eprintln!("Failed to start headless core sidecar: {error}");
-            }
-            Ok(())
-        })
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application");
-
-    app.run(|app_handle, event| {
-        if let RunEvent::Exit = event {
-            if let Some(process) = app_handle.try_state::<HeadlessProcess>() {
-                if let Ok(mut guard) = process.0.lock() {
-                    if let Some(mut child) = guard.take() {
-                        let _ = child.kill();
-                    }
-                }
-            }
-        }
-    });
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

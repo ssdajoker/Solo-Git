@@ -7,43 +7,7 @@ from typing import Optional
 
 import click
 
-try:
-    # Prefer real CLI utilities when available
-    from sologit.cli.commands import abort_with_error, formatter  # type: ignore
-except Exception:  # pragma: no cover - used in isolated test stubs
-    # Test environments may stub out `sologit.cli.commands` without exporting
-    # all helpers. Provide minimal fallbacks so this module can import.
-    import click as _click
-
-    def abort_with_error(message: str, details: str | None = None, **_: object) -> None:
-        """Fallback abort helper used only in tests/stubs."""
-        raise _click.Abort()
-
-    class _DummyFormatter:
-        def __init__(self) -> None:
-            # simple stand-in; tests that patch formatter will override this
-            self.console = type("Console", (), {"print": staticmethod(lambda *_a, **_k: None)})()
-
-        def print(self, *_: object, **__: object) -> None:
-            pass
-
-        def print_header(self, *_: object, **__: object) -> None:
-            pass
-
-        def print_info(self, *_: object, **__: object) -> None:
-            pass
-
-        def print_info_panel(self, *_: object, **__: object) -> None:
-            pass
-
-        def table(self, headers: list[str]):  # minimal API used in this module
-            class _T:
-                def add_row(self, *_: object) -> None:
-                    pass
-
-            return _T()
-
-    formatter = _DummyFormatter()
+from sologit.cli.commands import abort_with_error, formatter
 from sologit.engines.git_engine import GitEngine
 from sologit.engines.test_orchestrator import TestConfig, TestOrchestrator
 from sologit.workflows.ci_orchestrator import CIOrchestrator

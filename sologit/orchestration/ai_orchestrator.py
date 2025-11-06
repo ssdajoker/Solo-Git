@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Iterator, List, Optional
 
@@ -58,21 +58,19 @@ class PatchResponse:
 
     patch: GeneratedPatch
     model_used: str
+    tokens_used: int
     cost_usd: float
-    tokens_used: int = 0
 
 
 @dataclass
 class ReviewResponse:
     """Response from patch review."""
 
+    review: str
     approved: bool
     model_used: str
+    tokens_used: int
     cost_usd: float
-    review: str = ""
-    tokens_used: int = 0
-    issues: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
 
 
 class AIOrchestrator:
@@ -102,13 +100,12 @@ class AIOrchestrator:
 
     def plan(
         self,
-        task_description: Optional[str] = None,
+        task_description: str,
         repo_context: Optional[str] = None,
         force_model: Optional[str] = None,
         escalate_on_failure: bool = False,
         include_plan_text: bool = False,
         progress: Optional[Progress] = None,
-        **kwargs: Any,
     ) -> PlanResponse:
         """
         Generate an execution plan for a task.
@@ -131,11 +128,6 @@ class AIOrchestrator:
             task_id = progress.add_task("Planning task...", total=100)
 
         try:
-            # Allow alias parameter name used in tests
-            if task_description is None:
-                task_description = kwargs.get("prompt")
-            if task_description is None:
-                raise ValueError("task_description or prompt is required")
             with self._progress_stage(progress, task_id, "Analyzing task complexity", 20):
                 context = {"repo_context": repo_context} if repo_context else None
                 complexity = self.model_router.analyze_complexity(
@@ -161,7 +153,7 @@ class AIOrchestrator:
                 estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
                 if not self.cost_guard.check_budget(estimated_cost):
                     raise RuntimeError(
-                        f"Budget exceeded for planning. Estimated: ${estimated_cost:.4f}, "
+                        f"Insufficient budget for planning. Estimated: ${estimated_cost:.4f}, "
                         f"Remaining: ${self.cost_guard.get_remaining_budget():.4f}"
                     )
 
@@ -219,7 +211,7 @@ class AIOrchestrator:
                                 )
                                 model_config = escalated_model
                             else:
-                                raise RuntimeError("Budget exceeded during model escalation") from e
+                                raise RuntimeError("Insufficient budget for model escalation") from e
                         else:
                             raise RuntimeError("No higher-tier model available for escalation") from e
                     else:
@@ -263,13 +255,12 @@ class AIOrchestrator:
 
     def generate_patch(
         self,
-        task_description: Optional[str] = None,
-        plan: Optional[CodePlan] = None,
+        task_description: str,
+        plan: Optional[str] = None,
         file_contents: Optional[Dict[str, str]] = None,
         force_model: Optional[str] = None,
         escalate_on_failure: bool = False,
         progress: Optional[Progress] = None,
-        **kwargs: Any,
     ) -> PatchResponse:
         """
         Generate a code patch for a task.
@@ -293,15 +284,6 @@ class AIOrchestrator:
             task_id = progress.add_task("Generating patch...", total=100)
 
         try:
-            # Accept alias 'prompt' for task_description, and allow plan-only usage
-            if task_description is None:
-                task_description = kwargs.get("prompt")
-            # Build a selection prompt from plan if task_description is not provided
-            selection_text: str = ""
-            if isinstance(plan, CodePlan):
-                selection_text = plan.title or plan.description or "generate patch"
-            if not task_description:
-                task_description = selection_text or "generate patch"
             with self._progress_stage(progress, task_id, "Selecting model", 10):
                 if force_model:
                     model_config = self._find_model_by_name(force_model)
@@ -313,19 +295,25 @@ class AIOrchestrator:
                         select_context["plan"] = plan
                     if file_contents:
                         select_context["file_contents"] = file_contents
-                    selection_prompt = task_description
+                    selection_prompt = (
+                        task_description.title
+                        if isinstance(task_description, CodePlan)
+                        else task_description
+                    )
                     model_config = self.model_router.select_model(
                         selection_prompt,
                         context=select_context,
                     )
 
             with self._progress_stage(progress, task_id, "Estimating cost", 10):
-                estimation_source = str(plan) if plan is not None else task_description
+                estimation_source = plan if plan is not None else task_description
+                if isinstance(estimation_source, CodePlan):
+                    estimation_source = str(estimation_source)
                 estimated_tokens = self.model_router.estimate_patch_size(estimation_source)
                 estimated_cost = (estimated_tokens / 1000.0) * model_config.cost_per_1k_tokens
                 if not self.cost_guard.check_budget(estimated_cost):
                     raise RuntimeError(
-                        f"Budget exceeded for patch generation. Estimated: ${estimated_cost:.4f}, "
+                        f"Insufficient budget for patch generation. Estimated: ${estimated_cost:.4f}, "
                         f"Remaining: ${self.cost_guard.get_remaining_budget():.4f}"
                     )
 
@@ -358,7 +346,7 @@ class AIOrchestrator:
                                 )
                                 model_config = escalated_model
                             else:
-                                raise RuntimeError("Budget exceeded during model escalation") from e
+                                raise RuntimeError("Insufficient budget for model escalation") from e
                         else:
                             raise RuntimeError("No higher-tier model available for escalation") from e
                     else:
@@ -377,8 +365,8 @@ class AIOrchestrator:
             return PatchResponse(
                 patch=patch,
                 model_used=model_config.name,
-                cost_usd=(token_estimate / 1000.0) * model_config.cost_per_1k_tokens,
                 tokens_used=token_estimate,
+                cost_usd=(token_estimate / 1000.0) * model_config.cost_per_1k_tokens,
             )
 
         finally:
@@ -389,7 +377,6 @@ class AIOrchestrator:
         self,
         patch: GeneratedPatch,
         test_files: Optional[List[str]] = None,
-        context: Optional[Dict[str, Any]] = None,
         progress: Optional[Progress] = None,
     ) -> ReviewResponse:
         """
@@ -440,30 +427,12 @@ class AIOrchestrator:
 
             approved = "approved" in response.content.lower() or "lgtm" in response.content.lower()
 
-            # Heuristic issues/suggestions to satisfy tests
-            issues: List[str] = []
-            suggestions: List[str] = []
-            if patch.additions >= 200:
-                issues.append("Large patch size; requires additional review")
-                approved = False
-
-            # Determine if tests are present
-            has_tests = any("test" in f.lower() for f in (test_files or patch.files_changed))
-            if not has_tests:
-                suggestions.append("Add or update unit tests for changed functionality")
-
-            # Include security sensitive context suggestion
-            if context and context.get("security_sensitive"):
-                suggestions.append("Ensure changes meet security guidelines and add security-focused tests")
-
             return ReviewResponse(
                 review=response.content,
                 approved=approved,
                 model_used=model_config.name,
                 tokens_used=response.total_tokens,
                 cost_usd=(response.total_tokens / 1000.0) * model_config.cost_per_1k_tokens,
-                issues=issues,
-                suggestions=suggestions,
             )
 
         finally:
@@ -509,7 +478,6 @@ class AIOrchestrator:
             with self._progress_stage(progress, task_id, "Analyzing failure", 60):
                 max_output_lines = 100
                 output_lines = test_output.split('\n')
-                trimmed_output = test_output
                 if len(output_lines) > max_output_lines:
                     trimmed_output = '\n'.join(output_lines[-max_output_lines:])
                     truncated_output = f"[... {len(output_lines) - max_output_lines} lines omitted ...]\n{trimmed_output}"

@@ -358,13 +358,9 @@ if commands:
     cli.add_command(ci)
 
 # AI-assisted commit message generation (v1.0)
-# Some tests stub out `sologit.cli.commands` without exporting these.
-try:  # noqa: SIM105 - intentional broad guard to support test stubs
-    from sologit.cli.commands import generate_commit_message, show_telemetry  # type: ignore
-    cli.add_command(generate_commit_message)
-    cli.add_command(show_telemetry)
-except Exception:  # pragma: no cover - exercised in tests with stubs
-    pass
+from sologit.cli.commands import generate_commit_message, show_telemetry  # noqa: E402
+cli.add_command(generate_commit_message)
+cli.add_command(show_telemetry)
 
 def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
     """Shared launcher for the Heaven TUI."""
