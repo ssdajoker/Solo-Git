@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Launch the Solo Git headless core via uvicorn.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+cd "$REPO_DIR"
+exec python -m uvicorn sologit.headless_core:app --host 127.0.0.1 --port "${SOLOGIT_HEADLESS_PORT:-1234}" --reload

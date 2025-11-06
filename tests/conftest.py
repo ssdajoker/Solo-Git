@@ -9,6 +9,7 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
+import os
 from zipfile import ZipFile
 from io import BytesIO
 from unittest.mock import Mock, MagicMock
@@ -339,6 +340,33 @@ def isolated_cli_env(temp_dir, monkeypatch):
     (temp_dir / 'config').mkdir(parents=True, exist_ok=True)
     
     return temp_dir
+
+
+# ===========================
+# CLI Headless Adapter (Tests)
+# ===========================
+
+@pytest.fixture(autouse=True)
+def _enable_legacy_headless_adapter(monkeypatch):
+    """Force CLI to use in-process legacy adapter instead of HTTP in tests.
+
+    This lets existing tests that patch get_git_engine/get_git_sync influence
+    CLI behavior while we migrate to the headless-backed commands.
+    """
+    monkeypatch.setenv("SOLOGIT_CLI_USE_LEGACY_ENGINE", "1")
+    # Ensure deterministic environment for tests
+    monkeypatch.delenv("SOLOGIT_HEADLESS_BASE_URL", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _default_isolated_env(tmp_path, monkeypatch):
+    """Ensure CLI-related services use per-test isolated directories by default."""
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv('SOLOGIT_DATA_DIR', str(data_dir))
+    monkeypatch.setenv('SOLOGIT_CONFIG_DIR', str(config_dir))
 
 
 # ===========================
