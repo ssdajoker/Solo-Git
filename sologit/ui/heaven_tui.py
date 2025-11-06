@@ -22,6 +22,7 @@ from sologit.ui.test_runner import TestRunnerWidget, TestsCompleted, TestStatus
 from sologit.ui.shortcuts import format_help_markup, get_status_bar_summary
 from sologit.ui.history import get_command_history, undo, redo, can_undo, can_redo
 from sologit.ui.theme import theme
+from sologit.api.service import SoloGitService
 from sologit.state.git_sync import GitStateSync
 from sologit.orchestration.ai_orchestrator import AIOrchestrator
 from sologit.utils.logger import get_logger
@@ -416,13 +417,15 @@ class HeavenTUI(App):
         self,
         repo_path: Optional[str] = None,
         *,
+        service: Optional[SoloGitService] = None,
         git_sync: Optional[GitStateSync] = None,
         ai_orchestrator: Optional[AIOrchestrator] = None,
     ):
         super().__init__()
         self.repo_path = repo_path
-        self.git_sync = git_sync or GitStateSync()
-        self.ai_orchestrator = ai_orchestrator or AIOrchestrator()
+        self.service = service or SoloGitService()
+        self.git_sync = git_sync or self.service.git_state_sync
+        self.ai_orchestrator = ai_orchestrator or self.service.ai_orchestrator
         self._background_tasks: set[asyncio.Task] = set()
         self._active_test_run_id: Optional[str] = None
         self._last_event_timestamp: Optional[str] = None

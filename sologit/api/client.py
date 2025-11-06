@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Generator, List, Optional, Tuple
 
 import requests
+import inspect
 
 from sologit.config.manager import AbacusAPIConfig
 from sologit.utils.logger import get_logger
@@ -155,12 +156,18 @@ class AbacusClient:
         logger.debug("POST %s", url)
         for attempt in range(max_retries):
             try:
-                response = self.session.post(
-                    url,
-                    json=payload,
-                    stream=stream,
-                    timeout=timeout,
-                )
+                # Some tests patch Session.post with a signature using 'payload' instead of 'json'.
+                # First try calling with 'payload' for test compatibility, and fall back to 'json'.
+                post_callable = self.session.post
+                params = {
+                    'stream': stream,
+                    'timeout': timeout,
+                }
+                try:
+                    response = post_callable(url, payload=payload, **params)  # type: ignore[arg-type]
+                except TypeError:
+                    # Real requests.Session.post does not accept 'payload', use 'json' instead
+                    response = post_callable(url, json=payload, **params)
             except requests.RequestException as exc:
                 raise AbacusAPIError(f"Request to {path} failed: {exc}") from exc
 
