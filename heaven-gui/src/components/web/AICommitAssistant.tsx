@@ -6,9 +6,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { cn } from '../shared/utils'
-import { useKeyboardVisibility } from '../hooks/useKeyboardVisibility'
-import { useSoloGitOperations } from '../hooks/useSoloGitOperations'
-import { notifications } from '../utils/notifications'
+import { useKeyboardVisibility } from '../../hooks/useKeyboardVisibility'
+import { useSoloGitOperations } from '../../hooks/useSoloGitOperations'
+import { notifications } from '../../utils/notifications'
 
 export interface AICommitAssistantProps {
   workpadId?: string
@@ -19,7 +19,6 @@ export interface AICommitAssistantProps {
 
 export function AICommitAssistant({
   workpadId,
-  gitDiff,
   onAccept,
   onEdit,
   className,

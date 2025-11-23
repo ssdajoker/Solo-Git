@@ -183,6 +183,14 @@ def cli(ctx, verbose, config):
     if integrated_commands is not None:
         integrated_commands.set_formatter_console(console)
 
+    # Register health command if available
+    try:
+        from sologit.cli.commands import health as health_cmd
+        if isinstance(cli, click.Group) and 'health' not in cli.commands:
+            cli.add_command(health_cmd)
+    except Exception:  # pragma: no cover - optional
+        pass
+
     # Load configuration
     try:
         if config_commands:
@@ -357,10 +365,11 @@ if commands:
     from sologit.cli.ci_commands import ci
     cli.add_command(ci)
 
-# AI-assisted commit message generation (v1.0)
-from sologit.cli.commands import generate_commit_message, show_telemetry  # noqa: E402
+# AI-assisted commit message generation (v1.0) and utility commands
+from sologit.cli.commands import generate_commit_message, show_telemetry, health as health_cmd  # noqa: E402
 cli.add_command(generate_commit_message)
 cli.add_command(show_telemetry)
+cli.add_command(health_cmd)
 
 def _launch_heaven_tui(repo_path: Optional[str] = None) -> None:
     """Shared launcher for the Heaven TUI."""

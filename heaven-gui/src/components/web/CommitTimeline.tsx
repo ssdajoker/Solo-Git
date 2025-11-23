@@ -24,16 +24,10 @@ export function CommitTimeline({
   const [compareCommits, setCompareCommits] = useState<string[]>([])
   
   // Auto-hide after 5 seconds of inactivity
-  const { isVisible, triggerActivity } = useContextualVisibility(5000)
+  const { show: triggerActivity } = useContextualVisibility({ hideDelay: 5000 })
   
   // Mock commits - in production, this would come from Tauri or props
-  const mockCommits: (Commit & { 
-    type?: 'trunk' | 'workpad' | 'tag'
-    aiAssisted?: boolean
-    testStatus?: 'pending' | 'running' | 'passed' | 'failed'
-    ciStatus?: 'pending' | 'running' | 'success' | 'failed'
-    buildNumber?: number
-  })[] = [
+  const mockCommits: Commit[] = [
     {
       id: 'c1',
       sha: 'a9b8c7d6',

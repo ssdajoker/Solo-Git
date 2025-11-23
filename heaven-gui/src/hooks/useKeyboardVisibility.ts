@@ -17,6 +17,7 @@ export function useKeyboardVisibility(
   options: UseKeyboardVisibilityOptions = {}
 ) {
   const [isVisible, setIsVisible] = useState(false)
+  const { shift = false, ctrl = false, alt = false, meta = false } = options
   
   const toggle = () => {
     setIsVisible(prev => !prev)
@@ -36,19 +37,19 @@ export function useKeyboardVisibility(
       if (e.code !== key && e.key !== key) return
       
       // Check modifiers
-      if (options.shift && !e.shiftKey) return
-      if (options.ctrl && !e.ctrlKey) return
-      if (options.alt && !e.altKey) return
-      if (options.meta && !e.metaKey) return
+      if (shift && !e.shiftKey) return
+      if (ctrl && !e.ctrlKey) return
+      if (alt && !e.altKey) return
+      if (meta && !e.metaKey) return
       
       // If modifiers are required but not all are present, return
-      const requiresModifier = options.shift || options.ctrl || options.alt || options.meta
+      const requiresModifier = shift || ctrl || alt || meta
       if (requiresModifier) {
         const hasRequiredModifiers = 
-          (options.shift ? e.shiftKey : true) &&
-          (options.ctrl ? e.ctrlKey : true) &&
-          (options.alt ? e.altKey : true) &&
-          (options.meta ? e.metaKey : true)
+          (shift ? e.shiftKey : true) &&
+          (ctrl ? e.ctrlKey : true) &&
+          (alt ? e.altKey : true) &&
+          (meta ? e.metaKey : true)
         
         if (!hasRequiredModifiers) return
       }
@@ -59,7 +60,7 @@ export function useKeyboardVisibility(
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [key, options])
+  }, [alt, ctrl, key, meta, shift])
   
   return {
     isVisible,

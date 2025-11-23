@@ -26,6 +26,17 @@ export type LanguageId =
   | 'text'
   | 'unknown'
 
+export type GitFileStatus =
+  | 'M'
+  | 'A'
+  | 'D'
+  | 'R'
+  | 'C'
+  | 'U'
+  | '?'
+  | '??'
+  | '!'
+
 export interface FileNode {
   id: string
   name: string
@@ -37,6 +48,7 @@ export interface FileNode {
   expanded?: boolean
   selected?: boolean
   languageId?: LanguageId
+  gitStatus?: GitFileStatus
 }
 
 export interface FileTree {
