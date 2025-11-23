@@ -9,6 +9,8 @@ export type CommandCategory =
   | 'Testing'
   | 'Git'
   | 'AI'
+  | 'CI'
+  | 'View'
   | 'Settings'
   | 'Help'
 

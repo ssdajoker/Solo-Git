@@ -2,6 +2,7 @@
 """Command implementations for Solo Git CLI."""
 
 import asyncio
+import sys
 import click
 from pathlib import Path
 from typing import List, Optional
@@ -210,6 +211,48 @@ def get_git_sync() -> GitStateSync:
 def repo() -> None:
     """Repository management commands."""
     pass
+
+
+@click.command('health')
+@click.option('--json', 'json_output', is_flag=True, help='Output health info as JSON')
+def health(json_output: bool) -> None:
+    """Show Solo-Git core health and version info."""
+    start = time.time()
+    git_engine = get_git_engine()
+    cfg = get_config_manager()
+    state_mgr = StateManager()
+
+    repos = git_engine.list_repos()
+    workpads_total = 0
+    try:
+        for repo in repos:
+            wps = state_mgr.list_workpads(repo.repo_id)
+            workpads_total += len(wps)
+    except Exception:
+        # Non-fatal
+        pass
+
+    info: Dict[str, Any] = {
+        "success": True,
+        "core_version": cfg.version if hasattr(cfg, 'version') else "unknown",
+        "python_version": sys.version.split()[0],
+        "repo_count": len(repos),
+        "workpad_count": workpads_total,
+        "config_path": str(cfg.config_path),
+        "latency_ms": round((time.time() - start) * 1000, 2),
+    }
+
+    if json_output:
+        import json as _json
+        click.echo(_json.dumps(info))
+    else:
+        formatter.print_header("Solo-Git Core Health")
+        formatter.print_key_value("Version", info["core_version"])
+        formatter.print_key_value("Python", info["python_version"])
+        formatter.print_key_value("Repositories", str(info["repo_count"]))
+        formatter.print_key_value("Workpads", str(info["workpad_count"]))
+        formatter.print_key_value("Config Path", info["config_path"])
+        formatter.print_key_value("Latency (ms)", str(info["latency_ms"]))
 
 
 @repo.command('init')
@@ -1181,7 +1224,7 @@ def ci_smoke(repo_id: str, commit: Optional[str]) -> None:
         formatter.print_header("CI Smoke Tests")
         info_table = formatter.table(headers=["Field", "Value"])
         info_table.add_row("Repository", f"{repo.name} ({repo_id})")
-        info_table.add_row("Commit", commit[:8])
+        info_table.add_row("Commit", (commit[:8] if commit else "-"))
         info_table.add_row("Tests", str(len(smoke_tests)))
         formatter.console.print(info_table)
 

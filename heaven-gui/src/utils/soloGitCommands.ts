@@ -11,7 +11,7 @@ export const soloGitCommands: Command[] = [
     id: 'pair-start',
     label: 'Pair: Start AI Pairing',
     description: 'Start AI pair programming session',
-    category: 'ai',
+  category: 'AI',
     icon: '🤖',
     shortcut: 'Cmd+Shift+P',
     action: () => {
@@ -23,7 +23,7 @@ export const soloGitCommands: Command[] = [
     id: 'pair-stop',
     label: 'Pair: Stop AI Pairing',
     description: 'End current AI pair programming session',
-    category: 'ai',
+  category: 'AI',
     icon: '🛑',
     action: () => {
       console.log('Stop AI pairing')
@@ -34,7 +34,7 @@ export const soloGitCommands: Command[] = [
     id: 'pair-suggest',
     label: 'Pair: Ask for Suggestion',
     description: 'Get AI suggestion for current context',
-    category: 'ai',
+  category: 'AI',
     icon: '💡',
     action: () => {
       console.log('Ask AI for suggestion')
@@ -46,7 +46,7 @@ export const soloGitCommands: Command[] = [
     id: 'workpad-create',
     label: 'Workpad: Create',
     description: 'Create new ephemeral workpad',
-    category: 'git',
+  category: 'Git',
     icon: '📝',
     action: () => {
       console.log('Create workpad')
@@ -57,7 +57,7 @@ export const soloGitCommands: Command[] = [
     id: 'workpad-promote',
     label: 'Workpad: Promote to Trunk',
     description: 'Promote workpad if tests pass',
-    category: 'git',
+  category: 'Git',
     icon: '⚡',
     action: () => {
       console.log('Promote workpad')
@@ -68,7 +68,7 @@ export const soloGitCommands: Command[] = [
     id: 'workpad-discard',
     label: 'Workpad: Discard',
     description: 'Discard current workpad',
-    category: 'git',
+  category: 'Git',
     icon: '🗑️',
     action: () => {
       console.log('Discard workpad')
@@ -78,7 +78,7 @@ export const soloGitCommands: Command[] = [
     id: 'workpad-list',
     label: 'Workpad: List All',
     description: 'Show all active workpads',
-    category: 'git',
+  category: 'Git',
     icon: '📋',
     action: () => {
       console.log('List workpads')
@@ -90,7 +90,7 @@ export const soloGitCommands: Command[] = [
     id: 'tests-run',
     label: 'Tests: Run',
     description: 'Run test suite',
-    category: 'testing',
+  category: 'Testing',
     icon: '🧪',
     shortcut: 'Cmd+Shift+T',
     action: () => {
@@ -102,7 +102,7 @@ export const soloGitCommands: Command[] = [
     id: 'tests-run-file',
     label: 'Tests: Run Current File',
     description: 'Run tests for current file only',
-    category: 'testing',
+  category: 'Testing',
     icon: '🧪',
     action: () => {
       console.log('Run file tests')
@@ -112,7 +112,7 @@ export const soloGitCommands: Command[] = [
     id: 'tests-run-failed',
     label: 'Tests: Re-run Failed',
     description: 'Re-run only failed tests',
-    category: 'testing',
+  category: 'Testing',
     icon: '🔄',
     action: () => {
       console.log('Re-run failed tests')
@@ -122,7 +122,7 @@ export const soloGitCommands: Command[] = [
     id: 'tests-coverage',
     label: 'Tests: Show Coverage',
     description: 'Display test coverage report',
-    category: 'testing',
+  category: 'Testing',
     icon: '📊',
     action: () => {
       console.log('Show coverage')
@@ -134,7 +134,7 @@ export const soloGitCommands: Command[] = [
     id: 'ci-pipeline',
     label: 'CI: View Pipeline',
     description: 'Open CI/CD pipeline view',
-    category: 'ci',
+  category: 'CI',
     icon: '🏗️',
     action: () => {
       console.log('View pipeline')
@@ -145,7 +145,7 @@ export const soloGitCommands: Command[] = [
     id: 'ci-logs',
     label: 'CI: View Build Logs',
     description: 'Show latest build logs',
-    category: 'ci',
+  category: 'CI',
     icon: '📜',
     action: () => {
       console.log('View build logs')
@@ -155,7 +155,7 @@ export const soloGitCommands: Command[] = [
     id: 'ci-retry',
     label: 'CI: Retry Failed Build',
     description: 'Retry the last failed build',
-    category: 'ci',
+  category: 'CI',
     icon: '🔄',
     action: () => {
       console.log('Retry build')
@@ -167,7 +167,7 @@ export const soloGitCommands: Command[] = [
     id: 'ai-commit',
     label: 'AI: Generate Commit Message',
     description: 'AI-powered commit message generation',
-    category: 'ai',
+  category: 'AI',
     icon: '✨',
     shortcut: 'Cmd+Shift+A',
     action: () => {
@@ -179,7 +179,7 @@ export const soloGitCommands: Command[] = [
     id: 'ai-explain',
     label: 'AI: Explain Changes',
     description: 'Get AI explanation of current changes',
-    category: 'ai',
+  category: 'AI',
     icon: '📖',
     action: () => {
       console.log('Explain changes')
@@ -189,7 +189,7 @@ export const soloGitCommands: Command[] = [
     id: 'ai-review',
     label: 'AI: Request Code Review',
     description: 'Get AI code review for changes',
-    category: 'ai',
+  category: 'AI',
     icon: '👁️',
     action: () => {
       console.log('AI code review')
@@ -201,7 +201,7 @@ export const soloGitCommands: Command[] = [
     id: 'focus-mode',
     label: 'Focus: Toggle Mode',
     description: 'Hide all panels except editor',
-    category: 'view',
+  category: 'View',
     icon: '🎯',
     shortcut: 'Cmd+Shift+F',
     action: () => {
@@ -213,7 +213,7 @@ export const soloGitCommands: Command[] = [
     id: 'zen-mode',
     label: 'Zen: Toggle Mode',
     description: 'Distraction-free editing mode',
-    category: 'view',
+  category: 'View',
     icon: '🧘',
     shortcut: 'Cmd+K Z',
     action: () => {
@@ -224,7 +224,7 @@ export const soloGitCommands: Command[] = [
     id: 'view-test-results',
     label: 'View: Test Results',
     description: 'Open test results panel',
-    category: 'view',
+  category: 'View',
     icon: '📊',
     action: () => {
       console.log('Open test results')
@@ -235,7 +235,7 @@ export const soloGitCommands: Command[] = [
     id: 'view-workflow',
     label: 'View: Workflow Status',
     description: 'Show current workflow pipeline',
-    category: 'view',
+  category: 'View',
     icon: '⚡',
     action: () => {
       console.log('Open workflow panel')
@@ -248,7 +248,7 @@ export const soloGitCommands: Command[] = [
     id: 'model-select',
     label: 'Model: Select AI Model',
     description: 'Choose AI model (GPT-4, DeepSeek, Llama)',
-    category: 'ai',
+  category: 'AI',
     icon: '🤖',
     action: () => {
       console.log('Select model')
@@ -258,7 +258,7 @@ export const soloGitCommands: Command[] = [
     id: 'model-cost',
     label: 'Model: View Cost Breakdown',
     description: 'Show AI usage cost by model',
-    category: 'ai',
+  category: 'AI',
     icon: '💰',
     action: () => {
       console.log('View cost breakdown')
@@ -270,7 +270,7 @@ export const soloGitCommands: Command[] = [
     id: 'git-status',
     label: 'Git: Show Status',
     description: 'Display git status',
-    category: 'git',
+  category: 'Git',
     icon: '📊',
     action: () => {
       console.log('Git status')
@@ -280,7 +280,7 @@ export const soloGitCommands: Command[] = [
     id: 'git-diff',
     label: 'Git: Show Diff',
     description: 'Display git diff',
-    category: 'git',
+  category: 'Git',
     icon: '📝',
     action: () => {
       console.log('Git diff')
@@ -290,7 +290,7 @@ export const soloGitCommands: Command[] = [
     id: 'git-stage-all',
     label: 'Git: Stage All Changes',
     description: 'Stage all modified files',
-    category: 'git',
+  category: 'Git',
     icon: '➕',
     action: () => {
       console.log('Stage all')
@@ -300,7 +300,7 @@ export const soloGitCommands: Command[] = [
     id: 'git-unstage-all',
     label: 'Git: Unstage All',
     description: 'Unstage all staged files',
-    category: 'git',
+  category: 'Git',
     icon: '➖',
     action: () => {
       console.log('Unstage all')

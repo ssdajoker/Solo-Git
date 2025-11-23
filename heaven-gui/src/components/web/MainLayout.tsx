@@ -26,6 +26,20 @@ export interface MainLayoutProps {
   className?: string
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === 'string') {
+    return error
+  }
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return 'Unknown error'
+  }
+}
+
 export function MainLayout({
   repoId,
   globalState,
@@ -123,10 +137,11 @@ export function MainLayout({
         setFileContents(prev => ({ ...prev, [tabId]: content }));
       } catch (error) {
         console.error(`Failed to read file ${path}:`, error);
+        const message = getErrorMessage(error)
         // Optionally show an error to the user
         setFileContents(prev => ({
           ...prev,
-          [tabId]: `Error loading file. Please try again.${error && error.message ? ` (${error.message})` : ''}`
+          [tabId]: `Error loading file. Please try again.${message ? ` (${message})` : ''}`
         }));
       }
     }

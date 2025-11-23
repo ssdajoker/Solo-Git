@@ -15,7 +15,8 @@
       "all": false,
       "shell": {
         "all": false,
-        "open": true
+        "open": true,
+        "sidecar": true
       },
       "fs": {
         "all": false,
@@ -36,11 +37,11 @@
         "icons/icon.ico"
       ],
       "resources": [],
-      "externalBin": [],
-      "copyright": "Copyright © 2024 Solo Git Contributors",
+      "externalBin": ["sologit-core"],
+      "copyright": "Copyright © 2025 Solo-Git Contributors",
       "category": "DeveloperTool",
-      "shortDescription": "Git workflow manager with AI assistance",
-      "longDescription": "Heaven is the desktop GUI for Solo-Git, a Git workflow manager with built-in AI assistance for commit messages, code generation, and test-driven development.",
+      "shortDescription": "AI-assisted Git workflow manager (Solo-Git GUI)",
+      "longDescription": "Heaven is the desktop GUI for Solo-Git. It bundles the headless Python core as a sidecar so the app runs out-of-the-box without requiring a separate Python install. Features include AI-assisted commit messages, workpads, and test-driven auto-merge.",
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
@@ -49,10 +50,8 @@
           "language": "en-US"
         }
       },
-      "linux": {
-        "deb": {
-          "depends": ["libwebkit2gtk-4.0-37", "libssl3"]
-        }
+      "deb": {
+        "depends": ["libwebkit2gtk-4.0-37", "libssl3"]
       }
     },
     "security": {

@@ -9,6 +9,12 @@ export type CommitStatus =
   | 'failed'     // Tests failed or merge conflict
   | 'ai'         // AI-assisted commit
 
+export type CommitType = 'trunk' | 'workpad' | 'tag'
+
+export type CommitTestStatus = 'pending' | 'running' | 'passed' | 'failed'
+
+export type CommitCiStatus = 'pending' | 'running' | 'success' | 'failed'
+
 export interface Commit {
   id: string
   sha: string
@@ -23,6 +29,11 @@ export interface Commit {
   tags?: string[]
   parent?: string
   children?: string[]
+  type?: CommitType
+  aiAssisted?: boolean
+  testStatus?: CommitTestStatus
+  ciStatus?: CommitCiStatus
+  buildNumber?: number
 }
 
 export interface CommitNode extends Commit {

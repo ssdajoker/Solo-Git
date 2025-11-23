@@ -96,7 +96,7 @@ export default function CodeViewer({ repoId, filePath, showDiff: _showDiff = fal
 
   if (!filePath) {
     return (
-      <div className="code-viewer empty">
+      <div className="code-viewer empty" data-testid="code-viewer-empty">
         <div className="empty-state">
           <h3>No file selected</h3>
           <p className="hint">Select a file from the file browser</p>
@@ -106,7 +106,7 @@ export default function CodeViewer({ repoId, filePath, showDiff: _showDiff = fal
   }
 
   return (
-    <div className="code-viewer">
+    <div className="code-viewer" data-testid="code-viewer">
       <div className="code-viewer-header">
         <span className="file-path">{filePath}</span>
         <span className="file-language">{language}</span>
